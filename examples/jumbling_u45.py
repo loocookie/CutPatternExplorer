@@ -20,19 +20,26 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from cutpattern.dsl import cube_faces, puzzle, split, turn
+from cutpattern import solids as S
+from cutpattern.dsl import puzzle, split, turn
 
 # 3x3x3 면 절단의 각반경: 평면 x = 1/sqrt(3)
 THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
 
 
 def build():
-    faces = cube_faces("faces", turns=(45, -45, 90, -90, 180))
+    faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
+
+    # 축 id 는 방향을 말해주지 않는다 (`c0`..`c5`). 방향을 박은 id 를 두면
+    # axisops.rotate 한 번에 거짓말이 되므로 (§2.2), 이름은 뜻이 있는 이 자리에서
+    # 묶는다. 아래 방향은 S.cube() 를 갓 만든 상태 기준이다.
+    U = faces["c3"]  # +y
+    R = faces["c2"]  # +x. U 에 수직이면 대칭이라 어느 면이든 같다
 
     with puzzle("U45 then R split", faces) as p:
         split(faces)
-        turn(faces.U, 45)
-        split(faces.R)
+        turn(U, 45)
+        split(R)
         # 되돌리기는 정의 끝에서 자동
     return p
 

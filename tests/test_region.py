@@ -361,16 +361,17 @@ def test_uncut_boundary_follows_the_on_illegal_policy():
     여기서 예외를 그대로 올리면 뷰어의 재생성 루프가 죽고, 각도를 되돌려도
     복원할 앱이 남지 않는다. 불법 Turn 과 같은 처리를 해야 한다.
     """
-    from cutpattern.dsl import cube_faces, turn
+    from cutpattern import solids as S
+    from cutpattern.dsl import turn
     from cutpattern.engine.operations import Truncated, UncutBoundaryError
 
     def build():
-        f = cube_faces("faces", turns=(45, -45, 90, -90, 180))
+        f = S.cube("faces", turns=(45, -45, 90, -90, 180))
         with puzzle("uncut-policy", f) as p:
             split(f)
-            turn(f.U, 45)
-            with region(outside(f.R), outside(f.L)):
-                split(f.F, f.B)
+            turn(f["c3"], 45)  # +y
+            with region(outside(f["c2"]), outside(f["c4"])):  # +-x
+                split(f["c0"], f["c5"])
         return p
 
     p = build()
@@ -381,14 +382,14 @@ def test_uncut_boundary_follows_the_on_illegal_policy():
         assert not [r for r in log if isinstance(r, Truncated)]
 
     # 깊어지면 raise 는 올리고
-    with pytest.raises(UncutBoundaryError, match="R"):
+    with pytest.raises(UncutBoundaryError, match="c2"):
         p.evaluate({"faces": 63.0}, on_illegal="raise")
 
     # truncate 는 직전 상태에서 멈추고 기록만 남긴다
     _reg, log = p.evaluate({"faces": 63.0}, on_illegal="truncate")
     trunc = [r for r in log if isinstance(r, Truncated)]
     assert len(trunc) == 1
-    assert trunc[0].axis_id == "R"
+    assert trunc[0].axis_id == "c2"
     assert trunc[0].remaining > 0
 
     # 슬라이더를 되돌리면 복원된다 (§13.2). 평가가 상태를 들고 있지 않으므로

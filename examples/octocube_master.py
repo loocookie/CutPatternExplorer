@@ -66,7 +66,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from cutpattern.dsl import at_angle, cube_faces, puzzle, split, turned
+from cutpattern import solids as S
+from cutpattern.dsl import at_angle, puzzle, split, turned
 
 TURN_ANGLE = 45.0
 
@@ -80,7 +81,7 @@ THETA_DEG = math.degrees(math.acos(CUT_OFFSET))
 
 
 def build(turn_angle: float = TURN_ANGLE):
-    faces = cube_faces("faces", turns=(45, -45, 90, -90, 180))
+    faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
 
     with puzzle("OctoCube Master", faces) as p:
         split(faces)

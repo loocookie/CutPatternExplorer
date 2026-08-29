@@ -10,7 +10,8 @@ from cutpattern.engine.operations import Turn, evaluate
 from cutpattern.engine.turn import is_turn_legal
 from examples.mixup_plus import THETA_333, THETA_MIXUP, build
 
-SLICE_45 = (Turn("U", 45.0, True), Turn("D", 45.0, False))
+# 면축 id 는 solids 가 정한다. c3 = +y, c1 = -y
+SLICE_45 = (Turn("c3", 45.0, True), Turn("c1", 45.0, False))
 
 
 @pytest.fixture(scope="module")
@@ -81,17 +82,17 @@ def test_45_slice_is_closed_after_the_plus_cuts(theta, plus):
 
 def test_plain_cube_blocks_face_turns_after_a_45_slice():
     """대조군. Plus 절단이 없으면 45도 슬라이스 후 면 회전이 막힌다."""
-    from cutpattern.dsl import cube_faces
+    from cutpattern import solids as S
     from cutpattern.engine.operations import SplitByAxis
 
-    faces = cube_faces("faces")
+    faces = S.cube("faces")
     fam = PuzzleFamily(
         axis_sets=(faces.to_engine(),),
         operations=tuple([SplitByAxis(a.id) for a in faces]) + SLICE_45,
     )
     reg, _ = evaluate(fam, {"faces": THETA_333})
-    assert is_turn_legal(reg, faces.U, THETA_333)
-    assert not is_turn_legal(reg, faces.R, THETA_333)
+    assert is_turn_legal(reg, faces["c3"], THETA_333)
+    assert not is_turn_legal(reg, faces["c2"], THETA_333)
 
 
 def test_slice_composition_conserves_arc_length(plus):

@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from cutpattern import solids as S
+from cutpattern.geometry.vector import norm
 
 
 def angle(a, b) -> float:
@@ -260,16 +261,21 @@ def test_large_catalans_need_the_full_group():
     assert len(orbit(seed, "I")) == 60
 
 
-def test_rhombic_dodecahedron_matches_cube_edge_directions():
-    from cutpattern.dsl import cube_edges
+def test_rhombic_dodecahedron_directions_are_cube_edges():
+    """마름모십이면체 면축 12개 = 정육면체 모서리 방향.
 
-    assert signature(S.rhombic_dodecahedron()) == signature(cube_edges())
+    성분 두 개가 1/sqrt2, 하나가 0 이다.
 
+    예전에는 `dsl.cube_edges()` 와 비교했는데, 그쪽이 같은 것을 다시 만든
+    중복이라 순환 검증이었다. 그 생성기를 없애면서 방향을 직접 단정한다.
+    """
+    axes = list(S.rhombic_dodecahedron())
+    assert len(axes) == 12
+    r2 = 1 / math.sqrt(2)
+    for a in axes:
+        assert norm(a.normal) == pytest.approx(1.0)
+        assert sorted(abs(round(v, 9)) for v in a.normal) == pytest.approx([0.0, r2, r2])
 
-def test_octahedron_matches_cube_vertex_directions():
-    from cutpattern.dsl import cube_vertices
-
-    assert signature(S.octahedron()) == signature(cube_vertices())
 
 
 def test_archimedean_direction_sets_come_from_merge():

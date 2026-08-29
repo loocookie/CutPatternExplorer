@@ -833,9 +833,10 @@ pCubes XML이 복잡한 것은 XML이 프로그래밍 언어가 아닌데 프로
 파이썬을 그대로 문법으로 쓰면 `for`, `def`, `with`, 컴프리헨션, 조건문이 전부 공짜로 딸려온다. **파서는 한 줄도 없다.**
 
 ```python
-from cutpattern.dsl import at_angle, cube, puzzle, split, turned
+from cutpattern import solids as S
+from cutpattern.dsl import at_angle, puzzle, split, turned
 
-faces = cube()
+faces = S.cube()
 
 with puzzle("OctoCube Master", faces) as p:
     split(faces)
@@ -852,8 +853,22 @@ p.run({"cube": 63.2563})
 
 ### 9.2 API
 
+축 집합을 **만드는** 것은 `solids` 의 일이고 `dsl` 은 연산과 질의만 담는다.
+한때 `dsl` 에도 `cube_faces` / `cube_edges` / `cube_vertices` 가 있었으나
+`solids` 것과 방향 집합이 같은 중복이라 없앴다.
+
+id 에 방향을 박지 않는다. `solids` 는 `c0`..`c5` 처럼 뜻 없는 id 를 준다.
+`R`/`U` 같은 이름을 라이브러리가 주면 `rotate` 한 번에 거짓말이 되기 때문이다
+(§2.5). 이름이 필요하면 **쓰는 자리에서** 묶는다.
+
 ```python
-# 축 집합
+faces = S.cube("faces")
+U = faces["c3"]                  # 이 정의에서 U 라 부를 축
+R = at_angle(U, 90, faces)[0]    # U 에 수직인 면
+```
+
+```python
+# 축 집합 (solids)
 cube() / octahedron() / tetrahedron() / dodecahedron() / icosahedron()
 prism(n) / antiprism(n) / bipyramid(n) / trapezohedron(n)
 orbit(seed, group, expected=n)          임의의 면추이 집합

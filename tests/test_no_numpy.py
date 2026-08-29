@@ -46,7 +46,8 @@ def guard(name, *a, **k):
     return _real(name, *a, **k)
 builtins.__import__ = guard
 
-from cutpattern.dsl import at_angle, cube_faces, outside, puzzle, region, split, turned
+from cutpattern import solids as S
+from cutpattern.dsl import at_angle, outside, puzzle, region, split, turned
 from cutpattern.render.arcs import build_arcs
 from cutpattern import solids as S
 from cutpattern.axisops import merge, mirror
@@ -55,7 +56,7 @@ from cutpattern.engine.operations import Truncated, UncutBoundaryError
 THETA = math.degrees(math.acos(0.45))
 
 # 1. split + turn + 렌더
-faces = cube_faces("faces", turns=(45, -45, 90, -90, 180))
+faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
 with puzzle("probe", faces) as p:
     split(faces)
     for x in faces:
@@ -75,11 +76,11 @@ assert not [r for r in log2 if isinstance(r, Truncated)], "예상 못한 절단"
 assert len(reg2) == 18, len(reg2)
 
 # 3. 경계 미절단을 실제로 잡는가. 판정 경로까지 numpy 없이 돈다
-f2 = cube_faces("f2", turns=(45, -45, 90, -90, 180))
+f2 = S.cube("f2", turns=(45, -45, 90, -90, 180))
 with puzzle("uncut", f2) as q:
-    split(f2.F, f2.B)
-    with region(outside(f2.R), outside(f2.L)):
-        split(f2.U, f2.D)
+    split(f2["c0"], f2["c5"])
+    with region(outside(f2["c2"]), outside(f2["c4"])):
+        split(f2["c3"], f2["c1"])
 try:
     q.evaluate({"f2": THETA}, on_illegal="raise")
     raise AssertionError("UncutBoundaryError 가 나왔어야 한다")

@@ -13,13 +13,14 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from cutpattern.dsl import cube_faces, puzzle, split
+from cutpattern import solids as S
+from cutpattern.dsl import puzzle, split
 
 THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
 
 
 def build():
-    faces = cube_faces("faces")
+    faces = S.cube("faces")
 
     with puzzle("Cube faces", faces) as p:
         split(faces)

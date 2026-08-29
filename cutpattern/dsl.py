@@ -4,9 +4,10 @@ XML 대신 파이썬 자체를 문법으로 쓴다. for, def, with, 컴프리헨
 전부 그냥 동작한다. pCubes 가 Script, Macro, ExecMacro 로 따로 만들어야 했던
 변수/매크로/반복이 공짜로 딸려온다. 파서는 한 줄도 없다.
 
-    from cutpattern.dsl import puzzle, cube_faces, split, turned
+    from cutpattern import solids as S
+    from cutpattern.dsl import puzzle, split, turned
 
-    faces = cube_faces("faces", cut="faceCut", turns=(45, -45, 90, -90, 180))
+    faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
 
     with puzzle("OctoCube Master", faces) as p:
         split(faces)
@@ -54,7 +55,6 @@ from .query import (
     group_by_nearest,
     nearest,
 )
-from .geometry.vector import Vec3, clamp, normalize
 
 __all__ = [
     "AxisSet",
@@ -81,9 +81,6 @@ __all__ = [
     "group_by_nearest",
     "nearest",
     "axes_of",
-    "cube_faces",
-    "cube_edges",
-    "cube_vertices",
     "ANGLE_TOL_DEG",
 ]
 
@@ -170,48 +167,6 @@ class AxisSet:
             cut_angle_input=self.cut,
             name=self.name,
         )
-
-
-# ---------------------------------------------------- 표준 축 집합 생성기
-
-_CUBE_FACES = {
-    "R": Vec3(1, 0, 0),
-    "L": Vec3(-1, 0, 0),
-    "U": Vec3(0, 1, 0),
-    "D": Vec3(0, -1, 0),
-    "F": Vec3(0, 0, 1),
-    "B": Vec3(0, 0, -1),
-}
-
-
-def cube_faces(id: str = "faces", turns=()) -> AxisSet:
-    """정육면체 면축 6개. 반대 방향도 각각 명시한다 (§2.2)."""
-    return AxisSet(id, dict(_CUBE_FACES), turns, name="면축")
-
-
-def cube_edges(id: str = "edges", turns=()) -> AxisSet:
-    """정육면체 모서리축 12개. 수직인 면 두 개의 합 방향."""
-    s = AxisSet(id, extra_turns=turns, name="모서리축")
-    items = list(_CUBE_FACES.items())
-    for i, (a_id, a_n) in enumerate(items):
-        for b_id, b_n in items[i + 1 :]:
-            if abs(a_n @ b_n) > 1e-9:
-                continue  # 마주보는 면끼리는 모서리를 만들지 않는다
-            s.add(a_id + b_id, normalize(a_n + b_n))
-    return s
-
-
-def cube_vertices(
-    id: str = "vertices", turns=()
-) -> AxisSet:
-    """정육면체 꼭짓점축 8개. 서로 수직인 면 세 개의 합 방향."""
-    s = AxisSet(id, extra_turns=turns, name="꼭짓점축")
-    for x in ("R", "L"):
-        for y in ("U", "D"):
-            for z in ("F", "B"):
-                n = _CUBE_FACES[x] + _CUBE_FACES[y] + _CUBE_FACES[z]
-                s.add(x + y + z, normalize(n))
-    return s
 
 
 # ------------------------------------------------------------- 프로그램

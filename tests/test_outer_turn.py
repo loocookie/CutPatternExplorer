@@ -5,14 +5,30 @@ import math
 import numpy as np
 import pytest
 
-from cutpattern.dsl import cube_faces, puzzle, split, turn, turned
+from cutpattern.dsl import AxisSet, puzzle, split, turn, turned
 from cutpattern.engine.axes import PuzzleFamily
 from cutpattern.engine.operations import SplitByAxis, Turn, evaluate
 from cutpattern.engine.turn import IllegalTurnError, is_turn_legal
 from cutpattern.geometry.angular_coverage import TAU
 
 THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
-FACES = cube_faces("faces", turns=(45, -45, 90, -90, 180))
+
+# 축 id 는 이 테스트가 정한다. `Turn("U", 45, outer=True)` 처럼 방향이 읽혀야
+# 하는 단정이 많아서, `solids` 의 `c0..c5` 보다 여기서 이름을 붙이는 쪽이 맞다.
+# 축 집합을 회전시키지 않으므로 id 가 거짓말할 여지도 없다 (§2.2).
+FACES = AxisSet(
+    id="faces",
+    axes={
+        "U": (0, 1, 0),
+        "D": (0, -1, 0),
+        "R": (1, 0, 0),
+        "L": (-1, 0, 0),
+        "F": (0, 0, 1),
+        "B": (0, 0, -1),
+    },
+    extra_turns=(45, -45, 90, -90, 180),
+    name="면축",
+)
 
 
 def raw(*ops, theta=THETA_333):

@@ -16,7 +16,8 @@ import types
 
 import pytest
 
-from cutpattern.dsl import cube_edges, cube_faces, puzzle, split, turned
+from cutpattern import solids as S
+from cutpattern.dsl import puzzle, split, turned
 from cutpattern.geometry.vector import Vec3, norm
 from cutpattern.render.markers import MARKER_ANGLE_DEG, build_axis_markers, marker_id
 
@@ -24,12 +25,12 @@ THETA = math.degrees(math.acos(0.45))
 
 
 def _family():
-    faces = cube_faces("faces", turns=(45, -45))
-    edges = cube_edges("edges")
+    faces = S.cube("faces", turns=(45, -45))
+    edges = S.rhombic_dodecahedron("edges")
     with puzzle("marked", faces, edges) as p:
         split(faces)
-        with turned(faces.U, 45):
-            split(faces.R)
+        with turned(faces["c3"], 45):
+            split(faces["c2"])
     return p.family
 
 
@@ -147,7 +148,7 @@ def test_viewer_draws_a_marker_and_label_per_axis(view):
     assert len(view._marker_curves) == 18
     assert len(view._marker_labels) == 18
     texts = {lb.text for lb in view._made["label"]}
-    assert "R" in texts and "RU" in texts
+    assert "c2" in texts and "rd0" in texts
 
 
 def test_hiding_a_set_hides_its_arcs_and_markers(view):

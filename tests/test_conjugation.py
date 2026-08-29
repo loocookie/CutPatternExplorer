@@ -13,8 +13,24 @@ import math
 import pytest
 
 import cutpattern.engine.operations as OPS
-from cutpattern.dsl import at_angle, cube_faces, outside, puzzle, region, split, turn, turned
+from cutpattern import solids as S
+from cutpattern.dsl import (
+    at_angle,
+    outside,
+    puzzle,
+    region,
+    split,
+    turn,
+    turned,
+)
 from cutpattern.engine.operations import Truncated, plan_conjugation
+# 축 id 는 방향을 말해주지 않는다 (`c0`..`c5`). 방향을 박은 id 를 두면
+# axisops.rotate 한 번에 거짓말이 되므로 (§2.2), 여기서 이름을 묶는다.
+# 방향은 S.cube() 를 갓 만든 상태 기준이다.
+R, L = "c2", "c4"   # +x, -x
+U, D = "c3", "c1"   # +y, -y
+F, B = "c0", "c5"   # +z, -z
+
 
 EXAMPLES = (
     "quantum",
@@ -98,11 +114,11 @@ def test_rollback_closes_bare_turns():
     이게 없으면 같은 기하를 내는 두 표기(`turned()` 블록 대 맨 `turn()`)가
     소스만 봐서는 안 보이는 성능 차이를 갖는다 (§7.10).
     """
-    faces = cube_faces("faces", turns=(45, -45))
+    faces = S.cube("faces", turns=(45, -45))
     with puzzle("bare", faces) as p:
         split(faces)
-        turn(faces.U, 45)
-        split(faces.R)
+        turn(faces[U], 45)
+        split(faces[R])
     ops = p.family.operations
     rollback = len(ops) - 1
     assert plan_conjugation(p.family) == {6: rollback}
@@ -111,23 +127,23 @@ def test_rollback_closes_bare_turns():
 def test_plan_refuses_what_it_cannot_prove():
     """증명 못 하는 것은 넣지 않는다. 빠지면 폴백이라 결과는 같고 느릴 뿐이다."""
     # 짝 사이에서 여는 region 블록. 영역이 회전을 따라 변환되는 경로다
-    f2 = cube_faces("f2", turns=(45, -45))
+    f2 = S.cube("f2", turns=(45, -45))
     with puzzle("inner-region", f2) as q:
         split(f2)
-        with turned(f2.U, 45):
-            with region(outside(f2.R), outside(f2.L)):
-                split(f2.F)
+        with turned(f2[U], 45):
+            with region(outside(f2[R]), outside(f2[L])):
+                split(f2[F])
     assert plan_conjugation(q.family) == {}
 
     # 실린 축. 블록 안 split 이 실린 축을 쓰면 법선이 달라진다 (§2.1)
     from cutpattern.dsl import carry
 
-    f3 = cube_faces("f3", turns=(45, -45))
+    f3 = S.cube("f3", turns=(45, -45))
     with puzzle("carried", f3) as r:
-        carry(f3.U, f3.R)
+        carry(f3[U], f3[R])
         split(f3)
-        with turned(f3.U, 45):
-            split(f3.R)
+        with turned(f3[U], 45):
+            split(f3[R])
     assert plan_conjugation(r.family) == {}
 
 
@@ -141,13 +157,13 @@ def test_mixed_fallback_and_conjugation_agree():
     from cutpattern.dsl import carry
 
     def build():
-        f = cube_faces("f", turns=(45, -45, 90, -90))
+        f = S.cube("f", turns=(45, -45, 90, -90))
         with puzzle("mixed", f) as p:
-            carry(f.U, f.F)          # U 는 실려 있어 접합 대상이 아니다
+            carry(f[U], f[F])        # U 는 실려 있어 접합 대상이 아니다
             split(f)
-            with turned(f.U, 45):    # 폴백
-                with turned(f.R, 45):  # 접합
-                    split(f.F, f.B)
+            with turned(f[U], 45):   # 폴백
+                with turned(f[R], 45):  # 접합
+                    split(f[F], f[B])
         return p
 
     plan = plan_conjugation(build().family)

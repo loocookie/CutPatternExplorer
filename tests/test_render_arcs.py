@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from cutpattern.dsl import AxisSet, cube_faces
+from cutpattern.dsl import AxisSet
 from cutpattern.engine.axes import PuzzleFamily
 from cutpattern.engine.operations import SplitByAxis, Turn, evaluate
 from cutpattern.render.arcs import arc_id, build_arcs
@@ -21,7 +21,7 @@ FACE_NORMALS = [
 
 ALL_FACE_SPLITS = tuple(SplitByAxis(i) for i in ("R", "L", "U", "D", "F", "B"))
 THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
-FACES = cube_faces("faces")
+FACES = AxisSet(id="faces", axes=dict(FACE_NORMALS), name="면축")
 
 
 def build(*ops, theta=THETA_333, max_step=0.05):

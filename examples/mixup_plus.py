@@ -51,7 +51,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from cutpattern.dsl import at_angle, cube_faces, puzzle, split, turned
+from cutpattern import solids as S
+from cutpattern.dsl import at_angle, puzzle, split, turned
 
 SLICE_ANGLE = 45.0
 
@@ -63,7 +64,7 @@ THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
 
 
 def build(slice_angle: float = SLICE_ANGLE):
-    faces = cube_faces("faces", turns=(45, -45, 90, -90, 180))
+    faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
 
     with puzzle("Mixup Plus", faces) as p:
         split(faces)
