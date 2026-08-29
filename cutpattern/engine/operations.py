@@ -9,11 +9,10 @@ import math
 from dataclasses import dataclass, replace
 from functools import lru_cache
 
-from ..epsilon import RADIUS_EPS
+from ..epsilon import ANGLE_EPS, RADIUS_EPS
 
 # 회전 상쇄 판정 허용 오차(도)
 TURN_CANCEL_EPS = 1e-9
-from ..geometry.angular_coverage import ANGLE_EPS as _UNUSED_ANGLE_EPS  # noqa: F401
 from ..geometry.angular_coverage import Coverage, difference, full
 from ..geometry.conjugate import TurnFrame, pull_back_all
 from ..geometry.region import Constraint, Region, covers_within, dangling_endpoints
@@ -166,14 +165,26 @@ def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
     **증명하지 못하면 넣지 않는다.** 빠진 짝은 지금 경로로 그대로 흘러 결과가
     같고 느릴 뿐이다. 정확성이 이 함수의 완전성에 걸리지 않는다는 것이 요점이다.
 
+    닫는 쪽은 둘이다.
+
+    - 짝을 이루는 반대 회전. `turned()` 가 내는 모양이다
+    - `RollbackTurns`. 열려 있던 회전을 역순으로 한꺼번에 되돌리므로 그 자리가
+      곧 닫는 괄호다. 정의 끝에 자동으로 붙으므로 (§7.6) 맨 `turn()` 도 접합
+      대상이 된다. 그러지 않으면 같은 기하를 내는 두 표기가 소스만 봐서는
+      안 보이는 성능 차이를 갖는다
+
     지금 거부하는 것:
 
     - 짝 사이에 `EnterRegion` / `ExitRegion` 이 열리는 경우. 블록 **바깥의**
       영역은 괜찮다 (`Φ⁻¹(C ∩ Φ(R)) = Φ⁻¹(C) ∩ R`). 안에서 여는 것은 영역이
       회전을 따라 변환되는 경로라 따로 다뤄야 한다
-    - 짝 사이에 `RollbackTurns` 가 있는 경우
     - 축이 다른 축을 싣고 도는 경우 (§2.1 carry). 블록 안 split 이 실린 축을
       쓰면 법선이 달라진다
+
+    일부만 거부해도 된다. 바깥이 폴백이고 안쪽이 접합이면, registry 는 바깥
+    회전이 실제로 적용된 좌표계를 들고 있고 안쪽 프레임은 그 위에서 정의되므로
+    둘이 일관된다. `RollbackTurns` 는 실행된 적 없는 회전을 되돌리지 않는다 —
+    접합된 회전은 `pending_turns` 에 들어가지 않기 때문이다.
     """
     carriers = {mover for mover, _carried in family.carries}
     pairs: dict[int, int] = {}
@@ -200,8 +211,14 @@ def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
             stack.append([i, op.axis, op.angle, op.outer, ok])
         elif isinstance(op, SplitByAxis):
             continue  # 접합 대상이다
+        elif isinstance(op, RollbackTurns):
+            # 열려 있던 회전을 전부 여기서 닫는다 (§7.6)
+            for entry in stack:
+                if entry[4]:
+                    pairs[entry[0]] = i
+            stack.clear()
         else:
-            # EnterRegion / ExitRegion / RollbackTurns / 알 수 없는 연산
+            # EnterRegion / ExitRegion / 알 수 없는 연산
             poison_all()
     return pairs
 
@@ -377,8 +394,9 @@ def evaluate(
     # 접합 계획 (§7.10). 증명된 짝만 들어 있고, 나머지는 지금 경로로 흐른다.
     # registry 는 항상 **끌어온 좌표계**(회전 이전)의 상태를 들고 있다
     conj_open = plan_conjugation(family)
-    conj_close = {close: open_ for open_, close in conj_open.items()}
     frames: list[TurnFrame] = []
+    # 각 프레임을 닫는 연산 번호. 반대 회전일 수도 RollbackTurns 일 수도 있다
+    frame_close: list[int] = []
 
     # 축 법선은 런타임 상태다. 실림이 선언된 축은 회전과 함께 움직인다 (§2.1).
     # 정의(PuzzleFamily)는 초기 위치만 들고 있고, 각도가 바뀌면 처음부터 다시
@@ -482,6 +500,7 @@ def evaluate(
                 frames.append(
                     TurnFrame.make(normals[axis.id], theta, op.angle, op.outer)
                 )
+                frame_close.append(conj_open[i])
                 log.append(
                     TurnResult(
                         axis_id=axis.id,
@@ -493,8 +512,9 @@ def evaluate(
                     )
                 )
                 continue
-            if i in conj_close:
+            if frame_close and frame_close[-1] == i:
                 frames.pop()
+                frame_close.pop()
                 log.append(
                     TurnResult(
                         axis_id=axis.id,
@@ -616,6 +636,12 @@ def evaluate(
                     "영역 회전은 블록 안에서 짝을 맞춰야 한다 (turned 를 쓴다)"
                 )
         elif isinstance(op, RollbackTurns):
+            # 접합된 회전은 실행된 적이 없으므로 되돌릴 것도 없다. 프레임만
+            # 걷어낸다 (§7.10). pending_turns 에는 폴백으로 실제 실행된 것만
+            # 들어 있으므로 아래 되돌리기는 그것들만 다룬다
+            while frame_close and frame_close[-1] == i:
+                frames.pop()
+                frame_close.pop()
             failed = False
             for axis, theta, angle, outer in reversed(pending_turns):
                 try:

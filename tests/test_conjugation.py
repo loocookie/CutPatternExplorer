@@ -92,16 +92,24 @@ def test_plan_finds_every_turned_pair():
         assert len(pairs) * 2 == len(turns), name
 
 
-def test_plan_refuses_what_it_cannot_prove():
-    """증명 못 하는 것은 넣지 않는다. 빠지면 폴백이라 결과는 같고 느릴 뿐이다."""
-    # 맨 turn + 정의 끝의 자동 RollbackTurns. 어휘적 짝이 없다
+def test_rollback_closes_bare_turns():
+    """맨 `turn()` 도 접합된다. 닫는 것은 정의 끝의 자동 RollbackTurns 다.
+
+    이게 없으면 같은 기하를 내는 두 표기(`turned()` 블록 대 맨 `turn()`)가
+    소스만 봐서는 안 보이는 성능 차이를 갖는다 (§7.10).
+    """
     faces = cube_faces("faces", turns=(45, -45))
     with puzzle("bare", faces) as p:
         split(faces)
         turn(faces.U, 45)
         split(faces.R)
-    assert plan_conjugation(p.family) == {}
+    ops = p.family.operations
+    rollback = len(ops) - 1
+    assert plan_conjugation(p.family) == {6: rollback}
 
+
+def test_plan_refuses_what_it_cannot_prove():
+    """증명 못 하는 것은 넣지 않는다. 빠지면 폴백이라 결과는 같고 느릴 뿐이다."""
     # 짝 사이에서 여는 region 블록. 영역이 회전을 따라 변환되는 경로다
     f2 = cube_faces("f2", turns=(45, -45))
     with puzzle("inner-region", f2) as q:
@@ -110,6 +118,51 @@ def test_plan_refuses_what_it_cannot_prove():
             with region(outside(f2.R), outside(f2.L)):
                 split(f2.F)
     assert plan_conjugation(q.family) == {}
+
+    # 실린 축. 블록 안 split 이 실린 축을 쓰면 법선이 달라진다 (§2.1)
+    from cutpattern.dsl import carry
+
+    f3 = cube_faces("f3", turns=(45, -45))
+    with puzzle("carried", f3) as r:
+        carry(f3.U, f3.R)
+        split(f3)
+        with turned(f3.U, 45):
+            split(f3.R)
+    assert plan_conjugation(r.family) == {}
+
+
+def test_mixed_fallback_and_conjugation_agree():
+    """바깥은 폴백, 안쪽은 접합인 경우에도 결과가 같아야 한다.
+
+    registry 는 바깥 회전이 실제로 적용된 좌표계를 들고 있고 안쪽 프레임은 그
+    위에서 정의되므로 둘이 일관된다. RollbackTurns 는 실행된 적 없는 회전을
+    되돌리지 않는다 — 접합된 회전은 pending_turns 에 들어가지 않기 때문이다.
+    """
+    from cutpattern.dsl import carry
+
+    def build():
+        f = cube_faces("f", turns=(45, -45, 90, -90))
+        with puzzle("mixed", f) as p:
+            carry(f.U, f.F)          # U 는 실려 있어 접합 대상이 아니다
+            split(f)
+            with turned(f.U, 45):    # 폴백
+                with turned(f.R, 45):  # 접합
+                    split(f.F, f.B)
+        return p
+
+    plan = plan_conjugation(build().family)
+    assert len(plan) == 1, plan  # R 짝만 접합된다
+
+    for theta in (40.0, 54.7356, 63.0, 70.0):
+        import cutpattern.engine.operations as OPS
+
+        original = OPS.plan_conjugation
+        OPS.plan_conjugation = _no_conjugation
+        try:
+            plain = _run(build(), {"f": theta})
+        finally:
+            OPS.plan_conjugation = original
+        assert _run(build(), {"f": theta}) == plain, theta
 
 
 def test_region_outside_the_pair_is_still_conjugated():

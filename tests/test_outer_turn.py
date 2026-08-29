@@ -135,13 +135,6 @@ def test_dsl_turned_supports_outer():
     )
 
 
-def _turn_count(p):
-    from cutpattern.engine.turn import TurnResult
-
-    _reg, log = p.evaluate({"faces": THETA_333})
-    return sum(isinstance(r, TurnResult) for r in log)
-
-
 def test_rollback_cancels_matching_outer_turns_only():
     """상쇄 판정은 축과 각뿐 아니라 어느 쪽인지도 봐야 한다."""
     with puzzle("cancel", FACES) as same_side:
@@ -154,10 +147,24 @@ def test_rollback_cancels_matching_outer_turns_only():
         turn(FACES.U, 45, outer=True)
         turn(FACES.U, -45, outer=False)
 
-    # 같은 쪽이면 짝이 맞아 rollback 이 아무것도 하지 않는다
-    assert _turn_count(same_side) == 2
-    # 다른 쪽이면 서로 다른 영역이라 상쇄되지 않고 rollback 이 둘 다 되돌린다
-    assert _turn_count(other_side) == 4
+    # 상쇄 판정은 접합 계획에 그대로 드러난다 (§7.10). TurnResult 개수로 세지
+    # 않는다 — 접합하면 되돌리기가 실행되지 않아 로그에 안 남는다.
+    #
+    # 연산 배치는 둘 다 [0..5]=split, 6=Turn, 7=Turn, 8=RollbackTurns 다.
+    from cutpattern.engine.operations import plan_conjugation
+
+    # 같은 쪽이면 짝이 맞아 두 번째 Turn 이 첫 번째를 닫는다
+    assert plan_conjugation(same_side.family) == {6: 7}
+    # 다른 쪽이면 서로 다른 영역이라 상쇄되지 않고 둘 다 rollback 이 닫는다
+    assert plan_conjugation(other_side.family) == {6: 8, 7: 8}
+
+    # 짝이 맞으므로 순효과가 없다. 그냥 split 한 것과 같은 상태여야 한다
+    with puzzle("plain", FACES) as plain:
+        split(FACES)
+    same_reg, _ = evaluate(same_side.family, {"faces": THETA_333})
+    plain_reg, _ = evaluate(plain.family, {"faces": THETA_333})
+    assert same_reg.total_arc_length() == pytest.approx(plain_reg.total_arc_length())
+    assert len(same_reg.non_empty()) == len(plain_reg.non_empty())
 
 
 # ---- M 띠의 구간 구조 ---------------------------------------------------
