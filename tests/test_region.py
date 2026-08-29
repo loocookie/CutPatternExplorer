@@ -300,3 +300,102 @@ def test_moved_arc_is_not_swallowed_by_hidden_coverage():
     for axis in faces:
         bc, _orient = reg.find(axis.normal, offset)
         assert bc.is_complete, f"{axis.id} 면 원이 뚫렸다"
+
+
+# ---- 경계가 실제 절단인가 (§6.3) --------------------------------------
+
+
+def test_region_with_an_uncut_boundary_is_rejected():
+    """경계축을 자르지 않은 채 region 을 잡으면 거부한다.
+
+    영역 제한 split 은 경계에서 잘린다. 그 자리에 절단이 없으면 잘린 끝이
+    아무 데도 닿지 않아 면 한가운데 매달린 모서리가 남는다. 블록이 끝나고
+    회전이 되돌아온 뒤에도 남는 진짜 결함이라, 사후 진단이 아니라 사전 판정으로
+    막는다. Turn 합법성(§7.1)과 같은 성격이다.
+    """
+    from cutpattern.engine.operations import UncutBoundaryError
+
+    faces = _faces()
+    x, xm = _pair(faces["c2"], faces)
+    z = faces["c0"]
+    with puzzle("uncut", faces) as p:
+        split(z)  # 경계로 쓸 x 를 자르지 않았다
+        with region(outside(x), outside(xm)):
+            split(at_angle(z, 90, faces))
+    with pytest.raises(UncutBoundaryError, match="c2"):
+        _evaluate(p)
+
+
+def test_splitting_the_boundary_first_makes_it_legal():
+    """경계를 먼저 split 하면 통과하고 매달림도 남지 않는다."""
+    faces = _faces()
+    x, xm = _pair(faces["c2"], faces)
+    z = faces["c0"]
+    with puzzle("cut-first", faces) as p:
+        split(z, x, xm)
+        with region(outside(x), outside(xm)):
+            split(at_angle(z, 90, faces))
+    reg, _log = _evaluate(p)
+    assert not _final_dangling(reg)
+
+
+def test_boundary_check_only_asks_for_the_part_that_cuts_the_cell():
+    """한 경계가 셀을 가르는 부분만 요구한다.
+
+    원 전체를 요구하면 회전을 거쳐 일부만 남은 경계가 멀쩡한데도 거부된다.
+    OctoCube Hide 가 바로 그 경우다.
+    """
+    from examples.octocube_hide import build
+
+    reg, _log = build().evaluate({"cube": THETA_DEG})
+    assert not _final_dangling(reg)
+
+
+def test_uncut_boundary_follows_the_on_illegal_policy():
+    """경계 미절단도 truncate 정책을 탄다 (§6.3, §13.2).
+
+    경계가 절단인지는 cut angle 의 함수다. 아래 정의는 theta <= 45 에서는
+    합법이고 그 위에서는 R 원의 U cap 쪽이 회전으로 딴 carrier 에 가 있어
+    경계가 뚫린다. 슬라이더를 미는 것만으로 넘는 선이다.
+
+    여기서 예외를 그대로 올리면 뷰어의 재생성 루프가 죽고, 각도를 되돌려도
+    복원할 앱이 남지 않는다. 불법 Turn 과 같은 처리를 해야 한다.
+    """
+    from cutpattern.dsl import cube_faces, turn
+    from cutpattern.engine.operations import Truncated, UncutBoundaryError
+
+    def build():
+        f = cube_faces("faces", turns=(45, -45, 90, -90, 180))
+        with puzzle("uncut-policy", f) as p:
+            split(f)
+            turn(f.U, 45)
+            with region(outside(f.R), outside(f.L)):
+                split(f.F, f.B)
+        return p
+
+    p = build()
+
+    # 얕은 절단에서는 양쪽 정책 모두 통과한다
+    for policy in ("raise", "truncate"):
+        _reg, log = p.evaluate({"faces": 40.0}, on_illegal=policy)
+        assert not [r for r in log if isinstance(r, Truncated)]
+
+    # 깊어지면 raise 는 올리고
+    with pytest.raises(UncutBoundaryError, match="R"):
+        p.evaluate({"faces": 63.0}, on_illegal="raise")
+
+    # truncate 는 직전 상태에서 멈추고 기록만 남긴다
+    _reg, log = p.evaluate({"faces": 63.0}, on_illegal="truncate")
+    trunc = [r for r in log if isinstance(r, Truncated)]
+    assert len(trunc) == 1
+    assert trunc[0].axis_id == "R"
+    assert trunc[0].remaining > 0
+
+    # 슬라이더를 되돌리면 복원된다 (§13.2). 평가가 상태를 들고 있지 않으므로
+    # 같은 각도는 항상 같은 결과여야 한다
+    reg_back, log_back = p.evaluate({"faces": 40.0}, on_illegal="truncate")
+    assert not [r for r in log_back if isinstance(r, Truncated)]
+    reg_first, _ = build().evaluate({"faces": 40.0}, on_illegal="truncate")
+    assert reg_back.total_arc_length() == pytest.approx(
+        reg_first.total_arc_length(), abs=1e-12
+    )

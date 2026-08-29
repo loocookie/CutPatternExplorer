@@ -50,7 +50,7 @@ from cutpattern.dsl import at_angle, cube_faces, outside, puzzle, region, split,
 from cutpattern.render.arcs import build_arcs
 from cutpattern import solids as S
 from cutpattern.axisops import merge, mirror
-from cutpattern.engine.operations import Truncated
+from cutpattern.engine.operations import Truncated, UncutBoundaryError
 
 THETA = math.degrees(math.acos(0.45))
 
@@ -74,7 +74,19 @@ reg2, log2 = build_hide().evaluate({"cube": THETA}, on_illegal="truncate")
 assert not [r for r in log2 if isinstance(r, Truncated)], "예상 못한 절단"
 assert len(reg2) == 18, len(reg2)
 
-# 3. 축 집합 생성 (대칭군, 궤도)
+# 3. 경계 미절단을 실제로 잡는가. 판정 경로까지 numpy 없이 돈다
+f2 = cube_faces("f2", turns=(45, -45, 90, -90, 180))
+with puzzle("uncut", f2) as q:
+    split(f2.F, f2.B)
+    with region(outside(f2.R), outside(f2.L)):
+        split(f2.U, f2.D)
+try:
+    q.evaluate({"f2": THETA}, on_illegal="raise")
+    raise AssertionError("UncutBoundaryError 가 나왔어야 한다")
+except UncutBoundaryError:
+    pass
+
+# 4. 축 집합 생성 (대칭군, 궤도)
 S.rhombic_triacontahedron()
 S.pentagonal_hexecontahedron()
 print("OK")
@@ -84,7 +96,7 @@ print("OK")
 def test_engine_runs_with_numpy_import_blocked():
     """실행 경로에 numpy 가 없는가.
 
-    split, turn, region 블록, 축 집합 생성, 렌더까지 판다.
+    split, turn, region 블록(경계 사전 판정 포함), 축 집합 생성, 렌더까지 판다.
     region 을 빼면 `geometry/region.py` 의 clip 과 covers_within 이 통째로
     검사에서 새어 나간다 — `EnterRegion` 이 유일한 진입점이기 때문이다.
     """

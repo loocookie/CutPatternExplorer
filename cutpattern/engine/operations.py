@@ -13,7 +13,7 @@ from ..epsilon import RADIUS_EPS
 # 회전 상쇄 판정 허용 오차(도)
 TURN_CANCEL_EPS = 1e-9
 from ..geometry.angular_coverage import Coverage, full
-from ..geometry.region import Constraint, Region, dangling_endpoints
+from ..geometry.region import Constraint, Region, covers_within, dangling_endpoints
 from ..geometry.region import _add_constraint as _extend_cell
 from ..geometry.registry import BoundaryRegistry
 from ..geometry.span import Provenance
@@ -31,6 +31,7 @@ __all__ = [
     "SplitResult",
     "TurnResult",
     "Truncated",
+    "UncutBoundaryError",
     "IllegalTurnError",
     "split_by_axis",
     "evaluate",
@@ -92,6 +93,26 @@ class EnterRegion:
 @dataclass(frozen=True)
 class ExitRegion:
     """직전 EnterRegion 을 되돌린다."""
+
+
+class UncutBoundaryError(Exception):
+    """region 의 경계가 아직 절단이 아니다 (§6.3).
+
+    영역 제한 split 은 경계에서 잘린다. 그 자리에 절단이 없으면 잘린 끝이
+    아무 데도 닿지 않아 면 한가운데 매달린 모서리가 남는다. 블록이 끝나고
+    회전이 되돌아온 뒤에도 남는 진짜 결함이다.
+
+    경계를 먼저 split 하면 된다. Turn 합법성(§7.1)과 같은 성격의 사전 판정이고,
+    같은 covers_within 으로 본다 — 셀을 실제로 가르는 부분만 요구한다.
+    """
+
+    def __init__(self, axis_id: str, gap: float) -> None:
+        super().__init__(
+            f"영역 경계가 아직 절단이 아니다: 축 {axis_id!r} "
+            f"(빈 길이 {gap:.4f}). 그 축을 먼저 split 해야 한다"
+        )
+        self.axis_id = axis_id
+        self.gap = gap
 
 
 @dataclass(frozen=True)
@@ -181,7 +202,10 @@ def evaluate(
         "raise"    — 불법 Turn 에서 IllegalTurnError 를 올린다 (기본)
         "truncate" — 불법이 되기 직전 상태에서 멈추고 Truncated 를 기록한다.
                      slider 를 움직이는 동안 family Turn 이 불법이 될 수 있으므로
-                     UI 는 이쪽을 쓴다 (§13.1).
+                     UI 는 이쪽을 쓴다 (§13.2).
+
+    IllegalTurnError 와 UncutBoundaryError 가 둘 다 이 정책을 탄다. 어느 쪽도
+    각도의 함수라, 합법이던 정의가 슬라이더를 미는 것만으로 불법이 된다.
     """
     if on_illegal not in ("raise", "truncate"):
         raise ValueError(f"on_illegal 은 'raise' 또는 'truncate' (받은 값: {on_illegal!r})")
@@ -221,6 +245,31 @@ def evaluate(
                 )
             )
         return tuple(out)
+
+    def check_region_boundaries(cells) -> None:
+        """셀들의 경계가 전부 실제 절단 위에 있는가 (§6.3).
+
+        한 경계가 셀을 가르는 부분은 **같은 셀의 나머지 제약**으로 잘린 부분
+        뿐이다. 원 전체를 요구하면 멀쩡한 정의가 거부된다.
+        """
+        for cell in cells:
+            for k, c in enumerate(cell):
+                others = tuple(o for j, o in enumerate(cell) if j != k)
+                hit = reg.find(c.normal, c.offset)
+                if hit is not None:
+                    circle, coverage = hit[0].circle, hit[0].visible_coverage
+                else:
+                    circle, coverage = (
+                        SphericalCircle.from_normal_offset(c.normal, c.offset),
+                        [],
+                    )
+                if circle.is_degenerate():
+                    continue  # 반지름 0. 가르는 경계가 없다 (§6.1)
+                ok, missing = covers_within(circle, coverage, others)
+                if not ok:
+                    raise UncutBoundaryError(
+                        c.axis_id, sum(b - a for a, b in missing)
+                    )
 
     def active_region():
         return region_stack[-1] if region_stack else None
@@ -298,6 +347,24 @@ def evaluate(
                         break
                 if out is not None:
                     merged.append(out)
+            try:
+                check_region_boundaries(merged)
+            except UncutBoundaryError as exc:
+                # 불법 Turn 과 같은 정책을 탄다 (§13.2). 경계가 절단인지는 cut
+                # angle 에 따라 달라지므로, 슬라이더를 미는 것만으로 합법이던
+                # 정의가 불법이 될 수 있다. 여기서 예외를 그대로 올리면 뷰어의
+                # 재생성 루프가 죽고, 각도를 되돌려도 복원할 앱이 남지 않는다
+                if on_illegal == "raise":
+                    raise
+                log.append(
+                    Truncated(
+                        op_index=i,
+                        axis_id=exc.axis_id,
+                        reason=str(exc),
+                        remaining=len(family.operations) - i,
+                    )
+                )
+                return reg, log
             new_region = Region(merged)
             depth = len(region_stack)
             region_stack.append(new_region)
