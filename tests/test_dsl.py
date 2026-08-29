@@ -270,8 +270,12 @@ def test_balanced_turns_leave_nothing_to_roll_back():
 
     p = build()
     reg, _ = p.evaluate({"faces": THETA_DEG})
-    # 되돌릴 회전이 남지 않으므로 carrier 가 늘지 않는다
-    assert len(reg) == 30
+    # 되돌릴 회전이 남지 않으므로 빈 carrier 가 하나도 안 남는다.
+    #
+    # 접합(§7.10) 전에는 30 이었다. 왕복이 매번 도착지 carrier 를 만들고 돌아온
+    # 뒤 빈 껍데기로 남겼기 때문이다. 접합은 회전을 실행하지 않으므로 껍데기가
+    # 생기지 않는다. len(reg) == len(non_empty) 쪽이 원래 재고 싶던 것이다
+    assert len(reg) == len(reg.non_empty()) == 18
 
 
 def test_two_axis_sets_with_separate_sliders():

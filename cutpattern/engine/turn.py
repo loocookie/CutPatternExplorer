@@ -52,6 +52,8 @@ class TurnResult:
     carriers_after: int = 0
     no_op: bool = False
     outer: bool = False
+    # 접합으로 실행을 건너뛴 회전 (§7.10). 로그 모양을 유지하려고 남긴다
+    conjugated: bool = False
     # 진단용. 실제로 옮긴 호들 (출발 carrier 법선, t0, t1)
     moved: tuple = ()
 

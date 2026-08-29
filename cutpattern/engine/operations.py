@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
+from functools import lru_cache
 
 from ..epsilon import RADIUS_EPS
 
 # 회전 상쇄 판정 허용 오차(도)
 TURN_CANCEL_EPS = 1e-9
-from ..geometry.angular_coverage import Coverage, full
+from ..geometry.angular_coverage import ANGLE_EPS as _UNUSED_ANGLE_EPS  # noqa: F401
+from ..geometry.angular_coverage import Coverage, difference, full
+from ..geometry.conjugate import TurnFrame, pull_back_all
 from ..geometry.region import Constraint, Region, covers_within, dangling_endpoints
 from ..geometry.region import _add_constraint as _extend_cell
 from ..geometry.registry import BoundaryRegistry
@@ -24,6 +27,7 @@ from .turn import IllegalTurnError, TurnResult, turn
 
 __all__ = [
     "SplitByAxis",
+    "plan_conjugation",
     "Turn",
     "RollbackTurns",
     "EnterRegion",
@@ -146,6 +150,157 @@ class SplitResult:
 # ---- 실행 --------------------------------------------------------------
 
 
+# 계획은 연산 목록만 보고 정해진다. 절단 각도와 무관하므로 슬라이더를 움직여도
+# 다시 계산할 이유가 없다. PuzzleFamily 는 frozen 이고 Vec3 가 tuple 이라 해시가
+# 된다 (§12.2). 정의 몇 개를 오가는 UI 를 감당할 크기로 잡는다
+@lru_cache(maxsize=32)
+def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
+    """접합 가능한 Turn 짝을 찾는다 (§7.10, §12.3-2).
+
+    `turned(a, θ)` 는 회전하고 자르고 정확히 되돌린다. 그 왕복의 순효과는
+    `E ∪ Φ⁻¹(C)` 뿐이므로 (§7.10), 짝을 알아보면 registry 를 건드리지 않고
+    새 절단만 끌어올 수 있다.
+
+    반환값은 {여는 Turn 의 연산 번호: 닫는 Turn 의 연산 번호}.
+
+    **증명하지 못하면 넣지 않는다.** 빠진 짝은 지금 경로로 그대로 흘러 결과가
+    같고 느릴 뿐이다. 정확성이 이 함수의 완전성에 걸리지 않는다는 것이 요점이다.
+
+    지금 거부하는 것:
+
+    - 짝 사이에 `EnterRegion` / `ExitRegion` 이 열리는 경우. 블록 **바깥의**
+      영역은 괜찮다 (`Φ⁻¹(C ∩ Φ(R)) = Φ⁻¹(C) ∩ R`). 안에서 여는 것은 영역이
+      회전을 따라 변환되는 경로라 따로 다뤄야 한다
+    - 짝 사이에 `RollbackTurns` 가 있는 경우
+    - 축이 다른 축을 싣고 도는 경우 (§2.1 carry). 블록 안 split 이 실린 축을
+      쓰면 법선이 달라진다
+    """
+    carriers = {mover for mover, _carried in family.carries}
+    pairs: dict[int, int] = {}
+    # (연산 번호, 축 id, 각도, outer, 접합 가능한가)
+    stack: list[list] = []
+
+    def poison_all() -> None:
+        for entry in stack:
+            entry[4] = False
+
+    for i, op in enumerate(family.operations):
+        if isinstance(op, Turn):
+            if (
+                stack
+                and stack[-1][1] == op.axis
+                and stack[-1][3] == op.outer
+                and abs(stack[-1][2] + op.angle) < TURN_CANCEL_EPS
+            ):
+                entry = stack.pop()
+                if entry[4]:
+                    pairs[entry[0]] = i
+                continue
+            ok = op.axis not in carriers
+            stack.append([i, op.axis, op.angle, op.outer, ok])
+        elif isinstance(op, SplitByAxis):
+            continue  # 접합 대상이다
+        else:
+            # EnterRegion / ExitRegion / RollbackTurns / 알 수 없는 연산
+            poison_all()
+    return pairs
+
+
+def _pulled_pieces(reg: BoundaryRegistry, circle: SphericalCircle, frames):
+    """원을 회전 스택으로 끌어오고, 각 조각을 저장된 carrier 좌표로 옮긴다.
+
+    반환은 (carrier 또는 None, 원, 구간) 목록. carrier 가 None 이면 그 자리에
+    아직 아무 경계도 없다.
+    """
+    out = []
+    for c, spans in pull_back_all(circle, frames):
+        hit = reg.find(c.n, c.h)
+        if hit is None:
+            out.append((None, c, spans))
+        else:
+            bc = hit[0]
+            out.append((bc, bc.circle, reg.to_carrier_frame(bc, c.n, c.h, spans)))
+    return out
+
+
+def is_conjugated_turn_legal(
+    reg: BoundaryRegistry, normal, theta_deg: float, frames, region
+) -> tuple[bool, float]:
+    """회전 스택 안에서의 §7.1 합법성 판정.
+
+    registry 는 끌어온 좌표계(원래 좌표계)의 상태를 들고 있고, 판정해야 할
+    것은 회전된 상태의 경계원이다. `Φ` 가 전단사이므로 물음을 끌어와서 묻는다.
+
+        B ⊆ Φ(E)   <=>   Φ⁻¹(B) ⊆ E
+
+    되돌리기 쪽 판정은 하지 않는다. 경계 carrier 의 span 은 회전이 옮기지 않고
+    (§7.2 0단계) 블록 안 split 은 coverage 를 더하기만 하므로, 정방향이 합법이면
+    되돌리기는 반드시 합법이다 (§7.10).
+    """
+    d = math.cos(math.radians(theta_deg))
+    circle = SphericalCircle.from_normal_offset(normal, d)
+    if circle.is_degenerate():
+        return True, 0.0  # 반지름 0. 경계가 없다 (§6.1)
+    gap = 0.0
+    for bc, c, spans in _pulled_pieces(reg, circle, frames):
+        want = spans
+        if region is not None:
+            want, _outside = region.clip(c, want)
+        if not want:
+            continue
+        have = [] if bc is None else (bc.visible_coverage if region is not None else bc.coverage)
+        missing = [(a, b) for a, b in difference(want, have) if b - a > ANGLE_EPS]
+        gap += sum(b - a for a, b in missing)
+    return gap <= 0.0, gap
+
+
+def conjugated_split(
+    registry: BoundaryRegistry,
+    axis: Axis,
+    theta_deg: float,
+    frames,
+    op_index: int = -1,
+    axis_set_id: str = "",
+    constraints=None,
+) -> SplitResult:
+    """회전 스택 안의 split. 회전을 실행하지 않고 절단원만 끌어온다 (§7.10).
+
+    영역은 끌어온 **뒤에** 적용한다. 실제 경로에서는 영역이 회전을 따라
+    변환되므로 `C ∩ Φ(R)` 을 자르는데, 그것을 끌어오면 `Φ⁻¹(C) ∩ R` 이다.
+    끌어온 좌표계에서는 영역이 변환되지 않은 원본이다.
+    """
+    theta = math.radians(theta_deg)
+    h = math.cos(theta)
+    circle = SphericalCircle.from_normal_offset(axis.normal, h)
+    if circle.is_degenerate():
+        return SplitResult(axis.id, -1, [], skipped_degenerate=True)
+    prov = Provenance(
+        op_index=op_index,
+        axis_id=axis.id,
+        kind="split",
+        origin_axis_set=axis_set_id,
+        origin_axis=axis.id,
+    )
+    first_index = -1
+    added_total: Coverage = []
+    bad: list = []
+    for c, spans in pull_back_all(circle, frames):
+        tags = None
+        if constraints is not None:
+            spans, tags = constraints.clip_tagged(c, spans)
+            if not spans:
+                continue
+        bc, added = registry.add_coverage(
+            c.n, c.h, spans, prov, only_visible=constraints is not None
+        )
+        if first_index < 0:
+            first_index = bc.index
+        added_total.extend(added)
+        if constraints is not None:
+            bad.extend(dangling_endpoints(c, spans, tags, registry))
+    return SplitResult(axis.id, first_index, added_total, dangling=tuple(bad))
+
+
 def split_by_axis(
     registry: BoundaryRegistry,
     axis: Axis,
@@ -219,6 +374,12 @@ def evaluate(
     log: list[SplitResult | TurnResult | Truncated] = []
     pending_turns: list[tuple[Axis, float, float, bool]] = []
 
+    # 접합 계획 (§7.10). 증명된 짝만 들어 있고, 나머지는 지금 경로로 흐른다.
+    # registry 는 항상 **끌어온 좌표계**(회전 이전)의 상태를 들고 있다
+    conj_open = plan_conjugation(family)
+    conj_close = {close: open_ for open_, close in conj_open.items()}
+    frames: list[TurnFrame] = []
+
     # 축 법선은 런타임 상태다. 실림이 선언된 축은 회전과 함께 움직인다 (§2.1).
     # 정의(PuzzleFamily)는 초기 위치만 들고 있고, 각도가 바뀌면 처음부터 다시
     # 실행되므로 결정적이다.
@@ -285,12 +446,66 @@ def evaluate(
         if isinstance(op, SplitByAxis):
             aset, axis = family.find_axis(op.axis)
             theta = cut_angles[aset.cut_angle_input]
-            log.append(
-                split_by_axis(reg, current(axis), theta, i, aset.id, active_region())
-            )
+            if frames:
+                log.append(
+                    conjugated_split(
+                        reg, current(axis), theta, frames, i, aset.id, active_region()
+                    )
+                )
+            else:
+                log.append(
+                    split_by_axis(reg, current(axis), theta, i, aset.id, active_region())
+                )
         elif isinstance(op, Turn):
             aset, axis = family.find_axis(op.axis)
             theta = cut_angles[aset.cut_angle_input]
+            if i in conj_open:
+                # 접합. 회전을 실행하지 않고 스택에만 쌓는다 (§7.10).
+                # 판정은 그대로 한다 — 정방향 하나면 되돌리기까지 보장된다
+                ok, gap = is_conjugated_turn_legal(
+                    reg, normals[axis.id], theta, frames, active_region()
+                )
+                if not ok:
+                    where = " (영역 안)" if active_region() else ""
+                    reason = f"회전 경계원이 완전한 cut 이 아니다{where} (빈 길이 {gap:.4f})"
+                    if on_illegal == "raise":
+                        raise IllegalTurnError(axis.id, reason)
+                    log.append(
+                        Truncated(
+                            op_index=i,
+                            axis_id=axis.id,
+                            reason=reason,
+                            remaining=len(family.operations) - i,
+                        )
+                    )
+                    return reg, log
+                frames.append(
+                    TurnFrame.make(normals[axis.id], theta, op.angle, op.outer)
+                )
+                log.append(
+                    TurnResult(
+                        axis_id=axis.id,
+                        angle_deg=op.angle,
+                        outer=op.outer,
+                        conjugated=True,
+                        carriers_before=len(reg),
+                        carriers_after=len(reg),
+                    )
+                )
+                continue
+            if i in conj_close:
+                frames.pop()
+                log.append(
+                    TurnResult(
+                        axis_id=axis.id,
+                        angle_deg=op.angle,
+                        outer=op.outer,
+                        conjugated=True,
+                        carriers_before=len(reg),
+                        carriers_after=len(reg),
+                    )
+                )
+                continue
             try:
                 log.append(
                     turn(

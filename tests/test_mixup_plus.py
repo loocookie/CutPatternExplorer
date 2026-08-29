@@ -68,7 +68,11 @@ def test_45_slice_is_closed_after_the_plus_cuts(theta, plus):
     before, _ = evaluate(_without_rollback(plus), {"faces": theta})
     after, _ = evaluate(_without_rollback(plus, SLICE_45), {"faces": theta})
 
-    assert len(after) == len(before)  # carrier 가 늘지 않는다
+    # carrier 개수는 재지 않는다. 접합(§7.10) 전에는 before 가 빈 껍데기까지
+    # 세어 34 였고 after 와 우연히 같았을 뿐이다. 실제로는 접합 켜든 끄든
+    # non-empty 가 18 -> 26 으로 늘고 새 평면이 8개 생긴다. 격자가 보존된다는
+    # 주장은 아래 셋이 진짜로 담고 있다 — 호 길이가 보존되고, 면 원 6개가
+    # 온전하며, 모든 면 회전이 여전히 합법이다
     assert after.total_arc_length() == pytest.approx(before.total_arc_length())
     assert _complete(after, faces, theta) == {a.id for a in faces}
     for axis in faces:

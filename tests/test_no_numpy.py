@@ -63,8 +63,8 @@ with puzzle("probe", faces) as p:
             split(*at_angle(x, 90, faces))
 reg, log = p.evaluate({"faces": THETA}, on_illegal="truncate")
 arcs = build_arcs(reg, max_step=0.05)
-assert len(reg) == 30, len(reg)
-assert len(arcs) == 114, len(arcs)
+assert len(reg) == 18, len(reg)
+assert len(arcs) == 30, len(arcs)
 assert abs(reg.total_arc_length() - 87.747970730) < 1e-9, reg.total_arc_length()
 
 # 2. region 블록. EnterRegion 의 경계 사전 판정이 covers_within 을 타므로
