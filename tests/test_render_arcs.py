@@ -3,7 +3,6 @@
 import math
 
 import numpy as np
-import pytest
 
 from cutpattern.dsl import AxisSet
 from cutpattern.engine.axes import PuzzleFamily

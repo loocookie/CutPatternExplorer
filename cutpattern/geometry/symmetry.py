@@ -19,11 +19,10 @@
 
 from __future__ import annotations
 
-import itertools
 import math
 
 from ..epsilon import NORMAL_EPS
-from .vector import IDENTITY3, Mat3, Vec3, norm, normalize, rotation_matrix
+from .vector import IDENTITY3, Mat3, Vec3, norm, rotation_matrix
 
 __all__ = [
     "rotation_group",
@@ -53,7 +52,7 @@ def _round_key(m: Mat3, decimals: int = 9) -> tuple:
 
 
 def _close_group(
-    generators: list[Mat3], expected: int | None = None, allow_improper: bool = False
+    generators: list[Mat3], expected: int | None = None
 ) -> list[Mat3]:
     """생성원으로부터 군 전체를 닫는다. 폭 우선으로 곱해 나간다."""
     elements: dict[tuple, Mat3] = {}
@@ -125,7 +124,7 @@ def rotation_group(name: str) -> list[Mat3]:
             _axis_rotation((0, 1, phi), 2 * math.pi / 5),
         ]
 
-    group = _close_group(gens, expected=GROUP_ORDERS[name], allow_improper=name in ("Td", "Oh", "Ih"))
+    group = _close_group(gens, expected=GROUP_ORDERS[name])
     _GROUP_CACHE[name] = group
     return group
 

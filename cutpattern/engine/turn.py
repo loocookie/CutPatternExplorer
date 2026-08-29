@@ -10,22 +10,20 @@ cut(회전 경계원) 위의 점이므로 점집합으로서의 E 는 변하지 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 from ..epsilon import ANGLE_EPS
-from ..geometry.angular_coverage import TAU, make_span
+from ..geometry.angular_coverage import TAU, difference, make_span
 from ..geometry.classify import (
     FIXED,
-    MIXED,
     MOVING,
-    STRADDLING,
     classify_carrier,
     classify_span,
     split_span_by_cap,
 )
 from ..geometry.region import Region, covers_within
 from ..geometry.registry import BoundaryCircle, BoundaryRegistry
-from ..geometry.span import AngularSpan, Provenance
+from ..geometry.span import AngularSpan
 from ..geometry.spherical_circle import SphericalCircle
 from ..geometry.vector import normalize, rotation_matrix
 from .axes import Axis
@@ -88,13 +86,9 @@ def _as_region(constraints):
 def _covers(carrier, region):
     if region is None:
         return covers_within(carrier.circle, carrier.coverage, ())
-    ok = True
-    missing = []
     inside, _outside = region.clip(carrier.circle, [(0.0, TAU)])
     if not inside:
         return True, []
-    from ..geometry.angular_coverage import difference
-
     gaps = difference(inside, carrier.visible_coverage)
     gaps = [(a, b) for a, b in gaps if b - a > ANGLE_EPS]
     return (not gaps), gaps

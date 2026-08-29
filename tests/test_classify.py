@@ -10,7 +10,6 @@ from cutpattern.geometry.classify import (
     FIXED,
     MIXED,
     MOVING,
-    STRADDLING,
     circle_terms,
     classify_carrier,
     classify_span,

@@ -370,6 +370,14 @@ TurnRecord
   active: bool                      §13
 ```
 
+위 블록은 **언어 중립 스케치**다. 필드 이름이 camelCase 지만 파이썬 구현은
+snake_case 를 쓴다 — `arcId` 는 `arc_id`, `extraTurnAngles` 는
+`extra_turn_angles`, `originAxisSet` 은 `origin_axis_set` 이다. 모델을 먼저
+말하고 구현 이름은 §15 의 모듈에서 찾는다.
+
+`RuntimeState` 와 `TurnRecord` 는 아직 구현되어 있지 않다. 사용자 조작 UI 와
+함께 온다 (§16 남은 것 3).
+
 `enabled`, `style`은 UI 상태이므로 family가 아니라 `RuntimeState`에 둔다.
 
 `provenance`가 두 층인 것이 중요하다. 재료를 만드는 연산은 `Split` 뿐이므로 **모든 호가 출처를 가진다.** 축 집합별 색칠이 그 값을 쓴다(§11). 읽으면 이렇게 나온다.
@@ -813,7 +821,7 @@ provenance 쪽은 §5 정의(`op_index` 는 이 호를 지금 자리로 보낸 �
 
 | 단계 | 상태 |
 |---|---|
-| 1. `SplitByAxisSet(faces)` | U, R 원 모두 완전 |
+| 1. `split(faces)` (= `SplitByAxis` 6개) | U, R 원 모두 완전 |
 | 2. `Turn(U, 45°)` | U 원 완전 covered → **합법**. R 호 중 U-cap 안쪽 부분만 분할되어 R' 원으로 이동 |
 | 3. (`Turn(R, ·)` 시도 시) | R carrier coverage에 결손 → **불법**. 물리적으로도 막힘이 맞다 |
 | 4. `SplitByAxis(R)` | R 원 전체를 후보로 만들고 차집합 계산 |
@@ -1235,8 +1243,7 @@ Split은 대부분 coverage union이므로 싸고, Turn만 straddling 호에 국
 
 ```text
 NORMAL_EPS        법선 평행/동일성
-OFFSET_EPS        평면 offset 동일성
-MERGE_EPS         carrier 병합 격자 및 최근접 임계
+MERGE_EPS         carrier 병합 격자 및 최근접 임계 (offset 동일성도 겸한다)
 ANGLE_EPS         각도 구간 끝점 병합
 SEL_EPS           cap 내부/외부 판정
 S_EPS             동축 판정 (진폭 s ≈ 0)
@@ -1275,6 +1282,8 @@ cutpattern/
     span                provenance 를 가진 구간 계층 (§5)
     classify            영역 분류, s~=0 분기, 교점 (§7.3)
     registry            carrier 병합, 양방향 키, 스냅 (§7.5)
+    region              가시 영역 셀, 제약, 클리핑 (§6.3, §7.9)
+    conjugate           회전 짝 접합의 Φ⁻¹ 매핑 (§7.10)
 
   engine/
     axes                Axis / AxisSet / PuzzleFamily
@@ -1289,6 +1298,7 @@ cutpattern/
 
   render/
     arcs                호 -> 점 좌표 목록. 렌더러 비의존
+    markers             축 위치 마커. 렌더러 비의존 (§11.3)
     vpython_view        개발용 뷰어
 
 examples/               퍼즐 정의

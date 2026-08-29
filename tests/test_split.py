@@ -5,11 +5,7 @@ import math
 import pytest
 
 from cutpattern.engine.axes import Axis, AxisSet, PuzzleFamily
-from cutpattern.engine.operations import (
-    SplitByAxis,
-        Turn,
-    evaluate,
-)
+from cutpattern.engine.operations import SplitByAxis, evaluate
 from cutpattern.geometry.angular_coverage import TAU, total_length
 
 

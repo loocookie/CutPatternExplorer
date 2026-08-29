@@ -31,7 +31,6 @@ XML 대신 파이썬 자체를 문법으로 쓴다. for, def, with, 컴프리헨
 
 from __future__ import annotations
 
-import math
 from contextlib import contextmanager
 from dataclasses import dataclass
 

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import math
 
-from .geometry.symmetry import cyclic_group, orbit
+from .geometry.symmetry import orbit
 from .geometry.vector import Vec3, cross, normalize
 
 __all__ = [

@@ -77,12 +77,6 @@ class PuzzleFamily:
                 return carried
         return ()
 
-    def axis_set(self, set_id: str) -> AxisSet:
-        for s in self.axis_sets:
-            if s.id == set_id:
-                return s
-        raise KeyError(f"축 집합 없음: {set_id!r}")
-
     def find_axis(self, axis_id: str) -> tuple[AxisSet, Axis]:
         for s in self.axis_sets:
             for a in s.axes:

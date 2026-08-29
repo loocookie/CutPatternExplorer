@@ -8,14 +8,12 @@
 from __future__ import annotations
 
 import importlib
-import math
 
 import pytest
 
 import cutpattern.engine.operations as OPS
 from cutpattern import solids as S
 from cutpattern.dsl import (
-    at_angle,
     outside,
     puzzle,
     region,
@@ -170,8 +168,6 @@ def test_mixed_fallback_and_conjugation_agree():
     assert len(plan) == 1, plan  # R 짝만 접합된다
 
     for theta in (40.0, 54.7356, 63.0, 70.0):
-        import cutpattern.engine.operations as OPS
-
         original = OPS.plan_conjugation
         OPS.plan_conjugation = _no_conjugation
         try:

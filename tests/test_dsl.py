@@ -2,7 +2,6 @@
 
 import math
 
-import numpy as np
 import pytest
 
 from cutpattern import solids as S
@@ -15,11 +14,7 @@ from cutpattern.dsl import (
     turn,
     turned,
 )
-from cutpattern.engine.operations import (
-    RollbackTurns,
-    SplitByAxis,
-        Turn,
-)
+from cutpattern.engine.operations import RollbackTurns, SplitByAxis, Turn
 
 # 축 id 는 방향을 말해주지 않는다 (`c0`..`c5`). 방향을 박은 id 를 두면
 # axisops.rotate 한 번에 거짓말이 되므로 (§2.2), 테스트에서 부를 이름을 여기서

@@ -1,6 +1,5 @@
 """각도 구간 연산 테스트. 설계 문서 §17 기하 단위 테스트."""
 
-import math
 
 import pytest
 

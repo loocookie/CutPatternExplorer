@@ -32,7 +32,6 @@ __all__ = [
     "difference",
     "intersection",
     "is_full",
-    "is_empty",
     "total_length",
     "contains",
     "shift",
@@ -141,10 +140,6 @@ def intersection(a: Coverage, b: Coverage) -> Coverage:
         else:
             j += 1
     return normalize_spans(out)
-
-
-def is_empty(spans: Coverage) -> bool:
-    return not normalize_spans(spans)
 
 
 def is_full(spans: Coverage) -> bool:

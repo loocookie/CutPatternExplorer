@@ -36,6 +36,16 @@ PLATONIC_COUNTS = [
 ]
 
 
+def test_platonic_catalog_matches_the_factories():
+    """`S.PLATONIC` 이 정다면체 다섯을 빠짐없이 담는가.
+
+    카탈로그는 편집기가 프리셋을 열거할 자리다 (§19). 목록과 어긋나면 메뉴에서
+    빠지고, 그걸 알아챌 방법이 없다. CATALAN 쪽과 같은 검사다.
+    """
+    assert len(S.PLATONIC) == 5
+    assert set(S.PLATONIC.values()) == {f for f, _, _ in PLATONIC_COUNTS}
+
+
 @pytest.mark.parametrize("factory,count,prefix", PLATONIC_COUNTS)
 def test_platonic_face_count(factory, count, prefix):
     aset = factory()
@@ -87,6 +97,12 @@ PRISM_COUNTS = [
     (S.bipyramid, lambda n: 2 * n, "b"),
     (S.trapezohedron, lambda n: 2 * n, "z"),
 ]
+
+
+def test_prism_family_catalog_matches_the_factories():
+    """`S.PRISM_FAMILY` 가 각기둥 계열 넷을 빠짐없이 담는가 (§19)."""
+    assert len(S.PRISM_FAMILY) == 4
+    assert set(S.PRISM_FAMILY.values()) == {f for f, _, _ in PRISM_COUNTS}
 
 
 @pytest.mark.parametrize("factory,count,prefix", PRISM_COUNTS)

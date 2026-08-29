@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from ..epsilon import ANGLE_EPS, RADIUS_EPS
 from .angular_coverage import Coverage, reflect, shift, wrap_angle
-from .vector import Vec3, as_vec, clamp, normalize, orthonormal_basis
+from .vector import Vec3, clamp, normalize, orthonormal_basis
 
 __all__ = ["SphericalCircle", "transfer_spans"]
 

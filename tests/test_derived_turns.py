@@ -3,7 +3,6 @@
 회전각은 정적 값이 아니라 현재 절단 각도의 함수다.
 """
 
-import math
 
 import pytest
 

@@ -190,21 +190,6 @@ class Region:
         inner = [", ".join(str(c) for c in cell) or "전체" for cell in self.cells]
         return f"Region({inner})"
 
-    def boundary_constraints(self):
-        """셀들이 쓰는 모든 경계."""
-        seen = []
-        for cell in self.cells:
-            for c in cell:
-                if not any(
-                    c.axis_id == o.axis_id
-                    and c.side == o.side
-                    and abs(c.offset - o.offset) < 1e-12
-                    and (c.normal @ o.normal) > 1.0 - 1e-9
-                    for o in seen
-                ):
-                    seen.append(c)
-        return seen
-
     def clip(self, circle: SphericalCircle, spans: Coverage):
         """영역 안과 밖으로 나눈다."""
         from .angular_coverage import difference

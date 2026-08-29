@@ -29,7 +29,6 @@ __all__ = [
     "clamp",
     "cross",
     "dot",
-    "identity3",
     "norm",
     "normalize",
     "orthonormal_basis",
@@ -149,10 +148,6 @@ class Mat3(tuple):
 
 
 IDENTITY3 = Mat3(((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)))
-
-
-def identity3() -> Mat3:
-    return IDENTITY3
 
 
 def as_vec(v) -> Vec3:

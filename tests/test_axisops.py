@@ -273,8 +273,6 @@ def test_mirror_is_an_improper_isometry():
 
 
 def test_mirror_twice_is_identity():
-    from cutpattern.axisops import same_directions
-
     once = mirror(S.icosahedron(), (1, 2, 3))
     twice = mirror(once, (1, 2, 3))
     assert same_directions(twice, S.icosahedron())
@@ -282,8 +280,6 @@ def test_mirror_twice_is_identity():
 
 def test_mirror_of_an_achiral_solid_gives_the_same_directions_here():
     """정육면체는 z=0 평면 반사가 방향집합을 그대로 둔다."""
-    from cutpattern.axisops import same_directions
-
     assert same_directions(mirror(S.cube(), (0, 0, 1)), S.cube())
 
 
@@ -329,8 +325,6 @@ def test_both_hands_merge_into_the_full_group_orbit(key, full_group_name):
 
 @pytest.mark.parametrize("key", ["cube", "octahedron", "rhombic_dodecahedron"])
 def test_centrally_symmetric_solids_survive_inversion(key):
-    from cutpattern.axisops import same_directions
-
     aset = getattr(S, key)()
     assert same_directions(invert(aset), aset)
 
@@ -341,8 +335,6 @@ def test_tetrahedron_is_not_centrally_symmetric():
     손대칭이라는 뜻은 아니다. 정사면체는 거울면을 가지며, 거울상을 되돌리는
     회전이 T 밖(정팔면체 회전군 O)에 있을 뿐이다.
     """
-    from cutpattern.axisops import same_directions
-
     assert not same_directions(invert(S.tetrahedron()), S.tetrahedron())
     # 반전한 것과 합치면 정육면체의 꼭짓점 방향 8개가 된다
     both = merge("both", S.tetrahedron(), invert(S.tetrahedron()))
@@ -355,8 +347,6 @@ def test_invert_preserves_pairwise_angles():
 
 
 def test_same_directions_ignores_order_and_names():
-    from cutpattern.axisops import same_directions
-
     a = S.cube()
     b = rename(remove(S.cube(), "c0"), {"c1": "z"})
     assert same_directions(a, a)

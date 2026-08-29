@@ -71,10 +71,6 @@ class AngularSpan:
     def length(self) -> float:
         return self.t1 - self.t0
 
-    @property
-    def midpoint(self) -> float:
-        return 0.5 * (self.t0 + self.t1)
-
     def as_tuple(self) -> tuple[float, float]:
         return (self.t0, self.t1)
 
@@ -97,10 +93,6 @@ class SpanList:
 
     def intervals(self) -> Coverage:
         return normalize_spans([s.as_tuple() for s in self.spans])
-
-    def raw_intervals(self) -> Coverage:
-        """병합하지 않은 원본 구간. 길이 합 검증용."""
-        return [s.as_tuple() for s in self.spans]
 
     # ---- 편집 ----------------------------------------------------------
 

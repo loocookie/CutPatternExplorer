@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, replace
 from functools import lru_cache
 
-from ..epsilon import ANGLE_EPS, RADIUS_EPS
+from ..epsilon import ANGLE_EPS
 
 # 회전 상쇄 판정 허용 오차(도)
 TURN_CANCEL_EPS = 1e-9
@@ -21,7 +21,7 @@ from ..geometry.registry import BoundaryRegistry
 from ..geometry.span import Provenance
 from ..geometry.vector import rotation_matrix
 from ..geometry.spherical_circle import SphericalCircle
-from .axes import Axis, AxisSet, PuzzleFamily
+from .axes import Axis, PuzzleFamily
 from .turn import IllegalTurnError, TurnResult, turn
 
 __all__ = [
