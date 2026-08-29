@@ -1,0 +1,1160 @@
+# 구면 Cut Pattern 엔진 설계 (개정판 v3)
+
+## 0. 개정 요약
+
+### v2 대비 (v3)
+
+| 항목 | v2 | v3 |
+|---|---|---|
+| 정의 형식 | puzzle-family XML | **파이썬 내장 DSL.** 파서 없음. `for`/`def`/`with` 가 공짜 (§9) |
+| 원시 연산 | `SplitByAxisSet`, `SplitByAxis`, `Turn`, `RollbackTurns` | **`SplitByAxis`, `Turn` 둘뿐.** 나머지는 DSL 설탕 |
+| 회전 영역 | cap `n·x ≥ cos θ` 만 | **절단원의 어느 쪽이든.** `outer` 로 고름 (§7.2) |
+| slice 회전 | 지원 안 함 | **두 회전의 합성으로 나온다** (§2.3) |
+| 회전각 | `allowedTurnAngles` 정적 필드 | **유도한다.** 절단 각도의 함수 (§7.7). `extra_turn_angles` 는 보완용 |
+| 축 실림 | 미정의 | **`carry` 로 선언.** 유도하지 않는다 (§2.4) |
+| 축 집합 | 손으로 적은 법선 목록 | **대칭군 궤도.** 씨앗 하나 + 군, 궤도 크기로 자동 검증 (§2.5) |
+| 축 이름 | 관례 (U, R, F) | **출처 접두사 + 번호** (`c0`, `o7`) (§2.2) |
+| cut angle 입력 | `cutAngleInput` 별도 식별자 | **축 집합 id 가 곧 slider 식별자.** 공유는 merge 로 |
+| 축 질의 | `AxisSet` 메서드 | **자유 함수.** 집합 사이 질의가 본질 (§2.6) |
+| 축 조작 | 없음 | `merge` / `rotate` / `remove` / `keep` / `rename` (§2.5) |
+| provenance | 만든 연산만 | **출처(`origin_axis_set`)를 Turn 을 거쳐도 보존** (§5) |
+| 되돌리기 | 미정의 | 정의 끝에서 자동. 짝 맞은 회전은 상쇄 (§7.6) |
+| 영역 제한 | 없음 (pCubes `Hide` 거부) | **`with region(...)` 블록.** 셀 합집합이라 non-convex 도 된다 (§6.3) |
+| 가시성 | 없음 | **호에 표시를 단다.** 기하 위치로는 겹친 재료를 구분할 수 없다 (§7.9) |
+
+### v1 대비 (v2, 유지됨)
+
+| 항목 | v1 | v2 |
+|---|---|---|
+| Turn 합법성 | 판정 없음 | **회전 경계원이 완전 covered일 때만 합법.** 항상 검사 |
+| layer | `Turn(axis, layer/range)` | **삭제.** `Axis` 하나 = cut 원 하나 |
+| `basePoint` | Axis 필드 | **삭제.** 항상 원점. `h = d = cos θ` |
+| 축 대칭 | `(n,h) ≡ (-n,-h)` 축 입력에서 묶음 | **축 입력은 대칭 없음.** 반대 방향은 별도 축 |
+| carrier 키 | 법선 부호 정규화 | **정규화 안 함.** 양방향 조회 |
+| Turn 분류 | 원 전체 범위로 span 판정 | **다단계.** 원 단위 기각 → span 단위 |
+| `s = 0` | 미언급 | **필수 분기.** 동축 carrier 에서 상시 발생 |
+| replay 실패 | 미정의 | 최초 불법 지점에서 절단 |
+| 호 ID | 없음 | 결정적 ID |
+
+---
+
+## 1. 목적
+
+트위스티 퍼즐의 완전한 3차원 조각 모델을 만들지 않는다. **단위구 표면에 나타나는 절단 경계만** 표현하고, 퍼즐 정의에 포함된 `Split`과 `Turn`을 순서대로 적용하여, 절단 각도에 따라 변하는 cut pattern을 실시간으로 보여준다.
+
+원본 자료:
+
+- pCubes: <https://github.com/BMouradov/pCubes>
+- pCubes XML 설명: <https://github.com/BMouradov/pCubes/blob/main/Lazarus_sources/ReadMe.txt>
+- 기존 GlowScript 프로그램: <https://www.glowscript.org/#/user/loocookie/folder/MyPrograms/program/TwistyPuzzleTester/edit>
+
+이 문서는 pCubes 재현이 아니다. 퍼즐은 파이썬 내장 DSL로 정의하며(§9), pCubes의 축·`Split`·`Turn` 개념을 참고하되 문법은 가져오지 않는다. 현재 cut angle은 정의 밖 UI 상태다.
+
+---
+
+## 2. 위치와 범위
+
+| 항목 | 기존 GlowScript | pCubes | 이 엔진 |
+|---|---|---|---|
+| 주된 목적 | 대칭축 집합과 절단 깊이에 따른 구면 패턴 표시 | 일반 트위스티 퍼즐의 3차원 구성과 조작 | 구성 연산에 따라 변하는 구면 cut pattern 실시간 표시 |
+| 기본 형상 | 단위구 | 다양한 base figure | 단위구로 한정 |
+| 핵심 상태 | 축 집합과 집합별 각도 | 축, 절단면, 조각, 순차 명령 | `PuzzleFamily`, 외부 cut-angle 상태, 원별 coverage, move history |
+| 축의 역할 | 같은 성격의 방향을 묶어 집합별 각도 조절 | 구성 명령과 회전이 참조하는 기하 축 | 외부 cut-angle 입력을 공유하는 `AxisSet`과 실제 방향인 `Axis`를 분리 |
+| Split | 명시적 이력 없음 | 실제 형상을 절단해 part 생성 | 현재 coverage에 없는 호만 추가 |
+| Turn | 없음 | layer/part 기준 회전 | **합법일 때만** 선택 영역의 기존 호를 강체 회전 |
+| 결과물 | 정적 대칭 패턴 | 완전한 3차원 퍼즐 모델 | 각도에 따라 동적으로 달라지는 구면 경계 |
+
+표현 범위는 split과 jumbling 중심. 조각 기반 bandage는 범위 밖(§10).
+
+### 2.1 `AxisSet`과 `Axis`
+
+두 계층으로 나눈다.
+
+- **`AxisSet`** — 같은 절단 각도를 공유하는 축 묶음. 집합 id 가 곧 slider 식별자다. face/edge/vertex 방향을 각각 별도 집합으로 두면 세 그룹의 절단 깊이를 독립 조절할 수 있다.
+- **`Axis`** — 방향 `n` 하나. 자기 집합의 cut angle `θ`로 **절단 원 하나**를 결정한다.
+
+```
+Axis  →  cut circle:  n·x = cos θ
+      →  turn region: n·x ≥ cos θ   (바깥쪽이면 ≤)
+```
+
+축 하나에 각도 하나, 원 하나. layer 인덱스는 존재하지 않는다.
+
+두 집합이 절단 각도를 공유할 일은 없다. 공유하고 싶으면 `merge` 로 한 집합을 만든다.
+
+축 집합은 **공간에 고정된 cutter 정의**다. `Turn`이 움직이는 것은 축이 아니라 선택 영역에 들어간 기존 호들이다. 그래야 U를 45° 돌린 뒤에도 R cutter는 원래 위치에 남고, 이후 R split이 올바른 위치에 경계를 추가한다(§8). 예외는 `carry` 로 명시한 경우뿐이다(§2.4).
+
+### 2.2 축 이름과 대칭
+
+반대 방향은 별도 축으로 명시한다. 정사면체처럼 축의 반대 방향이 축이 아닌 퍼즐이 있으므로, 대칭을 자동 적용하면 표현할 수 없는 퍼즐이 생긴다. 또 방향이 명시되어야 cap의 안팎과 회전 부호가 모호해지지 않는다.
+
+관례 이름(U, R, F)을 쓰지 않는다. `merge` 하면 충돌하고, `rotate` 하면 U가 더 이상 위가 아니어서 뜻을 잃기 때문이다. 대신 **출처 접두사 + 번호**를 준다.
+
+```
+cube()          c0 .. c5
+octahedron()    o0 .. o7
+merge 후에도    c0 .. c5, o0 .. o7      충돌 없음
+rotate 해도     c0 .. c5                출처가 남는다
+```
+
+접두사가 겹쳐 id가 충돌하면 뒤에 오는 쪽에 꼬리표를 붙인다. 바꾸고 싶으면 `rename` 한다.
+
+### 2.3 slice 회전
+
+회전 영역은 **절단원 하나와 그 어느 쪽**이다.
+
+```
+outer=False   cap         n·x ≥ cos θ      0 ~ θ
+outer=True    나머지      n·x ≤ cos θ      θ ~ 180
+```
+
+경계원이 같으므로 합법성 판정도 교점 계산도 그대로다. 판정 부호만 뒤집힌다.
+
+band(slice) 영역은 원시 연산으로 두지 않는다. **두 회전의 합성으로 나오기 때문이다.**
+
+```
+M 슬라이스를 U 축으로 α 회전
+    turn(U, α, outer=True)    U cap 을 뺀 나머지를 회전
+    turn(D, α)                D cap 을 되돌림 (D 축 기준이라 U 축으로는 -α)
+```
+
+두 번째 회전도 합법이다. D의 원은 U cap 밖이라 첫 회전에서 통째로 U축 둘레로 돌지만, D는 U와 동축이라 원이 자기 자신으로 가서 여전히 완전하다.
+
+D축이 선언돼 있어야 하는데 §2.2가 이미 반대 축을 따로 적으라고 하므로 자동으로 충족된다.
+
+### 2.4 축 실림 (`carry`)
+
+축은 고정이다. 예외는 **선언**한다. 유도하지 않는다.
+
+```
+carry(mover, *carried)      mover 를 돌리면 carried 도 함께 돈다
+```
+
+기하로 유도하려면 "a1의 cap이 a2의 cap 안에 들어가는가"(`angle + θ₁ < θ₂`) 같은 조건을 쓰게 되는데, 그것은 **절단 각도의 함수**라 슬라이더를 끌면 참↔거짓이 오간다. 축이 붙었다 떨어졌다 하는 메커니즘은 없다.
+
+게다가 조건을 만족해도 안 실릴 수 있고(축이 코어에 박혀 층을 관통), 만족하지 않아도 실릴 수 있다(하위 기구가 한 층에 얹힌 복합 퍼즐). 경계면만 보는 모델로는 알 수 없다(§10).
+
+pCubes도 선언한다 — `TurnAxesWithLayer`, `TurnAxesWithPartNo`. 다만 우리는 layer도 part도 없으므로 축을 직접 가리킨다. 기본값은 양쪽 모두 **아무것도 실리지 않음**이다.
+
+규칙은 파이썬으로 쓴다. 축 사이 각은 슬라이더와 무관한 정적 값이라 정의 시점에 계산된다.
+
+```python
+for x in outer:
+    carry(x, *[a for a in inner if angle_between(x, a) < 40])
+```
+
+실려 도는 축은 회전각 유도에서 제외된다(§7.7). 같이 도니 정렬을 따질 것이 없다.
+
+### 2.5 축 집합 만들기
+
+정다면체와 카탈란 다면체는 **면추이적**이다. 면 법선 전체가 대칭군 아래 씨앗 하나의 궤도다.
+
+```
+orbit(seed, group, expected=n)
+```
+
+좌표표 대신 씨앗과 군만 적으면 되고, **궤도 크기가 면 개수와 맞는지로 씨앗이 자동 검증된다.** 씨앗이 대칭축 위에 얹히는 등 잘못되면 궤도가 작아져 바로 잡힌다.
+
+궤도 크기 = `|군| / |안정자|`. 회전군은 `T`(12), `O`(24), `I`(60), 반사를 포함한 전체군은 `Td`(24), `Oh`(48), `Ih`(120).
+
+각기둥 계열은 대칭이 낮아 꼭짓점 좌표에서 유도한다. 네 입체를 **꼭짓점 하나에서** 만들어야 쌍대 관계가 방향까지 정렬된다.
+
+```
+prism(n)          n+2    옆면 n + 밑면 2
+antiprism(n)      2n+2
+bipyramid(n)      2n     prism 의 쌍대
+trapezohedron(n)  2n     antiprism 의 쌍대
+```
+
+균등 각기둥의 쌍대가 곧 **이면각이 모두 같은** 쌍뿔·사다리꼴다면체다(둘의 조건식이 항등적으로 일치한다). 뿔은 이면각 등가가 `n=3`(정사면체)에서만 성립하므로 넣지 않는다.
+
+아르키메데스 다면체는 별도로 두지 않는다. 축은 면 *방향*이라 면 크기가 해서, 13개 중 11개가 플라톤/카탈란 방향집합의 **합집합**이다.
+
+```
+cuboctahedron        = merge(cube(), octahedron())
+truncated cube       = merge(cube(), octahedron())        같은 방향집합
+rhombicuboctahedron  = merge(cube(), octahedron(), rhombic_dodecahedron())
+```
+
+예외는 깎은육팔면체와 깎은십이이십면체 둘뿐이고, 그건 손대칭 궤도라 `orbit` 으로 직접 만든다.
+
+축 조작은 전부 **새 집합을 돌려준다**. 원본이 변하지 않아 합성할 수 있다.
+
+```
+merge(id, *sets)                    같은 방향은 먼저 온 쪽만
+rotate(s, axis=..., angle=...)      축과 각
+rotate(s, pairs=[(a,a2), (b,b2)])   두 쌍의 대응. 사잇각이 안 맞으면 거부
+rotate(s, quaternion=(w,x,y,z))
+mirror(s, normal)                   평면 반사
+invert(s)                           원점 반전
+remove(s, *axes) / keep(s, *axes) / rename(s, mapping)
+```
+
+반사는 `det = −1` 이라 회전이 아니다. `rotate` 로는 만들 수 없다. **손대칭 입체의 반대 손**을 만들려면 반사가 필요하다.
+
+카탈란 13종 중 오각이십사면체와 오각육십면체 둘만 손대칭이다. 그 둘은 반사를 포함한 궤도가 두 배가 된다.
+
+```
+orbit(pi_seed, "O")  → 24        한 손
+orbit(pi_seed, "Oh") → 48        두 손
+merge(pi, mirror(pi)) 와 같다
+```
+
+나머지 11종과 정다면체는 거울상이 (회전을 허용하면) 자기 자신과 같으므로 `mirror` 가 새 입체를 만들지 않는다.
+
+정사면체는 **중심대칭이 아니지만 손대칭도 아니다.** `invert` 하면 쌍대 정사면체가 되고, 둘을 합치면 정팔면체 방향 8개가 된다. 거울상을 되돌리는 회전이 `T` 밖(`O` 안)에 있을 뿐이다.
+
+### 2.6 축 질의
+
+축 집합의 메서드가 아니라 **자유 함수**다. 분류는 본질적으로 집합 사이 연산이기 때문이다.
+
+```
+angle_between(a, b)
+at_angle(ref, degrees, *targets)
+angles_from(ref, *targets)            {각: [축들]}
+group_by_nearest(source, reference)
+```
+
+질의는 `at_angle` 하나로 충분하다. 수직(90), 반대(180), 자기 자신(0)이 전부 그 특수한 경우이고, 입체에 따라 수직인 축이나 반대 축이 아예 없을 수도 있다. 자주 쓰는 조합은 파이썬 함수로 묶는다.
+
+```python
+adjacent = lambda x: at_angle(x, 90, faces)
+```
+
+`angles_from` 은 낯선 입체에서 어떤 각이 존재하는지 먼저 보는 용도다. `at_angle` 에 넣을 값을 여기서 찾는다.
+
+---
+
+## 3. 핵심 원리
+
+조각 집합을 저장하지 않는다. 두 종류의 연산이 누적된 결과, 즉 **구면 위 경계 곡선의 집합** `E`를 저장한다.
+
+**Split** — 새 절단 경계 후보를 추가한다. 경계 집합 `E`, 새 절단 원이 정의하는 호 전체를 `C`라 하면
+
+```
+E' = E ∪ C          ΔE = C \ E
+```
+
+같은 원 위의 각도 구간끼리만 비교하면 되므로, split에는 다른 원과의 교점 계산이 전혀 필요 없다.
+
+**Turn** — 새 절단을 만들지 않는다. 선택 영역 안의 기존 호를 강체 회전시킬 뿐이다. 단 회전 경계를 걸치는 호는 경계 교차점에서 **레코드를 쪼갠다**. 그 교차점은 이미 존재하는 cut(회전 경계원) 위의 점이므로 점집합으로서의 `E`는 변하지 않는다. 순수한 장부 분할이다.
+
+**Turn은 항상 합법성을 검사한다.** 불법이면 아무것도 하지 않는다(§7.1).
+
+Turn이 호를 새 carrier 원으로 옮기는 것은 새 절단 생성이 아니라 기존 재료의 이동이며, 이것이 jumbling의 정의 그 자체다.
+
+---
+
+## 4. 구면 기하 표현
+
+### 4.1 절단 원
+
+단위구 위 절단 경계는 평면과 구의 교선이다.
+
+```
+‖x‖ = 1
+n·x = h
+```
+
+- `n` : 정규화된 평면 법선 (축 방향)
+- `h` : 원점에서 평면까지의 부호 있는 거리
+- 원의 중심 : `h n`
+- 원의 반지름 : `r = √(1 − h²)`
+
+기준점은 **항상 원점**이다. pCubes의 `h = n·b + d` 는 `b = 0`에서 `h = d`로 축약된다. 따라서
+
+```
+θ ∈ (0°, 180°)
+h = d = cos θ
+r = sin θ
+```
+
+`θ`는 구 중심에서 본 원의 각반경이다. slider는 `θ`를 직접 다루며 `0.01° ~ 179.99°` 범위로 둔다.
+
+### 4.2 각도 좌표
+
+`n`에 수직인 일관된 직교기저 `(u, v)`를 정하면 원 위의 점은
+
+```
+x(t) = h n + √(1−h²) (cos t · u + sin t · v),    t ∈ [0, 2π)
+```
+
+이 `t` 좌표로 완전한 원과 부분 호를 같은 자료구조로 다룬다.
+
+기저 선택은 결정적이어야 한다. `n`과 가장 덜 평행한 표준 기저축을 골라 `u = normalize(e × n)`, `v = n × u`.
+
+### 4.3 carrier 원의 동일성
+
+같은 평면의 두 표현이 있다.
+
+```
+(n, h) ≡ (−n, −h)
+```
+
+이는 사용자의 설정 실수가 아니라 정상적으로 발생한다. 2×2×2를 면 6축 `θ = 90°`로 정의하면 U축 `(0,1,0)`은 평면 `y = 0`, D축 `(0,−1,0)`도 평면 `y = 0`이다. Turn 결과로 호가 반대 법선의 같은 원에 얹히는 경우도 생긴다.
+
+병합하지 않으면 coverage가 두 carrier로 쪼개져 저장되고, 어느 쪽도 2π에 못 미쳐 **합법인 회전이 불법으로 판정된다.** 이것이 병합이 필요한 가장 큰 이유다.
+
+**법선 부호를 정규화하지 않는다.** 부호 정규화는 `|n_x| ≈ ε` 근처에서 뒤집혀 키가 불안정해진다. 대신 조회할 때 두 키를 모두 던진다.
+
+```
+lookup(n, h):
+    hit = registry.nearest(( n,  h))
+    if hit: return hit, orientation = +1
+    hit = registry.nearest((−n, −h))
+    if hit: return hit, orientation = −1
+    return insert((n, h)), orientation = +1
+```
+
+`orientation = −1`로 병합될 때는 각도 좌표를 대상 carrier의 기저 기준으로 변환한다.
+
+`registry.nearest`는 정확 해시가 아니다. `(n, h)`를 `MERGE_EPS` 격자로 양자화한 정수 키로 거친 버킷을 잡고, 인접 버킷까지 후보를 모아 실제 거리로 최근접을 고른다(§7.4).
+
+---
+
+## 5. 자료구조
+
+```text
+PuzzleFamily            (immutable)
+  axisSets: AxisSet[]
+  operations: Operation[]
+  carries: (moverAxisId, carriedAxisId[])[]      §2.4
+
+AxisSet                 (immutable)
+  id                    slider 식별자를 겸한다
+  name
+  axes: Axis[]
+
+Axis                    (immutable)
+  id
+  normal: n             단위벡터. 실행 중에는 런타임 상태다 (§2.4)
+  extraTurnAngles       유도가 못 찾는 각만 (§7.7)
+
+RuntimeState            (mutable)
+  cutAngles: Map<AxisSetId, Angle>
+  axisNormals: Map<AxisId, n>       carry 로 움직인 결과
+  axisSetEnabled / axisSetStyle
+  moveHistory: TurnRecord[]
+  registry: BoundaryRegistry
+
+Operation               원시 연산은 둘뿐이다
+  SplitByAxis(axisId)
+  Turn(axisId, angle, outer)
+  RollbackTurns()                   정의 끝에 자동으로 붙는다 (§7.6)
+  EnterRegion(constraints)          with region(...) 블록 경계 (§6.3)
+  ExitRegion()
+
+BoundaryRegistry
+  circles: BoundaryCircle[]
+  buckets: Map<QuantKey, indices>
+
+BoundaryCircle
+  key
+  normal n
+  offset h
+  basis u, v
+  spans: AngularSpan[]              정렬됨, 서로 겹치지 않음
+
+AngularSpan
+  t0, t1                            t0 < t1, 0/2π 가로지르면 두 개로 분해
+  arcId                             결정적 ID
+  provenance
+  hiddenAt                          숨긴 region 블록의 깊이. None 이면 보인다 (§7.9)
+
+Provenance
+  opIndex, axisId, kind             이 호를 지금 자리로 보낸 연산. Turn 이 갱신
+  originAxisSet, originAxis         이 재료를 만든 split. Turn 을 거쳐도 보존
+
+TurnRecord
+  axisId, angle, outer
+  active: bool                      §13
+```
+
+`enabled`, `style`은 UI 상태이므로 family가 아니라 `RuntimeState`에 둔다.
+
+`provenance`가 두 층인 것이 중요하다. 재료를 만드는 연산은 `Split` 뿐이므로 **모든 호가 출처를 가진다.** 축 집합별 색칠이 그 값을 쓴다(§11). 읽으면 이렇게 나온다.
+
+```
+#36:turn:c5<-cube:c0     op36 의 c5 회전이 옮겼고, 원래 cube 집합의 c0 split 산물
+```
+
+`arcId`는 `(carrierKey, opIndex, ordinal)`로 만든다. 각도 값을 넣으면 slider를 조금만 움직여도 ID가 바뀌어 렌더 객체 pool이 무의미해진다.
+
+`Axis.normal`이 실행 중 바뀔 수 있다는 점이 v2와 다르다. 정의는 초기 위치만 들고 있고, 각도가 바뀌면 처음부터 다시 실행되므로 결정적이다.
+
+---
+
+## 6. Split
+
+### 6.1 절차
+
+```
+SplitByAxis(axis):
+    θ = cutAngles[axis 가 속한 집합의 id]
+    h = cos θ
+    r = sin θ
+    if r < RADIUS_EPS: return                    # 퇴화. 보이는 경계 없음
+
+    circle, orient = registry.lookup(currentNormal(axis), h)
+    C = 전체 구간 [0, 2π)   (orient 반영)
+    ΔE = C \ circle.coverage
+    circle.insert(ΔE)
+    return ΔE                                    # 새로 생긴 호만 렌더에 전달
+```
+
+축 집합 전체를 자르는 것은 원시 연산이 아니라 DSL 설탕이다. `split(집합)`은 축 단위 연산으로 펼쳐진다. 축이 어느 집합 소속인지는 축 자체가 아는 정보라 연산에 실을 이유가 없다 — 그래도 `originAxisSet` 은 그대로 기록된다.
+
+### 6.2 Split이 하지 않는 일
+
+- 구면을 면이나 조각으로 분할하지 않는다
+- 새 원과 기존 모든 원 사이의 교점을 계산하지 않는다
+- 단순히 교차한다는 이유만으로 호를 잘게 나누지 않는다
+
+서로 횡단하는 두 경계가 모두 고정되어 있다면 화면에는 두 곡선을 그대로 그리면 충분하다. 교차점은 §7의 선택적 회전에서만 필요하다.
+
+### 6.3 영역 제한 split (`region`)
+
+pCubes `Hide` 에 대응한다. 정지 재료를 잠시 치우고, 남은 것만 돌리고 자른 뒤
+원상복구하는 **구성 장치**다. 물리적 제약이 아니다.
+
+```
+Hide Ax1 Layer 0        정지 재료를 잠시 치운다
+Hide Ax1 Layer 2
+Turn Ax2 ...            남은 것만 돌리고
+SplitByAxes             남은 것만 자른 뒤
+Undo / Undo / ShowAll   되돌리고 복구한다
+```
+
+DSL 로는 `with region(...)` 블록이다. 블록 경계가 연산 목록에 `EnterRegion` /
+`ExitRegion` 으로 명시적으로 들어간다. 그래야 replay 로 재현된다.
+
+```python
+with region(outside(x), outside(x_opposite)):     # 가운데 슬라이스만 남긴다
+    with turned(z, 45):
+        with turned(z_opposite, -45):
+            split(faces)
+```
+
+**영역의 경계는 반드시 기존 절단원이다.** 부분 절단은 어딘가에서 끝나야 하는데,
+아무 데서나 끝나면 면 한가운데 매달린 모서리가 생긴다. 영역을 절단원의 반공간
+교집합으로 정의하면 잘리는 지점이 정의상 기존 절단원 위다.
+
+영역은 **셀(반공간 교집합)들의 합집합**으로 표현한다. 그래서 non-convex 도
+non-connected 도 그대로 담는다. 중첩하면 제약이 누적된다.
+
+블록 안의 split 은 두 가지를 지킨다.
+
+1. 절단원을 영역으로 잘라 **영역 안쪽만** 후보로 삼는다
+2. `ΔE = C \ E` 의 `E` 에 **보이는 호만** 넣는다 (§7.9)
+
+2번이 없으면 숨은 호가 새 절단을 막아, 절단이 보이는 재료 한가운데서 끝난다.
+숨은 재료는 치워져 있으므로 그 자리에도 잘라야 한다. 치워진 재료와 돌아간
+재료가 같은 자리를 차지하는 것은 정상이며, 블록이 끝나면 회전이 되돌아가면서
+풀린다.
+
+매달림은 진단으로 남긴다 (`SplitResult.dangling`). 블록 **안에서는** 매달리는
+것이 정상이다 (숨은 재료가 치워져 있다). 블록이 끝나고 회전이 되돌아온 뒤에도
+매달려 있으면 진짜 결함이다.
+
+---
+
+## 7. Turn
+
+### 7.1 합법성 판정 (항상 수행)
+
+축 `a`, 임계값 `d = cos θ_a`. 회전 영역은 절단원 `a·x = d` 의 한쪽이다.
+
+```
+isTurnLegal(axis):
+    circle = registry.find(a, d)
+    return circle is not None and circle.coverage 가 [0, 2π) 전체
+```
+
+**회전 경계원 자체가 이미 완전한 cut일 것.** 이것이 유일한 조건이다. 안쪽을 돌리든 바깥쪽을 돌리든 경계원이 같으므로 판정도 같다.
+
+다른 호가 그 경계를 가로지르는 것은 문제가 되지 않는다. 교차점은 정의상 경계원 위에 있고, 경계원이 완전한 cut이므로 그 지점에 이어진 재료가 없다. 3×3×3에서 R cut 원이 U cut 원을 가로지르지만 U 회전이 합법인 이유다.
+
+불법이면 연산 전체를 취소하고 진단을 남긴다. 상태를 부분적으로 변경하지 않는다.
+
+비용은 해당 carrier의 span 수에 비례. `O(1)`에 가깝다.
+
+### 7.2 회전 영역: 절단원의 어느 쪽
+
+```
+outer=False   cap         a·x > d      0 ~ θ
+outer=True    나머지      a·x < d      θ ~ 180
+```
+
+구현은 부호 하나다. 교점 계산, `s ≈ 0` 분기, 회전 코드, 합법성 판정이 전부 그대로고 판정식만 뒤집힌다.
+
+```
+MOVING  if  side · (value − d) > SEL_EPS  else  FIXED       side = ±1
+```
+
+이것만으로 slice 회전이 합성으로 나온다(§2.3).
+
+### 7.3 다단계 분류
+
+carrier 원 `(n, h)`, 기저 `(u, v)`에 대해
+
+```
+a·x(t) = m + s·cos(t − φ)
+
+an = clamp(a·n, −1, 1)
+m  = h · an
+s  = √(max(0, 1−h²)) · √(max(0, 1−an²))
+φ  = atan2(a·v, a·u)
+```
+
+**0단계 — 경계 carrier 단축.**
+carrier가 회전 경계원과 동일하면(§7.5의 최근접 비교) 즉시 `FIXED`. 원을 자기 축으로 돌리면 자기 자신이므로 결과가 같고, 호 ID와 provenance가 보존된다.
+
+**1단계 — `s ≈ 0` 분기 (필수).**
+
+```
+if s < S_EPS:
+    return MOVING if side·(m − d) > SEL_EPS else FIXED
+```
+
+`s`는 원을 한 바퀴 돌 때 `a` 방향 높이의 진폭이다. `s = 0`은 두 경우에 생긴다.
+
+1. `h = ±1` — 퇴화원. slider 범위 제한으로 회피됨
+2. **`a·n = ±1` — carrier가 회전축과 동축.** 상시 발생
+
+2번은 드문 경우가 아니다. 회전할 때마다 그 축 자신의 cut 원, 그리고 축과 평행한 법선을 가진 모든 cut이 여기 해당한다. 이 분기 없이 진행하면 아래 7.4의 `(d − m)/s`가 0으로 나누기가 되고, `s ≈ 1e-5` 같은 준동축에서는 `arccos`의 정의역을 벗어나 `NaN`이 되어 호 좌표가 조용히 사라진다.
+
+동축 원은 전체가 한 높이이므로 span 검사 없이 통째로 판정한다.
+
+**2단계 — 원 단위 조기 기각, `O(1)`.**
+원 전체의 값 범위는 `[m − s, m + s]`. 부호를 적용한 두 끝값의 최소/최대를 `lo`, `hi` 라 하면
+
+```
+if lo > SEL_EPS:   모든 span 이 MOVING
+if hi ≤ SEL_EPS:   모든 span 이 FIXED
+그 외 → 3단계
+```
+
+**3단계 — span 단위.**
+span `[t0, t1]`에 대해 후보값을 모은다.
+
+- 끝점 `a·x(t0)`, `a·x(t1)`
+- 내부 극값 각 `φ`(최대)와 `φ + π`(최소) 중 `[t0, t1]`에 포함되는 것
+
+부호를 적용한 값이 모두 양이면 `MOVING`, 모두 음이면 `FIXED`, 섞이면 `STRADDLING`. 전부 경계 위인 경우도 `FIXED` 다 — 경계에 얹힌 호는 움직이지 않는다.
+
+원 전체 범위를 span 판정에 그대로 쓰면 안 된다. 2단계는 기각 전용이다.
+
+### 7.4 분할과 회전
+
+straddling span만 교점을 푼다.
+
+```
+cos(t − φ) = (d − m) / s
+t = φ ± arccos(clamp((d − m)/s, −1, 1))
+```
+
+`s < S_EPS`는 1단계에서 이미 걸러졌으므로 여기서 0으로 나누지 않는다.
+
+절차:
+
+1. 교점 `t` 값으로 span을 분할한다
+2. 각 조각의 중점을 부호 적용해 평가해 MOVING / FIXED 확정
+3. MOVING 조각에만 회전을 적용한다
+
+회전 `R`(축 `a`, 각 `α`)을 적용하면
+
+```
+n' = R n
+h' = h          (구 중심을 지나는 회전이므로 불변)
+```
+
+각도 좌표는 새 carrier의 기저 기준으로 다시 변환한다. 회전은 방향을 보존하므로 사상은 순수 회전 `t → t + c` 이고, 길이를 그대로 옮기면 오차가 누적되지 않는다.
+
+옮긴 호의 provenance는 **옮긴 연산만 갱신하고 출처는 물려준다**(§5).
+
+### 7.5 carrier 병합과 스냅
+
+회전 결과 `n'`은 부동소수 오차를 안는다. 3×3×3에서 한 축을 90° 돌리면 이웃 축 원 위에 정확히 포개져야 하지만
+
+```
+R_u90 · (1,0,0) = (1.11e-16, 0, −1.0)      vs   registry의 (0,0,−1)
+```
+
+정확 해시로는 못 찾고 새 carrier가 생긴다. 결과는 호 이중 렌더, coverage union 실패, 그리고 §7.1 합법성 오판, 나아가 오차 누적이다.
+
+두 가지를 함께 적용한다.
+
+**(a) 최근접 조회.** `(n, h)`를 `MERGE_EPS` 격자로 양자화해 버킷을 잡되 인접 버킷까지 후보를 모으고, 실제 거리로 최근접을 고른다. §4.3대로 `(−n, −h)`도 조회한다.
+
+**(b) 스냅.** 병합되면 회전으로 계산된 `(n', h')`를 버리고 **registry에 이미 있는 값을 그대로 사용한다.** 오차가 매번 리셋되어 누적되지 않는다. 90° 회전을 수백 번 반복해도 carrier 수가 늘지 않는다.
+
+### 7.6 되돌리기
+
+구성용 회전은 **정의 끝에서 자동으로 되돌아간다.** cut pattern은 기준 방향에서 보여야 초기 상태와 비교가 되기 때문이다. 별도 함수를 두지 않는다.
+
+되돌릴 회전은 스택으로 쌓되, 직전 것을 정확히 상쇄하면 밀어넣지 않고 뺀다. 그래서 블록 단위로 짝을 맞춘 회전은 자동 되돌리기가 헛일을 하지 않는다.
+
+블록 단위 되돌리기는 DSL의 `turned` 가 담당한다.
+
+```
+turn(x, α) ... turn(x, −α)          블록 끝에서 즉시. 다음 축으로 넘어가기 전에 원상태
+자동 되돌리기                        끝에 남은 것만 역순으로
+```
+
+pCubes의 `Turn ... SplitByAxes ... Undo` 매크로 관용구가 앞의 것이다. 두 회전 사이에 split이 끼어도 LIFO로 짝이 맞는다.
+
+### 7.7 회전각 유도
+
+회전각은 정적 필드가 아니라 **현재 절단 각도의 함수**다. 슬라이더를 움직이면 고리가 침범했다 말았다 하므로 가능한 회전 자체가 달라진다.
+
+축 `a1` 둘레로 같은 극각에 놓인 축들이 고리를 이룬다. `a1`을 `α`만큼 돌렸을 때 고리 안의 **어떤 축 하나가 같은 고리의 다른 축 위로** 가면, 옮겨간 절단원이 이미 있던 절단원에 얹힌다. 그 다음에 그 축으로 또 돌릴 수 있다.
+
+전체 고리를 자기 자신으로 보낼 필요는 없다. 그걸 요구하면 doctrinaire 회전만 남고 jumbling을 통째로 놓친다. 손대칭 24궤도(오각이십사면체 등)에서는 고리를 보존하는 회전이 하나도 없어 목록이 비어버린다.
+
+그래서 **고리 안의 모든 쌍차를 모으고, 고리와 축 집합에 걸쳐 합집합**한다. 대칭 입체에서는 고리가 하나의 궤도라 합집합과 교집합이 어차피 같다.
+
+**침범 조건.** `a1`의 cap 반경 `θ₁`, `a2`의 절단원은 `a2`에서 극각 `θ₂`. `a1`에서 그 원까지 최단 거리가 `|angle − θ₂|` 이므로
+
+```
+a2 의 원이 a1 의 cap 에 걸린다  ⟺  |angle − θ₂| < θ₁
+```
+
+즉 `angle`, `θ₁`, `θ₂`가 구면삼각형 부등식을 만족해야 한다. 바깥쪽 회전이면 반대로 원의 일부가 cap 밖에 있어야 한다.
+
+고리는 `(극각, θ₂)`로 묶는다. 회전은 극각을 보존하고, 원이 겹치려면 반지름도 같아야 한다. 극각 0이나 180인 축은 방위각이 없고 회전에 불변이므로 제약이 아니다.
+
+**검증.**
+
+```
+cube        면축   고리 90도 4개                    {90, 180, 270}
+octahedron  면축   고리 70.53도 3개                 {120, 240}
+dodecahedron 면축  고리 63.43도 5개                 {72, 144, 216, 288}
+prism(5)    밑면   고리 90도 5개                    {72, 144, 216, 288}
+prism(5)    옆면   고리 72/90/144도 각 2개          {180}
+icosahedron 면축   고리 41.81도 3개 + 70.53도 6개   {44.478, 75.522, 120, 240, ...}
+```
+
+정이십면체가 면 대칭 차수만으로는 틀린다는 점이 중요하다. 두 번째 고리가 6개인데 C3 궤도 두 개가 75.522° 어긋나 겹쳐 있어서 쌍차에 44.478과 75.522가 나온다. 그것이 jumbling 정렬각이다. 첫 고리만 침범하는 얕은 절단에서는 `{120, 240}`이 맞다.
+
+각도 의존성도 확인된다. 정육면체는 `|90 − θ| < θ`, 곧 `θ > 45`에서 고리가 침범한다. `θ = 44`면 빈 목록, `θ = 46`이면 `{90, 180, 270}`.
+
+**한계.** 유도되는 것은 절단원끼리 맞아떨어지는 각이다. 유도가 못 찾는 각은 축의 `extraTurnAngles`로 명시하고 합집합한다. 실려 도는 축(§2.4)은 같이 도니 정렬을 따질 것이 없어 제외한다.
+
+### 7.8 구성 Turn과 사용자 Turn
+
+둘 다 같은 `Turn(axis, angle, outer)`이며 같은 합법성 판정, 분류, 분할, 회전 코드를 쓴다.
+
+- 정의의 `Turn`은 puzzle family를 만드는 고정 연산
+- 사용자 조작은 §7.7의 유도 결과 중 하나를 골라 같은 `Turn`을 만든다
+- 사용자 조작으로 생성된 `Turn`만 `RuntimeState.moveHistory`에 쌓인다
+
+### 7.9 영역 안의 Turn: 가시성 표시
+
+영역 블록 안에서도 회전할 수 있다. 합법성은 §7.1 그대로다 — **회전 경계원이
+영역 안에서 빈틈없이 덮였는가**. 영역이 없으면 2π 전체 판정으로 환원된다.
+
+회전축과 영역 경계가 코축일 필요는 없다. OctoCube Master 가 바로 그 경우로,
+숨기는 축과 도는 축이 직교한다. 정지 재료를 뚫고 지나가는 것이 아니라, 치운
+다음에 돌리는 것이기 때문이다.
+
+**참여 판정은 기하가 아니라 표시로 한다.** `AngularSpan.hidden_at` 에 숨긴
+블록의 깊이를 적고, 같은 깊이의 `ExitRegion` 이 지운다. 숨은 호는 회전에
+참여하지 않는다.
+
+기하 영역으로 대신할 수 없다. 회전이 보이는 재료를 숨은 재료 **위로** 옮기면
+같은 자리에 둘이 겹치는데, 위치만으로는 구분되지 않는다. 그러면 되돌리기가
+정방향보다 많은 호를 옮겨 왕복이 대칭이 아니게 된다. 표시는 재료를 따라다니므로
+회전이 몇 번이든 정확하다.
+
+영역 자체도 회전과 함께 변환된다. 회전은 각 셀을 회전 경계로 둘로 쪼개고
+도는 쪽만 행렬을 적용한다. 셀은 회전마다 최대 두 배가 되지만, 모순된
+셀(같은 원의 양쪽을 동시에 요구)은 즉시 버린다. `(n, d, s)` 와 `(−n, −d, −s)`
+가 같은 반공간이라는 것을 알아보아야 한다 — 못 알아보면 모순된 셀이 살아남아
+회전을 두 번 먹는다.
+
+영역 블록 안에서는 **레지스트리 쓰기도 숨은 호를 무시한다.** split 의
+`ΔE = C \ E` 도, 회전이 옮긴 호를 도착지에 넣는 것도 그렇다. 숨은 재료는
+치워져 있으므로 그 자리를 막지 못한다.
+
+도착지 쪽을 빼먹으면 한 블록 안에서는 드러나지 않는다. 앞선 블록이 만들어
+둔 부분 carrier 위로 회전이 겹칠 때, 옮긴 호가 숨은 호에 삼켜져 사라지고,
+되돌릴 때 돌아오지 않아 **원래 carrier 가 뚫린다.** 그다음 회전은 경계원이
+완전하지 않다고 불법 판정된다.
+
+블록 안의 회전은 **블록 안에서 짝을 맞춰야 한다** (`turned` 를 쓴다). 나간
+재료를 블록 밖에서 되찾을 방법이 없으므로 짝이 안 맞으면 거부한다.
+
+---
+
+## 8. 3×3×3 예제: U 45° 후 R Split
+
+"split은 절단 원 전체를 무조건 추가하는가?"에 대한 답이다.
+
+| 단계 | 상태 |
+|---|---|
+| 1. `SplitByAxisSet(faces)` | U, R 원 모두 완전 |
+| 2. `Turn(U, 45°)` | U 원 완전 covered → **합법**. R 호 중 U-cap 안쪽 부분만 분할되어 R' 원으로 이동 |
+| 3. (`Turn(R, ·)` 시도 시) | R carrier coverage에 결손 → **불법**. 물리적으로도 막힘이 맞다 |
+| 4. `SplitByAxis(R)` | R 원 전체를 후보로 만들고 차집합 계산 |
+| 5. | 이미 남아 있던 아랫부분은 중복 추가되지 않고, 비어 있던 윗층 구간만 새 호로 생김 |
+| 6. 이후 `Turn(R, ·)` | R 원 다시 완전 → 합법 |
+
+"윗층에만 split이 생긴다"는 결과를 조각 목록 없이 판단할 수 있다. 핵심은 완전한 원 객체 하나가 아니라, 원별 현재 coverage를 저장하는 것이다.
+
+---
+
+## 9. 퍼즐 정의: 내장 DSL
+
+### 9.1 XML을 쓰지 않는 이유
+
+pCubes XML이 복잡한 것은 XML이 프로그래밍 언어가 아닌데 프로그램을 담으려 하기 때문이다. `Script`로 변수를, `Macro`/`ExecMacro`로 함수를, 태그 반복으로 루프를 따로 발명해야 한다.
+
+파이썬을 그대로 문법으로 쓰면 `for`, `def`, `with`, 컴프리헨션, 조건문이 전부 공짜로 딸려온다. **파서는 한 줄도 없다.**
+
+```python
+from cutpattern.dsl import at_angle, cube, puzzle, split, turned
+
+faces = cube()
+
+with puzzle("OctoCube Master", faces) as p:
+    split(faces)
+    for x in faces:
+        with turned(x, 45):
+            split(*at_angle(x, 90, faces))
+
+p.run({"cube": 63.2563})
+```
+
+이것이 pCubes XML 전체 + `Script` + `Macro` + `ExecMacro` 3개를 대체한다.
+
+`split`과 `turn`은 활성 `puzzle` 블록에 연산을 **기록**할 뿐이다. 그래서 어떤 제어구조로 감싸도 동작한다. 블록을 벗어나면 immutable `PuzzleFamily`가 만들어진다.
+
+### 9.2 API
+
+```python
+# 축 집합
+cube() / octahedron() / tetrahedron() / dodecahedron() / icosahedron()
+prism(n) / antiprism(n) / bipyramid(n) / trapezohedron(n)
+orbit(seed, group, expected=n)          임의의 면추이 집합
+AxisSet(id, axes={...})                 직접
+
+# 축 조작 (전부 새 집합 반환)
+merge / rotate / remove / keep / rename
+
+# 질의 (자유 함수)
+angle_between / at_angle / angles_from / group_by_nearest
+
+# 연산 (원시 연산은 split, turn 둘뿐)
+split(target, ...)                      축 / 축 집합 / 그것들의 목록. 중첩 가능
+turn(axis, angle, outer=False)
+with turned(axis, angle, outer=False):  블록 끝에서 짝 맞춰 되돌림
+carry(mover, *carried)                  축 실림 선언 (§2.4)
+
+# 영역 (§6.3)
+inside(axis) / outside(axis)            절단원의 안쪽 / 바깥쪽
+with region(*constraints):              블록 안의 split 과 turn 을 제한
+```
+
+`split(집합)`은 축 단위 연산으로 펼쳐지는 설탕이다. 대상은 `axes_of` 로 편다 — 축, 축
+집합, 그것들의 목록을 중첩까지 받는다. 질의는 목록을 돌려주고 목록끼리 묶는 일이 흔한데,
+그때마다 `*` 를 붙이거나 for 문을 쓰게 하면 저작 계층으로서 값이 떨어진다.
+
+```python
+split(faces)                        집합 전체
+split(at_angle(x, 90, faces))       질의 결과를 그대로
+split(cube, rd)                     집합 여러 개
+split([pair_x, pair_y, pair_z])     축 쌍들의 목록
+```
+
+단, **빈 결과는 거부한다.** 대상을 빠뜨린 질의(`at_angle(x, 90)` 처럼)가 조용히 지나가면
+완성된 것처럼 보이는 no-op 정의가 남는다. 질의 쪽도 대상 집합을 빠뜨리면 거부한다.
+
+### 9.3 검증
+
+`with` 블록을 벗어날 때 자동으로 확인한다.
+
+- 참조하는 축 집합과 축 이름이 실제로 있는지
+- 축 id가 여러 집합에 중복되지 않는지 (연산이 이름으로 참조하므로 전 집합에서 유일해야 한다)
+- `carry` 선언이 가리키는 축이 있는지
+
+`evaluate` 시점에는 slider가 지정되지 않은 축 집합을 보고한다.
+
+### 9.4 pCubes 정의를 손으로 옮기기
+
+importer 를 만들지 않는다 (§16). 이 절은 코드 명세가 아니라 **사람이 보는 대응표**다.
+남의 파일을 읽고 이 DSL 로 옮길 때 참조한다.
+
+| pCubes | 이 엔진 |
+|---|---|
+| `Axes`, `Axis`, `NormVector` | 축 집합과 축 |
+| `PlaneDistances = "-D; D"` | 반대 방향 축을 각각 명시 (§2.2) |
+| `TurningAngles` | 유도한다 (§7.7) |
+| `AvailableAngles`, `JumbleAngle` | 유도 결과에 대응. 못 찾는 각은 `extraTurnAngles` |
+| `TurnAxesWithLayer`, `TurnAxesWithPartNo` | `carry` (§2.4). layer/part 가 없으므로 축을 직접 가리킨다 |
+| `Figure` | 연산 목록 |
+| `SplitByAxes` | `split(집합)` |
+| 평면형 `Split` | `split(축)` |
+| `Turn` | `turn(축, 각, outer)` |
+| `Macro` / `ExecMacro` / `Script` | 파이썬 함수와 변수 |
+| `Undo` | `turned` 블록 |
+| layer 대상 `Hide` / `ShowAll` | `with region(...)` 블록 (§6.3) |
+
+**무시해도 되는 것** (구면 경계에 영향 없음, 로그만 남긴다)
+
+- texture, 색상 등 3D 외관 정보
+- undo, solved-state, 애니메이션 속도 등 앱 상태
+- `LoadFrom` — 기본 형상은 단위구로 고정 (§1)
+
+**거부해야 하는 것** (조각 모델이 없으면 의미를 보존할 수 없다. 임의로 해석하지 않는다)
+
+- `Part`, `Vertices`, `Faces` 기반 직접 조각 구성
+- **part 번호**를 대상으로 하는 `Hide`, `Show`, `Remove`, `RemoveGrayParts`
+  (layer 대상 `Hide` 는 §6.3 의 `region` 으로 받는다. part 번호는 조각 모델이 필요하다)
+- 3차원 body 의미의 `Circle`, `Cylinder`
+- `Connect`
+- `FixedLayers` — layer 가 없다
+- 기타 물리적 조각 번호나 연결 상태에 의존하는 명령
+
+명확한 `unsupported operation` 진단을 낸다. pCubes에는 별도의 `Bandage` 연산이 없으며 `Connect`를 bandage로 재해석해서는 안 된다.
+
+layer 대상 `Hide` 는 §6.3 으로 받는다. OctoCube Master 가 그것으로 split 을 가운데 층에 제한한다. examples/octocube_hide.py 가 원본 구조 그대로의 재현이고, examples/octocube_master.py 는 영역 없는 근사판이다. 그쪽은 구면 전체를 자르므로 절단이 더 많다.
+
+---
+
+## 10. Bandage 퍼즐에 대한 한계
+
+경계만 저장하므로 물리적으로 붙은 조각들의 강체 제약을 일반적으로 표현할 수 없다. pCubes XML이 조각 단위 명령으로 bandaged 구조를 구성한다면 현재 모델로는 정확히 재현할 수 없다.
+
+다만 다음 두 경우는 표현 가능하다.
+
+1. bandage 결과가 일부 cut boundary의 부재로 정의될 수 있고, 입력을 경계 연산으로 직접 변환할 수 있는 경우
+2. 외부 전처리기가 조각 모델을 해석한 뒤 최종 `Split`/`Turn` 경계 연산으로 컴파일해 주는 경우
+
+1차 구현 범위는 split과 jumbling을 포함한 cut pattern 시각화로 한정하고, 완전한 bandage 호환성을 주장하지 않는다.
+
+---
+
+## 11. 렌더링
+
+- 단위구는 반투명 sphere 하나
+- 완전한 원은 `ring` 한 객체로 빠르게 표시
+- 부분 호는 폴리라인으로 표시
+- 회전 중에는 논리 기하를 매 프레임 재계산하지 않고, 선택된 렌더 객체에만 임시 회전 transform을 적용
+- 드래그 종료 시 정확한 호 자료구조로 commit
+- `arcId` 기반 렌더 객체 pool을 쓴다. 객체 생성·삭제 대신 좌표만 갱신
+- 호 샘플 수는 화면상 반지름과 줌 수준에 따라 조절
+
+완전한 원과 부분 호가 서로 다른 렌더 primitive를 쓰더라도 논리 계층에서는 둘 다 `BoundaryCircle + AngularSpan`으로 다룬다.
+
+### 11.1 뷰 회전
+
+단위구는 어느 방향에서 보아도 같은 원이다. 뷰 회전은 호 점들에 회전행렬을 곱하는 것으로 끝난다.
+
+```
+pts_view = pts @ view_rot.T          # (N,3) 일괄
+sx = cx + R * pts_view[:,0]          # 정사영
+sy = cy − R * pts_view[:,1]
+depth = pts_view[:,2]
+```
+
+원근 계산, 카메라 행렬, 메시 변환이 필요 없다. 드래그는 arcball로 누적 쿼터니언을 갱신한다.
+
+### 11.2 앞뒤 구분
+
+vpython 같은 3D 렌더러에서는 반투명 구가 뒤쪽 호를 가려 자동으로 흐려진다.
+
+Canvas 2D 같은 깊이 버퍼 없는 백엔드에서는 그리는 순서로 같은 효과를 만든다.
+
+1. `depth < 0`인 호 (뒤쪽)
+2. 반투명 구 원반
+3. `depth > 0`인 호 (앞쪽)
+
+실루엣을 가로지르는 호는 `depth` 부호가 바뀌는 지점에서 점 배열을 잘라 두 층에 나눠 담는다.
+
+---
+
+## 12. 성능
+
+현재 호 수를 `N`, 한 turn에서 실제로 선택 경계를 가로지르는 호 수를 `q`라 하면
+
+- 합법성 판정: `O(경계 carrier의 span 수)`
+- 빠른 분류: `O(N)`, 대부분 §7.2의 0~2단계에서 원 단위로 끝남
+- 정밀 교점 및 분할: `O(q)`
+- coverage 병합: 영향받은 carrier의 구간 수에 비례
+
+모든 원 쌍을 비교하는 `O(N²)` 전처리는 필요하지 않다. 보통 `q ≪ N`이면 충분히 실시간이다.
+
+규모가 커지면 다음을 순서대로 추가한다.
+
+1. carrier별 `m`, `s` 캐시
+2. 축/offset 기반 spatial index
+3. 변하지 않은 호의 렌더 좌표 재사용
+4. slider 조작 중 낮은 tessellation, 조작 종료 후 고화질 재생성
+5. 무거운 계산의 백그라운드 수행
+
+---
+
+## 13. 입력 변경과 재실행
+
+UI는 축 집합마다 slider를 연결하고 현재값을 `RuntimeState.cutAngles`에 저장한다. 정의는 이 값을 소유하지 않는다. 호의 최종 상태만 저장하지 않고 구성 연산과 사용자 move history를 모두 순서대로 보존한다.
+
+절차:
+
+1. 퍼즐 정의를 immutable operation list로 만든다
+2. UI에서 절단 각도가 바뀐다
+3. 일정 operation 간격 또는 중요한 turn 직전에 snapshot을 저장한다
+4. 각도가 바뀌면 영향받는 최초 operation 이전의 snapshot에서 구성 연산을 replay한다
+5. 구성이 끝나면 `moveHistory`의 `Turn`들을 같은 evaluator로 replay한다
+6. slider 조작 중에는 낮은 tessellation으로 표시하고, 조작 종료 시 정확한 결과를 commit한다
+
+### 13.1 replay 중 불법 turn
+
+절단 각도가 바뀌면 과거에 합법이던 turn이 불법이 될 수 있다. 평가는 진입 시점에 각도를 스냅샷하므로 한 번의 평가는 항상 일관된다 — 실행 도중 슬라이더가 움직여도 앞 연산과 뒤 연산이 서로 다른 각도를 보지 않는다.
+
+```
+for i, rec in enumerate(moveHistory):
+    if not isTurnLegal(rec.axis):
+        truncateAt = i
+        break
+    apply(rec)
+```
+
+`truncateAt` 이후의 기록은 **삭제하지 않고 `active = False`로 보관한다.** slider를 되돌리면 다시 합법이 되어 자동 복원된다. 삭제하면 슬라이더를 잠깐 움직였다 되돌린 것만으로 수순이 영구 소실된다.
+
+UI는 타임라인에서 비활성 구간을 회색 처리하고 `"각도 변경으로 N수 이후가 불가능해짐"` 정도의 알림을 띄운다.
+
+Split은 대부분 coverage union이므로 싸고, Turn만 straddling 호에 국소적인 계산을 요구한다.
+
+---
+
+## 14. 수치 안정성
+
+하나의 전역 epsilon을 모든 판정에 쓰지 않는다.
+
+```text
+NORMAL_EPS        법선 평행/동일성
+OFFSET_EPS        평면 offset 동일성
+MERGE_EPS         carrier 병합 격자 및 최근접 임계
+ANGLE_EPS         각도 구간 끝점 병합
+SEL_EPS           cap 내부/외부 판정
+S_EPS             동축 판정 (진폭 s ≈ 0)
+RADIUS_EPS        퇴화원 판정 (r ≈ 0)
+```
+
+추가 수칙:
+
+- dot product는 역삼각함수 전에 `[−1, 1]`로 clamp한다
+- `√` 안은 `max(0, ·)`로 감싼다
+- 매우 짧은 호는 병합하거나 제거한다
+- 접점은 두 개의 가까운 교점으로 만들지 않고 하나로 처리한다
+- 매 turn 후 법선과 기저를 재정규화한다
+- 병합 시 §7.4(b)의 스냅을 적용해 오차 누적을 끊는다
+- 호 끝점은 가능하면 3D 좌표보다 carrier 원의 각도 값으로 보관한다
+
+---
+
+## 15. 모듈 구성
+
+Python + numpy. 엔진은 렌더러를 import하지 않는다.
+
+```text
+cutpattern/
+  epsilon.py            판정 종류별 허용 오차 (§14)
+
+  geometry/
+    vector              벡터, 결정적 정규직교기저, 회전행렬
+    symmetry            회전군 T/O/I, 순환군, 이면체군, 궤도 (§2.5)
+    spherical_circle    (n,h), 기저, point(t), 반대 표현 변환
+    angular_coverage    원형 구간 union / difference / shift / reflect
+    span                provenance 를 가진 구간 계층 (§5)
+    classify            영역 분류, s~=0 분기, 교점 (§7.3)
+    registry            carrier 병합, 양방향 키, 스냅 (§7.5)
+
+  engine/
+    axes                Axis / AxisSet / PuzzleFamily
+    operations          SplitByAxis / Turn / RollbackTurns / EnterRegion / evaluate
+    turn                합법성 판정, 분류, 분할, 회전 (§7)
+    turns               회전각 유도 (§7.7)
+
+  solids.py             정다면체와 각기둥 계열 프리셋 (§2.5)
+  axisops.py            merge / rotate / remove / keep / rename (§2.5)
+  query.py              angle_between / at_angle / angles_from / group_by_nearest (§2.6)
+  dsl.py                puzzle / split / turn / turned / carry / region (§9)
+
+  render/
+    arcs                호 -> numpy 점 배열. 렌더러 비의존
+    vpython_view        개발용 뷰어
+
+examples/               퍼즐 정의
+tests/
+```
+
+`geometry/`와 `engine/`은 순수 Python이어야 한다. 그래야 렌더 없이 테스트를 돌리고, 나중에 뷰어를 교체하거나 브라우저(Pyodide)로 옮길 때 그대로 재사용할 수 있다.
+
+`solids`, `axisops`, `query`, `dsl` 은 저작 계층이다. 엔진은 이들을 참조하지 않는다.
+
+---
+
+## 16. 구현 상태
+
+### 완료
+
+1. **기하 코어** — `(n,h)` 원, 각도 좌표, coverage union/difference, carrier registry (양방향 키 + 최근접 + 스냅)
+2. **Split** — 차집합만 추가. 전역 교점 계산 없음. provenance 2층 구조
+3. **Turn** — 합법성 판정, `s≈0` 분기를 포함한 다단계 분류, straddling 분할, 회전, carrier 스냅. U 45° 후 R split 예제 통과
+4. **바깥쪽 회전** — slice 합성. Mixup Plus 예제 통과
+5. **회전각 유도** — 고리 기반. 정다면체와 각기둥 계열 검증
+6. **축 집합** — 대칭군 궤도, 각기둥 계열 4종(쌍대 항등식 검증), merge/rotate/remove/keep/rename, carry
+7. **DSL** — `puzzle` / `split` / `turn` / `turned` / `carry` + 자유 함수 질의
+8. **렌더** — 반투명 구 + 호, 축 집합별 색칠, slider, 불법 turn 절단 표시
+9. **카탈란 13종 프리셋** — 씨앗 + 군, 궤도 크기로 검증. 키랄 둘은 mirror/invert
+10. **영역 제한 split 과 영역 안 Turn** — `with region(...)`, 가시성 표시. OctoCube Master 원본 구조 재현 (§6.3, §7.9)
+
+### 남은 것
+
+순서가 있다. 1이 2의 선행 조건이다.
+
+1. **실시간 최적화** — snapshot/replay, 렌더 객체 pool 연결, spatial index (§12).
+   지금은 slider 가 움직일 때마다 처음부터 재평가한다. CPython 에서는 견딜지만
+   Pyodide 는 2~5배 느리므로 그대로 옮기면 몸통 정의가 안 돌아간다
+2. **웹 배포와 코드 편집창** — Pyodide + Canvas 2D (§11, §19)
+3. **사용자 조작 UI** — move history, 유도된 회전각 메뉴 (§7.7, §13). 보류.
+   엔진은 `available_turns` 까지 준비되어 있고, 조작 방식 자체가 미정이다
+
+### 안 하기로 한 것
+
+- **pCubes importer.** pCubes 명령의 절반은 이미 거부 대상이라(§9.4) 어댑터를
+  만들어도 반쪽짜리다. 값어치 있는 것은 코드가 아니라 §9.4 의 **매핑 표**고,
+  그것은 손으로 옮길 때 그대로 쓴다. OctoCube 가 그렇게 나왔다.
+  잃는 것은 검증용 퍼즐 코퍼스다 — 남의 파일을 대량으로 돌리면 엔진 버그가 잘
+  나온다. 그건 재미있는 것만 손으로 옮겨서 대신한다
+
+---
+
+## 17. 테스트
+
+### 기하 단위
+
+- `(n,h)`와 `(−n,−h)`가 같은 carrier로 병합되는가
+- 2×2×2 면 6축 `θ = 90°`에서 마주보는 축이 하나로 합쳐지는가
+- 완전한 원 coverage에서 일부를 이동한 뒤 빈 구간이 정확한가
+- `0/2π`를 가로지르는 구간 union / difference가 정확한가
+- 완전 포함 / 완전 제외 / straddling을 올바르게 분류하는가
+- 회전축과 동축인 carrier에서 `s≈0` 분기를 타고 `NaN`이 나오지 않는가
+- 준동축(`a·n = 0.99999999`)에서도 `NaN`이 나오지 않는가
+- 접점, 거의 평행한 평면, 극점 근처에서 `NaN`이 발생하지 않는가
+- 회전 후 `|n|=1`, `|x|=1`, `n·x=h`가 허용 오차 안인가
+- 90° 회전을 반복해도 carrier 수가 늘지 않고 오차가 누적되지 않는가
+
+### 대칭과 축 집합
+
+- 회전군 `T`/`O`/`I`가 직교, `det=1`, 곱셈에 닫혀 있는가
+- 궤도 크기가 면 개수와 맞는가. 틀린 씨앗을 넣으면 잡히는가
+- 정다면체가 면추이적인가 (모든 축에서 본 사잇각 분포가 같은가)
+- 쌍대 항등식: `trapezohedron(3)==cube`, `antiprism(3)==octahedron`, `bipyramid(4)==octahedron`, `prism(4)==cube`
+- 쌍뿔과 사다리꼴다면체의 이면각이 전부 같은가
+- merge가 같은 방향을 하나로 합치고 id 충돌을 해소하는가
+- `rotate(pairs=...)`가 사잇각 불일치를 거부하는가
+- 축 조작이 원본을 변경하지 않는가
+
+### 회전각 유도
+
+- 정다면체가 면 대칭에 맞는 값을 주는가
+- 정이십면체가 첫 고리 너머에서 jumbling 각을 찾는가
+- n각기둥의 옆면과 밑면이 다른 값을 주는가
+- 침범 조건이 부등식과 일치하는가 (`cube` 는 `θ > 45`)
+- 실려 도는 축이 제외되는가
+- `extraTurnAngles`가 합집합되고 중복되지 않는가
+
+### 시나리오
+
+- 3×3×3 기본 split
+- U 45° 후 R split에서 윗층의 누락 구간만 추가. 그 사이 R 회전은 불법
+- 45° 슬라이스 후 면 회전이 막히고, 두 번 하면 격자로 복귀
+- Mixup Plus의 45° 슬라이스가 Plus 절단 이후 닫히는가
+- OctoCube Master 37연산이 불법 회전 없이 완주하고 모서리 방향 12개를 만드는가
+- `Hide` 판 OctoCube 가 면 원 6개를 온전히 남기고 매달린 절단이 없는가
+- `Hide` 판이 영역 없는 판보다 절단이 적고, 대칭이 `T` 까지인가 (`O` 는 아니어야 한다)
+- 같은 구성을 정십이면체에 옮기면 면 원 12개가 남고 새 절단원 60개가 한 궤도로 생기는가
+- 사잇각 절반보다 얕은 절단에서는 새 절단이 생기지 않는가
+- 연속 jumbling turn 후에도 호가 끊기거나 중복되지 않음
+- 같은 split 반복 적용 시 시각 결과가 변하지 않음
+- 각도 slider를 왕복해도 원래 상태로 정확히 복귀
+- 평가 도중 각도가 바뀌어도 한 번의 평가가 일관되는가
+- Turn 전후 호 길이 총합이 보존되는가
+- 불법 turn이 상태를 전혀 바꾸지 않는가
+
+### DSL
+
+- `for`, `def`, `with`, 컴프리헨션이 그대로 동작하는가
+- `turned` 블록이 예외 상황에서도 되돌리기를 기록하는가
+- 중첩 `turned`가 역순으로 풀리는가
+- 짝 맞은 회전이 자동 되돌리기에서 상쇄되는가
+- 잘못된 이름과 중복 id를 위치 정보와 함께 보고하는가
+
+### 영역 (§6.3, §7.9)
+
+- `EnterRegion` 이 바깥 호에 표시를 달고 `ExitRegion` 이 지우는가
+- 숨은 호가 회전에 참여하지 않는가
+- 영역 안 회전의 왕복이 정확히 대칭인가 (초기 상태로 복귀)
+- 숨은 호가 새 절단을 막지 않는가
+- 영역이 실제로 절단을 제한하는가 (영역 없는 구성보다 호가 짧다)
+- 짝 안 맞는 블록 안 회전을 거부하는가
+- 옮긴 호가 숨은 호에 삼켜지지 않는가 (앞선 블록의 부분 carrier 위로 겹칠 때)
+
+---
+
+## 18. 성공 기준
+
+1. 축 집합, 절단 각도 입력, split, turn을 파이썬으로 정의할 수 있다
+2. 조각이나 면을 생성하지 않고 구면 경계만으로 결과를 표시한다
+3. split 시 전역 교점 계산을 하지 않는다
+4. turn은 항상 합법성을 판정하고, 불법이면 상태를 바꾸지 않는다
+5. turn으로 일부만 움직이는 호에 한해 교점을 지연 계산한다
+6. U 45° 후 R split 사례를 정확히 재현한다
+7. slice 회전이 두 연산의 합성으로 나온다
+8. 회전각을 절단 각도에서 유도한다
+9. 일반적인 퍼즐 규모에서 slider와 drag 조작이 실시간으로 반응한다
+10. 사용자의 실제 퍼즐 회전을 같은 Turn 엔진으로 실행하고 move history로 replay할 수 있다
+11. layer 대상 `Hide` 를 영역 블록으로 받아 절단을 제한하고, 블록이 끝나면 매달린 절단이 남지 않는다
+12. 브라우저에서 정의를 직접 쓰고 결과를 바로 볼 수 있다
+
+---
+
+## 19. 웹 배포와 코드 편집창
+
+목표는 브라우저에서 퍼즐 정의를 직접 쓰고 결과를 바로 보는 것이다.
+importer 를 대체하는 길이기도 하다 (§16).
+
+### 왜 싸게 되는가
+
+DSL 이 **내장 파이썬**이라서다 (§9.1). 편집창은 textarea 와 Pyodide `exec` 면
+끝이고, 문법 하이라이팅도 파이썬 것을 그대로 쓴다. 별도 언어였다면 브라우저용
+파서를 또 만들어야 했다.
+
+구조도 이미 맞춰져 있다 (§15).
+
+- `geometry/`, `engine/` 은 순수 파이썬 + numpy → 그대로 간다
+- `render/arcs.py` 는 생 numpy 점 배열만 뱉는다 → 렌더러 비의존
+- 갈아끼울 것은 `vpython_view.py` 하나다
+
+### 걸리는 것
+
+**성능이 선행 조건이다.** Pyodide + numpy 는 CPython 보다 2~5배 느리다.
+현재 측정치로 환산하면:
+
+| 정의 | 연산 | CPython | 브라우저 추정 |
+|---|---|---|---|
+| quantum | 37 | 0.02s | 괜찮음 |
+| octododeca | 97 | 0.10s | 0.3~0.5s. slider 가 뻑뻑함 |
+| OctoCube Hide 30매크로 | 553 | 2.49s | 10s 이상. 못 씀 |
+
+slider 콜백이 매번 처음부터 재평가하는 지금 구조로는 안 된다. §12 의
+snapshot/replay 가 먼저다.
+
+**numpy 다운로드가 ~10MB.** 첫 로딩이 느리다. 장기적으로는 hot path 에서
+numpy 를 걷어내는 선택지가 있다.
+
+**`exec` 살포.** 개인 도구면 브라우저 샌드박스로 충분하다. 그러나 "정의를
+링크로 공유"까지 가면 공유받은 링크가 임의 코드 실행이 된다. **URL 에 코드를
+싣기 전에** 정해야 할 문제다.

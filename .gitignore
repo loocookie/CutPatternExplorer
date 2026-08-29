@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 가상환경
+.venv/
+venv/
+
+# 에디터
+.idea/
+.vscode/
