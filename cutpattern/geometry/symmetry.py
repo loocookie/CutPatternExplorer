@@ -51,10 +51,21 @@ def _round_key(m: Mat3, decimals: int = 9) -> tuple:
     return tuple(round(x, decimals) + 0.0 for row in m for x in row)
 
 
+def _det(m: Mat3) -> float:
+    (a, b, c), (d, e, f), (g, h, i) = m
+    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+
+
 def _close_group(
-    generators: list[Mat3], expected: int | None = None
+    generators: list[Mat3], expected: int | None = None, allow_improper: bool = False
 ) -> list[Mat3]:
-    """생성원으로부터 군 전체를 닫는다. 폭 우선으로 곱해 나간다."""
+    """생성원으로부터 군 전체를 닫는다. 폭 우선으로 곱해 나간다.
+
+    allow_improper 가 거짓이면 **모든 원소가 순수 회전(det = +1)** 이어야 한다.
+    T / O / I 는 회전군이고 Td / Oh / Ih 만 반사를 포함한다. 생성원을 잘못 넣어
+    반사가 섞이면 궤도에 반대 손 방향이 딸려 들어오는데, 크기만 보면 기대값과
+    맞아떨어져 통과할 수 있다. 손대칭 입체(§2.5)에서 조용히 틀린 축 집합이 나온다.
+    """
     elements: dict[tuple, Mat3] = {}
     identity = IDENTITY3
     elements[_round_key(identity)] = identity
@@ -74,6 +85,12 @@ def _close_group(
     out = list(elements.values())
     if expected is not None and len(out) != expected:
         raise RuntimeError(f"군 크기가 {len(out)}, 기대값은 {expected}")
+    if not allow_improper:
+        improper = sum(1 for m in out if _det(m) < 0.0)
+        if improper:
+            raise RuntimeError(
+                f"회전군에 반사가 {improper}개 섞였다 (det = -1). 생성원을 확인하라"
+            )
     return out
 
 
@@ -124,7 +141,9 @@ def rotation_group(name: str) -> list[Mat3]:
             _axis_rotation((0, 1, phi), 2 * math.pi / 5),
         ]
 
-    group = _close_group(gens, expected=GROUP_ORDERS[name])
+    group = _close_group(
+        gens, expected=GROUP_ORDERS[name], allow_improper=name in ("Td", "Oh", "Ih")
+    )
     _GROUP_CACHE[name] = group
     return group
 

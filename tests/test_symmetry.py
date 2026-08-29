@@ -175,3 +175,37 @@ def test_rotation_group_is_a_subgroup_of_the_full_group(full, rot):
 def test_group_name_is_case_insensitive():
     assert len(rotation_group("oh")) == 48
     assert len(rotation_group("ih")) == 120
+
+
+def test_rotation_groups_contain_no_reflections():
+    """T / O / I 는 순수 회전군이다. det = +1 만 있어야 한다 (§2.5).
+
+    생성원에 반사가 섞이면 궤도에 반대 손 방향이 딸려 들어오는데, 크기만 보면
+    기대값과 맞아떨어져 통과할 수 있다. 손대칭 입체에서 조용히 틀린 축 집합이
+    나오므로 닫을 때 걸러야 한다.
+    """
+    for name in ("T", "O", "I"):
+        for m in rotation_group(name):
+            assert float(np.linalg.det(np.asarray(m))) == pytest.approx(1.0)
+
+
+def test_full_groups_do_contain_reflections():
+    """Td / Oh / Ih 는 반사를 포함한다. 위 검사가 이쪽을 막으면 안 된다."""
+    for name in ("Td", "Oh", "Ih"):
+        dets = {round(float(np.linalg.det(np.asarray(m))), 6) for m in rotation_group(name)}
+        assert dets == {1.0, -1.0}
+
+
+def test_closing_a_rotation_group_rejects_a_reflected_generator():
+    """생성원에 반사를 섞으면 닫는 단계에서 거부한다."""
+    from cutpattern.geometry.symmetry import _axis_rotation, _close_group
+    from cutpattern.geometry.vector import Mat3
+
+    mirror = Mat3(((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)))
+    with pytest.raises(RuntimeError, match="반사"):
+        _close_group([_axis_rotation((0, 0, 1), math.pi / 2), mirror])
+
+    # allow_improper 를 주면 통과한다. Td / Oh / Ih 가 그 경로다
+    assert _close_group(
+        [_axis_rotation((0, 0, 1), math.pi / 2), mirror], allow_improper=True
+    )
