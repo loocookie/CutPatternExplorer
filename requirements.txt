@@ -1,3 +1,5 @@
-numpy>=1.24
-vpython>=7.6
-pytest>=7.0
+# 엔진(cutpattern/geometry, cutpattern/engine)은 표준 라이브러리만 쓴다.
+# numpy 의존을 걷어냈다 — §12 성능, §19 브라우저 배포.
+vpython>=7.6   # 개발용 뷰어에만 필요 (cutpattern/render/vpython_view.py)
+pytest>=7.0    # 테스트. numpy 는 테스트의 비교 보조로만 쓴다
+numpy>=1.24    # 테스트 전용

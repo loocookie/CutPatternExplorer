@@ -23,10 +23,8 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
-
 from .geometry.symmetry import cyclic_group, orbit
-from .geometry.vector import normalize
+from .geometry.vector import Vec3, cross, normalize
 
 __all__ = [
     "PHI",
@@ -265,11 +263,11 @@ def _antiprism_vertices(n: int):
     return top, bottom
 
 
-def _face_normal(v1, v2, v3) -> np.ndarray:
+def _face_normal(v1, v2, v3) -> Vec3:
     """세 꼭짓점이 이루는 면의 바깥쪽 법선."""
-    a, b, c = (np.asarray(v, dtype=float) for v in (v1, v2, v3))
-    n = np.cross(b - a, c - a)
-    if float(n @ (a + b + c)) < 0.0:
+    a, b, c = Vec3(v1), Vec3(v2), Vec3(v3)
+    n = cross(b - a, c - a)
+    if (n @ (a + b + c)) < 0.0:
         n = -n
     return normalize(n)
 

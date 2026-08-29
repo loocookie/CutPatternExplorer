@@ -40,7 +40,7 @@ def test_all_points_lie_on_unit_sphere_and_carrier_plane():
     _reg, arcs = build(*ALL_FACE_SPLITS, Turn("U", 45.0), SplitByAxis("R"))
     for a in arcs:
         assert np.allclose(np.linalg.norm(a.points, axis=1), 1.0)
-        assert np.allclose(a.points @ a.circle.n, a.circle.h)
+        assert np.allclose(np.asarray(a.points) @ a.circle.n, a.circle.h)
 
 
 def test_arc_id_is_deterministic_across_reevaluation():

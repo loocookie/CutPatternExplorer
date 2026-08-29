@@ -18,9 +18,8 @@
 from __future__ import annotations
 
 import itertools
+import math
 from dataclasses import dataclass, field
-
-import numpy as np
 
 from ..epsilon import ANGLE_EPS, MERGE_EPS
 from .angular_coverage import Coverage, difference, is_full
@@ -79,30 +78,45 @@ class BoundaryRegistry:
 
     # ---- 내부 -----------------------------------------------------------
 
-    def _cell(self, n: np.ndarray, h: float) -> tuple[int, int, int, int]:
+    def _cell(self, n, h: float) -> tuple[int, int, int, int]:
         e = self.merge_eps
         return (
-            int(np.floor(n[0] / e)),
-            int(np.floor(n[1] / e)),
-            int(np.floor(n[2] / e)),
-            int(np.floor(h / e)),
+            math.floor(n[0] / e),
+            math.floor(n[1] / e),
+            math.floor(n[2] / e),
+            math.floor(h / e),
         )
 
-    def _nearest(self, n: np.ndarray, h: float) -> BoundaryCircle | None:
-        """MERGE_EPS 안의 가장 가까운 carrier. 없으면 None."""
+    def _nearest(self, n, h: float) -> BoundaryCircle | None:
+        """MERGE_EPS 안의 가장 가까운 carrier. 없으면 None.
+
+        Turn 이 옮기는 호마다 불리므로 hot path 다. 벡터 연산자를 쓰지 않고
+        성분을 지역 변수로 풀어 놓는다 (§12).
+        """
         cx, cy, cz, ch = self._cell(n, h)
+        n0, n1, n2 = n[0], n[1], n[2]
+        h = float(h)
         best: BoundaryCircle | None = None
         best_d = self.merge_eps
         seen: set[int] = set()
+        buckets = self._buckets
+        circles = self.circles
         for dx, dy, dz, dh in _NEIGHBORS:
-            for idx in self._buckets.get((cx + dx, cy + dy, cz + dz, ch + dh), ()):
+            for idx in buckets.get((cx + dx, cy + dy, cz + dz, ch + dh), ()):
                 if idx in seen:
                     continue
                 seen.add(idx)
-                bc = self.circles[idx]
-                d = max(float(np.linalg.norm(bc.circle.n - n)), abs(bc.circle.h - h))
+                c = circles[idx].circle
+                cn = c.n
+                a0 = cn[0] - n0
+                a1 = cn[1] - n1
+                a2 = cn[2] - n2
+                d = math.sqrt(a0 * a0 + a1 * a1 + a2 * a2)
+                dh_ = abs(c.h - h)
+                if dh_ > d:
+                    d = dh_
                 if d < best_d:
-                    best, best_d = bc, d
+                    best, best_d = circles[idx], d
         return best
 
     def _insert(self, circle: SphericalCircle) -> BoundaryCircle:

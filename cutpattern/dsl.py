@@ -34,8 +34,6 @@ import math
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-import numpy as np
-
 from .engine.axes import Axis
 from .engine.axes import AxisSet as _EngineAxisSet
 from .engine.axes import PuzzleFamily
@@ -56,7 +54,7 @@ from .query import (
     group_by_nearest,
     nearest,
 )
-from .geometry.vector import clamp, normalize
+from .geometry.vector import Vec3, clamp, normalize
 
 __all__ = [
     "AxisSet",
@@ -177,12 +175,12 @@ class AxisSet:
 # ---------------------------------------------------- 표준 축 집합 생성기
 
 _CUBE_FACES = {
-    "R": (1, 0, 0),
-    "L": (-1, 0, 0),
-    "U": (0, 1, 0),
-    "D": (0, -1, 0),
-    "F": (0, 0, 1),
-    "B": (0, 0, -1),
+    "R": Vec3(1, 0, 0),
+    "L": Vec3(-1, 0, 0),
+    "U": Vec3(0, 1, 0),
+    "D": Vec3(0, -1, 0),
+    "F": Vec3(0, 0, 1),
+    "B": Vec3(0, 0, -1),
 }
 
 
@@ -197,9 +195,9 @@ def cube_edges(id: str = "edges", turns=()) -> AxisSet:
     items = list(_CUBE_FACES.items())
     for i, (a_id, a_n) in enumerate(items):
         for b_id, b_n in items[i + 1 :]:
-            if abs(float(np.dot(a_n, b_n))) > 1e-9:
+            if abs(a_n @ b_n) > 1e-9:
                 continue  # 마주보는 면끼리는 모서리를 만들지 않는다
-            s.add(a_id + b_id, normalize(np.add(a_n, b_n)))
+            s.add(a_id + b_id, normalize(a_n + b_n))
     return s
 
 
@@ -211,7 +209,7 @@ def cube_vertices(
     for x in ("R", "L"):
         for y in ("U", "D"):
             for z in ("F", "B"):
-                n = np.add(np.add(_CUBE_FACES[x], _CUBE_FACES[y]), _CUBE_FACES[z])
+                n = _CUBE_FACES[x] + _CUBE_FACES[y] + _CUBE_FACES[z]
                 s.add(x + y + z, normalize(n))
     return s
 

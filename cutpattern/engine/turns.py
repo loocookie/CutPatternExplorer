@@ -38,8 +38,6 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-import numpy as np
-
 from ..geometry.vector import clamp, orthonormal_basis
 from .axes import Axis, PuzzleFamily
 
@@ -50,8 +48,8 @@ __all__ = ["ANGLE_TOL_DEG", "derived_turns", "available_turns", "rings_around"]
 ANGLE_TOL_DEG = 1e-4
 
 
-def _angle_between(a: np.ndarray, b: np.ndarray) -> float:
-    return math.degrees(math.acos(float(clamp(float(a @ b)))))
+def _angle_between(a, b) -> float:
+    return math.degrees(math.acos(clamp(a @ b)))
 
 
 def rings_around(

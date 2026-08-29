@@ -17,9 +17,16 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
-
-from .geometry.vector import as_vec, clamp, normalize, rotation_matrix
+from .geometry.vector import (
+    Mat3,
+    Vec3,
+    as_vec,
+    clamp,
+    cross,
+    norm,
+    normalize,
+    rotation_matrix,
+)
 
 __all__ = [
     "MERGE_TOL",
@@ -51,7 +58,8 @@ def _new_like(id: str, name: str, template):
 
 
 def _same_direction(a, b, tol: float = MERGE_TOL) -> bool:
-    return float(np.linalg.norm(np.asarray(a) - np.asarray(b))) < tol
+    d0, d1, d2 = a[0] - b[0], a[1] - b[1], a[2] - b[2]
+    return math.sqrt(d0 * d0 + d1 * d1 + d2 * d2) < tol
 
 
 # ------------------------------------------------------------------ merge
@@ -67,7 +75,7 @@ def merge(id: str, *sets, name: str = "", tol: float = MERGE_TOL):
     if not sets:
         raise ValueError("합칠 축 집합이 없다")
     out = _new_like(id, name or f"merged({', '.join(s.id for s in sets)})", sets[0])
-    seen: list[np.ndarray] = []
+    seen: list[Vec3] = []
     used: set[str] = set()
     for source in sets:
         for axis in source:
@@ -87,34 +95,36 @@ def merge(id: str, *sets, name: str = "", tol: float = MERGE_TOL):
 # ----------------------------------------------------------------- rotate
 
 
-def quaternion_matrix(q) -> np.ndarray:
+def quaternion_matrix(q) -> Mat3:
     """쿼터니언 (w, x, y, z) -> 3x3 회전행렬."""
     w, x, y, z = (float(v) for v in q)
     norm = math.sqrt(w * w + x * x + y * y + z * z)
     if norm < 1e-12:
         raise ValueError("영 쿼터니언은 회전이 아니다")
     w, x, y, z = w / norm, x / norm, y / norm, z / norm
-    return np.array(
-        [
-            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
-            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
-            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
-        ]
+    return Mat3(
+        (
+            (1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)),
+            (2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)),
+            (2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)),
+        )
     )
 
 
-def _frame(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def _frame(a, b) -> Mat3:
     """a 와 b 로 정규직교틀을 만든다. 열이 기저벡터다."""
     e1 = normalize(a)
-    rest = np.asarray(b, dtype=float) - float(e1 @ b) * e1
-    norm = float(np.linalg.norm(rest))
-    if norm < 1e-9:
+    rest = Vec3(b) - (e1 @ b) * e1
+    length = norm(rest)
+    if length < 1e-9:
         raise ValueError("두 방향이 평행해 회전이 하나로 정해지지 않는다")
-    e2 = rest / norm
-    return np.column_stack([e1, e2, np.cross(e1, e2)])
+    e2 = rest / length
+    e3 = cross(e1, e2)
+    # 열이 기저이므로 행 표현에서는 성분을 가로로 늘어놓는다
+    return Mat3(((e1[i], e2[i], e3[i]) for i in range(3)))
 
 
-def rotation_from_pairs(pairs) -> np.ndarray:
+def rotation_from_pairs(pairs) -> Mat3:
     """(a -> a'), (b -> b') 두 쌍으로 회전을 정한다.
 
     사잇각이 보존되지 않으면 그런 회전은 존재하지 않는다. 조용히 근사하지 않고
@@ -123,8 +133,8 @@ def rotation_from_pairs(pairs) -> np.ndarray:
     if len(pairs) != 2:
         raise ValueError(f"쌍이 정확히 두 개여야 한다 (받은 개수: {len(pairs)})")
     (a, a2), (b, b2) = ((normalize(x), normalize(y)) for x, y in pairs)
-    before = math.degrees(math.acos(float(clamp(float(a @ b)))))
-    after = math.degrees(math.acos(float(clamp(float(a2 @ b2)))))
+    before = math.degrees(math.acos(clamp(a @ b)))
+    after = math.degrees(math.acos(clamp(a2 @ b2)))
     if abs(before - after) > 1e-6:
         raise ValueError(
             f"사잇각이 보존되지 않는다: {before:.6f}도 -> {after:.6f}도. "
@@ -191,7 +201,13 @@ def mirror(aset, normal=(0, 0, 1), *, id: str | None = None, name: str = ""):
         right = mirror(left, (0, 0, 1), id="pi_right")
     """
     n = normalize(normal)
-    matrix = np.eye(3) - 2.0 * np.outer(n, n)
+    # 반사 행렬 I - 2 n n^T
+    matrix = Mat3(
+        (
+            ((1.0 if i == j else 0.0) - 2.0 * n[i] * n[j] for j in range(3))
+            for i in range(3)
+        )
+    )
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
         out.add(a.id, matrix @ a.normal, extra_turns=a.extra_turn_angles)

@@ -36,12 +36,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
-
 from ..epsilon import ANGLE_EPS, SEL_EPS
 from .angular_coverage import Coverage, difference, is_full, normalize_spans
 from .classify import MOVING, STRADDLING, classify_span, split_span_by_cap
 from .spherical_circle import SphericalCircle
+from .vector import Vec3, as_vec
 
 __all__ = [
     "Constraint",
@@ -62,12 +61,13 @@ class Constraint:
     """
 
     axis_id: str
-    normal: np.ndarray
+    normal: Vec3
     offset: float
     side: float
 
     def contains(self, point) -> bool:
-        value = float(np.asarray(point) @ self.normal) - self.offset
+        n = self.normal
+        value = point[0] * n[0] + point[1] * n[1] + point[2] * n[2] - self.offset
         return self.side * value > -SEL_EPS
 
     def __str__(self) -> str:
@@ -154,7 +154,7 @@ def dangling_endpoints(circle: SphericalCircle, spans: Coverage, tags, registry)
             point = circle.point(t)
             covered = False
             for bc in registry.non_empty():
-                if abs(float(point @ bc.circle.n) - bc.circle.h) > 1e-9:
+                if abs((point @ bc.circle.n) - bc.circle.h) > 1e-9:
                     continue
                 if contains(bc.coverage, bc.circle.angle_of(point)):
                     covered = True
@@ -199,7 +199,7 @@ class Region:
                     c.axis_id == o.axis_id
                     and c.side == o.side
                     and abs(c.offset - o.offset) < 1e-12
-                    and float(c.normal @ o.normal) > 1.0 - 1e-9
+                    and (c.normal @ o.normal) > 1.0 - 1e-9
                     for o in seen
                 ):
                     seen.append(c)
@@ -245,7 +245,7 @@ class Region:
 
         각 셀을 회전 경계로 둘로 쪼개고, 도는 쪽(side)만 행렬을 적용한다.
         """
-        n = np.asarray(axis_normal, dtype=float)
+        n = as_vec(axis_normal)
         boundary_in = Constraint("<turn>", n, offset, side)
         boundary_out = Constraint("<turn>", n, offset, -side)
         out: list[tuple[Constraint, ...]] = []
@@ -269,7 +269,8 @@ def _aligned(c: Constraint, reference_normal):
     (n, d, side) 와 (-n, -d, -side) 는 같은 반공간이다. 이걸 못 알아보면
     모순된 셀(같은 축의 반대쪽 두 cap)이 살아남아 회전을 두 번 먹는다.
     """
-    dot = float(np.asarray(reference_normal) @ c.normal)
+    n = c.normal
+    dot = reference_normal[0] * n[0] + reference_normal[1] * n[1] + reference_normal[2] * n[2]
     if abs(dot - 1.0) < 1e-9:
         return c.offset, c.side
     if abs(dot + 1.0) < 1e-9:

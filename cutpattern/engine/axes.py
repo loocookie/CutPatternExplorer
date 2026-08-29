@@ -8,9 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import numpy as np
-
-from ..geometry.vector import normalize
+from ..geometry.vector import Vec3, normalize
 
 __all__ = ["Axis", "AxisSet", "PuzzleFamily"]
 
@@ -28,7 +26,7 @@ class Axis:
     """
 
     id: str
-    normal: np.ndarray
+    normal: Vec3
     extra_turn_angles: tuple[float, ...] = ()
 
     @staticmethod

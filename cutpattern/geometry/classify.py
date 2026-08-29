@@ -27,12 +27,10 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
-
 from ..epsilon import ANGLE_EPS, S_EPS, SEL_EPS
 from .angular_coverage import TAU, wrap_angle
 from .spherical_circle import SphericalCircle
-from .vector import as_vec, clamp
+from .vector import clamp
 
 __all__ = [
     "MOVING",
@@ -78,11 +76,24 @@ class CircleTerms:
 
 
 def circle_terms(circle: SphericalCircle, a) -> CircleTerms:
-    a = as_vec(a)
-    an = float(clamp(float(a @ circle.n)))
-    m = circle.h * an
-    s = math.sqrt(max(0.0, 1.0 - circle.h * circle.h)) * math.sqrt(max(0.0, 1.0 - an * an))
-    phi = math.atan2(float(a @ circle.v), float(a @ circle.u))
+    """호출 빈도가 제일 높은 함수다. 벡터 연산자를 쓰지 않고 성분을 지역 변수로
+    풀어 float 산술을 직접 한다 (§12).
+    """
+    ax, ay, az = a[0], a[1], a[2]
+    n = circle.n
+    an = ax * n[0] + ay * n[1] + az * n[2]
+    if an > 1.0:
+        an = 1.0
+    elif an < -1.0:
+        an = -1.0
+    h = circle.h
+    m = h * an
+    s = math.sqrt(max(0.0, 1.0 - h * h)) * math.sqrt(max(0.0, 1.0 - an * an))
+    u, v = circle.u, circle.v
+    phi = math.atan2(
+        ax * v[0] + ay * v[1] + az * v[2],
+        ax * u[0] + ay * u[1] + az * u[2],
+    )
     return CircleTerms(an, m, s, wrap_angle(phi))
 
 
@@ -145,7 +156,7 @@ def straddle_roots(circle: SphericalCircle, a, d: float) -> list[float]:
     c = (d - ct.m) / ct.s
     if c > 1.0 + 1e-12 or c < -1.0 - 1e-12:
         return []
-    ac = math.acos(float(clamp(c)))
+    ac = math.acos(clamp(c))
     r0 = wrap_angle(ct.phi + ac)
     r1 = wrap_angle(ct.phi - ac)
     if abs(r0 - r1) < ANGLE_EPS or abs(abs(r0 - r1) - TAU) < ANGLE_EPS:

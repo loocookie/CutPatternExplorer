@@ -1,18 +1,17 @@
 """호를 점 배열로 변환. 설계 문서 §11.
 
-렌더러에 의존하지 않는다. numpy 배열만 내보내므로 vpython, Canvas 2D,
-어느 백엔드로도 그대로 쓸 수 있다 (§15).
+렌더러에 의존하지 않는다. 점 좌표 목록만 내보내므로 vpython, Canvas 2D,
+어느 백엔드로도 그대로 쓸 수 있다 (§15). numpy 도 쓰지 않는다 (§12).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
-
 from ..geometry.registry import BoundaryRegistry
 from ..geometry.span import Provenance
 from ..geometry.spherical_circle import SphericalCircle
+from ..geometry.vector import Vec3
 
 __all__ = ["RenderArc", "build_arcs", "arc_id"]
 
@@ -35,7 +34,7 @@ class RenderArc:
     circle: SphericalCircle
     t0: float
     t1: float
-    points: np.ndarray  # (N, 3)
+    points: list[Vec3]
     provenance: Provenance
     is_full_circle: bool
 

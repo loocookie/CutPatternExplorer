@@ -4,6 +4,10 @@
 
 기준점은 항상 원점이다 (§4.1). pCubes 의 h = n·b + d 는 b = 0 에서 h = d 로
 축약된다.
+
+numpy 를 쓰지 않는다 (§12, §15). `points` 의 폴리라인 생성만이 배열다운 유일한
+연산인데, 호 600개 규모에서 numpy 5.5ms 대 순수 파이썬 10ms 로 절대값이 이미
+무시할 수준이다. 그 10ms 를 위해 의존성 전체를 지고 갈 이유가 없다 (§19).
 """
 
 from __future__ import annotations
@@ -11,11 +15,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-import numpy as np
-
 from ..epsilon import ANGLE_EPS, RADIUS_EPS
 from .angular_coverage import Coverage, reflect, shift, wrap_angle
-from .vector import as_vec, clamp, normalize, orthonormal_basis
+from .vector import Vec3, as_vec, clamp, normalize, orthonormal_basis
 
 __all__ = ["SphericalCircle", "transfer_spans"]
 
@@ -24,10 +26,10 @@ __all__ = ["SphericalCircle", "transfer_spans"]
 class SphericalCircle:
     """법선 n, offset h 로 정해지는 구면 위의 원."""
 
-    n: np.ndarray
+    n: Vec3
     h: float
-    u: np.ndarray
-    v: np.ndarray
+    u: Vec3
+    v: Vec3
 
     # ---- 생성 ----------------------------------------------------------
 
@@ -52,7 +54,7 @@ class SphericalCircle:
     @property
     def theta(self) -> float:
         """각반경."""
-        return math.acos(float(clamp(self.h)))
+        return math.acos(clamp(self.h))
 
     def is_degenerate(self) -> bool:
         """반지름이 0 에 가까우면 보이는 경계가 없다."""
@@ -60,26 +62,65 @@ class SphericalCircle:
 
     # ---- 각도 좌표 <-> 3D ---------------------------------------------
 
-    def point(self, t: float) -> np.ndarray:
+    def point(self, t: float) -> Vec3:
+        n, u, v, h = self.n, self.u, self.v, self.h
         r = self.r
-        return self.h * self.n + r * (math.cos(t) * self.u + math.sin(t) * self.v)
+        c = r * math.cos(t)
+        s = r * math.sin(t)
+        return tuple.__new__(
+            Vec3,
+            (
+                h * n[0] + c * u[0] + s * v[0],
+                h * n[1] + c * u[1] + s * v[1],
+                h * n[2] + c * u[2] + s * v[2],
+            ),
+        )
 
-    def points(self, ts) -> np.ndarray:
-        """각도 배열 -> (N, 3) 좌표. numpy 일괄 처리 (§11, §12)."""
-        ts = np.asarray(ts, dtype=np.float64).reshape(-1, 1)
+    def points(self, ts) -> list[Vec3]:
+        """각도 열 -> 좌표 목록. 폴리라인 생성용 (§11, §12)."""
+        n, u, v, h = self.n, self.u, self.v, self.h
         r = self.r
-        return self.h * self.n + r * (np.cos(ts) * self.u + np.sin(ts) * self.v)
+        hn0, hn1, hn2 = h * n[0], h * n[1], h * n[2]
+        u0, u1, u2 = u
+        v0, v1, v2 = v
+        out: list[Vec3] = []
+        new = tuple.__new__
+        for t in ts:
+            t = float(t)
+            c = r * math.cos(t)
+            s = r * math.sin(t)
+            out.append(
+                new(
+                    Vec3,
+                    (
+                        hn0 + c * u0 + s * v0,
+                        hn1 + c * u1 + s * v1,
+                        hn2 + c * u2 + s * v2,
+                    ),
+                )
+            )
+        return out
 
     def angle_of(self, p) -> float:
         """구면 위 점의 이 원 기준 각도 좌표."""
-        p = as_vec(p)
-        return wrap_angle(math.atan2(float(p @ self.v), float(p @ self.u)))
+        u, v = self.u, self.v
+        x, y, z = p[0], p[1], p[2]
+        return wrap_angle(
+            math.atan2(
+                x * v[0] + y * v[1] + z * v[2],
+                x * u[0] + y * u[1] + z * u[2],
+            )
+        )
 
-    def sample_span(self, t0: float, t1: float, max_step: float = 0.05) -> np.ndarray:
-        """호 하나를 폴리라인 점 배열로 tessellate 한다."""
+    def sample_span(self, t0: float, t1: float, max_step: float = 0.05) -> list[Vec3]:
+        """호 하나를 폴리라인 점 목록으로 tessellate 한다."""
         length = t1 - t0
         n_seg = max(2, int(math.ceil(length / max_step)))
-        return self.points(np.linspace(t0, t1, n_seg + 1))
+        step = length / n_seg
+        # 끝점은 누적 오차 없이 t1 을 그대로 쓴다 (np.linspace 와 같은 규약)
+        ts = [t0 + i * step for i in range(n_seg)]
+        ts.append(t1)
+        return self.points(ts)
 
     def negated(self) -> "SphericalCircle":
         """같은 평면의 반대 표현 (-n, -h)."""
@@ -93,7 +134,7 @@ def transfer_spans(src: SphericalCircle, dst: SphericalCircle, spans: Coverage) 
     순수 회전 ``t_dst = t_src + c`` 이고, 반대 방향이면 손이 뒤집혀
     ``t_dst = -t_src + c`` 가 된다 (§4.3).
     """
-    same_side = float(src.n @ dst.n) > 0.0
+    same_side = (src.n @ dst.n) > 0.0
     c = dst.angle_of(src.point(0.0))
     if same_side:
         if c < ANGLE_EPS or c > 2.0 * math.pi - ANGLE_EPS:

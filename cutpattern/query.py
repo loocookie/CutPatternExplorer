@@ -16,10 +16,8 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-import numpy as np
-
 from .engine.axes import Axis
-from .geometry.vector import as_vec, clamp, normalize
+from .geometry.vector import Vec3, as_vec, clamp, normalize
 
 __all__ = [
     "ANGLE_TOL_DEG",
@@ -37,7 +35,7 @@ __all__ = [
 ANGLE_TOL_DEG = 1e-4
 
 
-def _normal(x) -> np.ndarray:
+def _normal(x) -> Vec3:
     """축이든 벡터든 단위 법선으로."""
     if isinstance(x, Axis):
         return x.normal

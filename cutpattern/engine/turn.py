@@ -12,8 +12,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 
-import numpy as np
-
 from ..epsilon import ANGLE_EPS
 from ..geometry.angular_coverage import TAU, make_span
 from ..geometry.classify import (
@@ -223,7 +221,7 @@ def turn(
 
     result.moved_spans = len(moving)
     result.moved = tuple(
-        (tuple(round(float(x), 9) for x in bc.circle.n), round(span.t0, 9), round(span.t1, 9))
+        (tuple(round(x, 9) for x in bc.circle.n), round(span.t0, 9), round(span.t1, 9))
         for bc, span in moving
     )
     result.carriers_after = len(registry)

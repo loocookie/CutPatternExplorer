@@ -23,7 +23,7 @@ def test_points_lie_on_sphere_and_plane(normal):
     ts = np.linspace(0.0, TAU, 37)
     pts = c.points(ts)
     assert np.allclose(np.linalg.norm(pts, axis=1), 1.0)
-    assert np.allclose(pts @ c.n, c.h)
+    assert np.allclose(np.asarray(pts) @ c.n, c.h)
 
 
 def test_angle_roundtrip():

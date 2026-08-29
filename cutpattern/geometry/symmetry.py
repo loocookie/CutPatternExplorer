@@ -22,9 +22,8 @@ from __future__ import annotations
 import itertools
 import math
 
-import numpy as np
-
 from ..epsilon import NORMAL_EPS
+from .vector import IDENTITY3, Mat3, Vec3, norm, normalize, rotation_matrix
 
 __all__ = [
     "rotation_group",
@@ -48,16 +47,17 @@ GROUP_ORDERS = {"T": 12, "O": 24, "I": 60, "Td": 24, "Oh": 48, "Ih": 120}
 _DIR_TOL = 1e-9
 
 
-def _round_key(m: np.ndarray, decimals: int = 9) -> tuple:
-    return tuple(np.round(m, decimals).ravel() + 0.0)
+def _round_key(m: Mat3, decimals: int = 9) -> tuple:
+    """행렬을 사전 키로. ``+ 0.0`` 은 -0.0 을 0.0 으로 접어 키를 안정시킨다."""
+    return tuple(round(x, decimals) + 0.0 for row in m for x in row)
 
 
 def _close_group(
-    generators: list[np.ndarray], expected: int | None = None, allow_improper: bool = False
-) -> list[np.ndarray]:
+    generators: list[Mat3], expected: int | None = None, allow_improper: bool = False
+) -> list[Mat3]:
     """생성원으로부터 군 전체를 닫는다. 폭 우선으로 곱해 나간다."""
-    elements: dict[tuple, np.ndarray] = {}
-    identity = np.eye(3)
+    elements: dict[tuple, Mat3] = {}
+    identity = IDENTITY3
     elements[_round_key(identity)] = identity
     frontier = [identity]
     while frontier:
@@ -78,18 +78,14 @@ def _close_group(
     return out
 
 
-def _axis_rotation(axis, angle: float) -> np.ndarray:
-    a = np.asarray(axis, dtype=np.float64)
-    a = a / np.linalg.norm(a)
-    ax, ay, az = a
-    K = np.array([[0.0, -az, ay], [az, 0.0, -ax], [-ay, ax, 0.0]])
-    return np.eye(3) + math.sin(angle) * K + (1.0 - math.cos(angle)) * (K @ K)
+# 축 회전은 §4.2 의 것과 같은 Rodrigues 공식이다. 사본을 두지 않는다
+_axis_rotation = rotation_matrix
 
 
-_GROUP_CACHE: dict[str, list[np.ndarray]] = {}
+_GROUP_CACHE: dict[str, list[Mat3]] = {}
 
 
-def rotation_group(name: str) -> list[np.ndarray]:
+def rotation_group(name: str) -> list[Mat3]:
     """대칭군의 원소를 3x3 행렬 목록으로 돌려준다.
 
     "T", "O", "I" 는 회전군이고 "Td", "Oh", "Ih" 는 반사를 포함한 전체군이다.
@@ -107,10 +103,10 @@ def rotation_group(name: str) -> list[np.ndarray]:
         gens = [
             _axis_rotation((0, 0, 1), math.pi),
             _axis_rotation((1, 1, 1), 2 * math.pi / 3),
-            np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),  # x<->y 반사
+            Mat3(((0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0))),  # x<->y 반사
         ]
     elif name in ("Oh", "Ih"):
-        gens = list(rotation_group(name[0])) + [-np.eye(3)]
+        gens = list(rotation_group(name[0])) + [-IDENTITY3]
     elif name == "O":
         gens = [
             _axis_rotation((0, 0, 1), math.pi / 2),
@@ -134,12 +130,12 @@ def rotation_group(name: str) -> list[np.ndarray]:
     return group
 
 
-def cyclic_group(n: int, axis=(0, 0, 1)) -> list[np.ndarray]:
+def cyclic_group(n: int, axis=(0, 0, 1)) -> list[Mat3]:
     """주축 둘레 n회 회전군. 각기둥 계열에 쓴다."""
     return [_axis_rotation(axis, 2 * math.pi * k / n) for k in range(n)]
 
 
-def dihedral_group(n: int, axis=(0, 0, 1), flip_axis=(1, 0, 0)) -> list[np.ndarray]:
+def dihedral_group(n: int, axis=(0, 0, 1), flip_axis=(1, 0, 0)) -> list[Mat3]:
     """이면체 회전군 D_n. 주축 n회 + 수직축 2회. 크기 2n."""
     flip = _axis_rotation(flip_axis, math.pi)
     out = []
@@ -149,21 +145,21 @@ def dihedral_group(n: int, axis=(0, 0, 1), flip_axis=(1, 0, 0)) -> list[np.ndarr
     return out
 
 
-def dedupe_directions(vectors, tol: float = _DIR_TOL) -> list[np.ndarray]:
+def dedupe_directions(vectors, tol: float = _DIR_TOL) -> list[Vec3]:
     """같은 방향을 하나로 합친다. 반대 방향은 **다른** 방향으로 본다 (§2.2)."""
-    out: list[np.ndarray] = []
+    out: list[Vec3] = []
     for v in vectors:
-        v = np.asarray(v, dtype=np.float64)
-        norm = float(np.linalg.norm(v))
-        if norm < NORMAL_EPS:
+        v = Vec3(v)
+        length = norm(v)
+        if length < NORMAL_EPS:
             continue
-        v = v / norm
-        if not any(float(np.linalg.norm(v - w)) < tol for w in out):
+        v = v / length
+        if not any(norm(v - w) < tol for w in out):
             out.append(v)
     return out
 
 
-def orbit(seed, group, expected: int | None = None) -> list[np.ndarray]:
+def orbit(seed, group, expected: int | None = None) -> list[Vec3]:
     """씨앗 방향에 군을 전부 적용해 얻는 서로 다른 방향들.
 
     면추이 다면체의 면 법선 집합이 정확히 이것이다. `expected` 를 주면 궤도
@@ -172,16 +168,17 @@ def orbit(seed, group, expected: int | None = None) -> list[np.ndarray]:
     """
     if isinstance(group, str):
         group = rotation_group(group)
-    seed = np.asarray(seed, dtype=np.float64)
-    norm = float(np.linalg.norm(seed))
-    if norm < NORMAL_EPS:
+    seed = Vec3(seed)
+    length = norm(seed)
+    if length < NORMAL_EPS:
         raise ValueError("씨앗이 영벡터다")
-    seed = seed / norm
+    seed = seed / length
 
     dirs = dedupe_directions(g @ seed for g in group)
     dirs.sort(key=lambda v: (round(-v[2], 9), round(math.atan2(v[1], v[0]), 9)))
     if expected is not None and len(dirs) != expected:
         raise ValueError(
-            f"궤도 크기가 {len(dirs)}, 기대값은 {expected}. 씨앗 {tuple(np.round(seed, 6))} 확인 필요"
+            f"궤도 크기가 {len(dirs)}, 기대값은 {expected}. "
+            f"씨앗 {tuple(round(x, 6) for x in seed)} 확인 필요"
         )
     return dirs
