@@ -137,7 +137,6 @@ class SplitResult:
     axis_id: str
     carrier_index: int
     added: Coverage
-    skipped_degenerate: bool = False
     # 어떤 절단도 지나가지 않는 끝점들 (§6.3). 진단으로만 남긴다.
     #
     # region 블록 **안에서는** 매달리는 것이 정상이다. 숨은 재료가 치워져
@@ -290,7 +289,8 @@ def conjugated_split(
     h = math.cos(theta)
     circle = SphericalCircle.from_normal_offset(axis.normal, h)
     if circle.is_degenerate():
-        return SplitResult(axis.id, -1, [], skipped_degenerate=True)
+        # 반지름 0. 보이는 경계가 없다 (§6.1)
+        return SplitResult(axis.id, -1, [])
     prov = Provenance(
         op_index=op_index,
         axis_id=axis.id,
@@ -338,7 +338,7 @@ def split_by_axis(
     circle = SphericalCircle.from_normal_offset(axis.normal, h)
     if circle.is_degenerate():
         # 반지름 0. 보이는 경계가 없다 (§6.1)
-        return SplitResult(axis.id, -1, [], skipped_degenerate=True)
+        return SplitResult(axis.id, -1, [])
     prov = Provenance(
         op_index=op_index,
         axis_id=axis.id,
