@@ -47,6 +47,7 @@
   details code { font: 11px/1.7 ui-monospace, Menlo, monospace; color: #5b6172;
                  word-break: break-all; }
   .note b { font-weight: 600; color: #4a5163; }
+  .note code { font: 11px ui-monospace, Menlo, monospace; color: #4a5163; }
   #err { color: #b3261e; font: 12px/1.5 ui-monospace, monospace;
          white-space: pre-wrap; display: none; }
   /* 링크로 받은 정의는 남이 쓴 코드다. 실행 전에 눈에 띄어야 한다 (§19.4) */
@@ -84,6 +85,11 @@
     <summary>바로 쓸 수 있는 이름</summary>
     <div id="vocabList"></div>
   </details>
+  <p class="note">
+    정의는 <b>스크립트</b>다. 함수로 감싸거나 <code>return</code> 할 것 없이
+    <code>with puzzle(...) as p:</code> 블록만 있으면 찾아서 쓴다.
+    축 집합마다 절단 각도 슬라이더가 하나씩 붙는다.
+  </p>
   <p class="note">
     편집창에서 <b>Tab</b> 은 4칸 들여쓰기, <b>Shift+Tab</b> 은 내어쓰기다.
     콜론으로 끝난 줄에서 Enter 를 치면 한 단 더 들어간다.

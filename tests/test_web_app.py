@@ -382,3 +382,69 @@ def test_vocabulary_does_not_wait_for_pyodide():
     body = _function_body(PAGE, "async function start()")
     assert "showVocabulary" not in body, "부팅 흐름과 묶여 있다"
     assert "showVocabulary();   // Pyodide 와 무관하다" in PAGE
+
+
+# ---- 흔한 실수의 메시지 (§19.7) ----------------------------------------
+
+
+def test_top_level_return_is_explained(browser_globals):
+    """편집창의 정의는 함수가 아니라 스크립트다.
+
+    examples/ 가 전부 `def build(): ... return p` 모양이라 `return p` 로 끝내기
+    쉽다. 파이썬 기본 메시지("'return' outside function")는 우리 규약을 설명해
+    주지 않는다.
+    """
+    source = """axes = dodecahedron("dodeca")
+
+with puzzle("test", axes) as p:
+    split(axes)
+
+return p
+"""
+    with pytest.raises(SyntaxError) as got:
+        browser_globals["load"](source)
+    text = str(got.value)
+    assert "return p" in text and "지운다" in text
+    assert "6번째 줄" in text, text
+
+    # 그 줄만 빼면 통과한다
+    info = browser_globals["prepare"](source.replace("\nreturn p\n", "\n"))
+    assert info["name"] == "test"
+    assert info["inputs"] == ["dodeca"]
+
+
+def test_a_definition_trapped_in_a_function_is_explained(browser_globals):
+    """예제 파일을 통째로 붙여 넣으면 아무도 build() 를 부르지 않는다."""
+    source = """def build():
+    faces = cube("faces")
+    with puzzle("갇힘", faces) as p:
+        split(faces)
+    return p
+"""
+    with pytest.raises(ValueError, match="함수 build 안에 있고"):
+        browser_globals["load"](source)
+
+
+def test_syntax_errors_name_the_line(browser_globals):
+    with pytest.raises(SyntaxError, match="1번째 줄"):
+        browser_globals["load"]("with puzzle(" + chr(34) + "t" + chr(10))
+
+
+def test_two_axis_sets_give_two_sliders(browser_globals):
+    """축 집합마다 절단 각도 입력이 따로 붙는다 (§2.2)."""
+    source = """axes1 = dodecahedron("dodeca")
+axes2 = icosahedron("icosa")
+
+with puzzle("test", axes1, axes2) as p:
+    split(axes1)
+    split(axes2)
+"""
+    info = browser_globals["prepare"](source)
+    assert info["inputs"] == ["dodeca", "icosa"]
+    assert info["axisSets"] == ["dodeca", "icosa"]
+
+
+def test_the_script_contract_is_stated_up_front():
+    """오류로 가르치기 전에 미리 알 수 있어야 한다."""
+    assert "정의는 <b>스크립트</b>다" in PAGE
+    assert "return" in PAGE and "with puzzle(...) as p:" in PAGE

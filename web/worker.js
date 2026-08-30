@@ -43,6 +43,25 @@ def _namespace():
     return ns
 
 
+def _compile(source):
+    """문법 오류를 우리 규약의 말로 바꿔 준다.
+
+    편집창의 정의는 **함수가 아니라 스크립트**다. 그런데 examples/ 가 전부
+    `def build(): ... return p` 모양이라 `return p` 로 끝내기 쉽고, 파이썬 기본
+    메시지("'return' outside function")는 그 규약을 설명해 주지 않는다.
+    """
+    try:
+        return compile(source, "<정의>", "exec")
+    except SyntaxError as exc:
+        where = " (%d번째 줄)" % exc.lineno if exc.lineno else ""
+        if exc.msg and "return" in exc.msg and "outside function" in exc.msg:
+            raise SyntaxError(
+                "정의는 함수가 아니라 그냥 실행되는 코드다%s. `return p` 를 지운다 — "
+                "`with puzzle(...) as p:` 블록만 있으면 찾아서 쓴다." % where
+            ) from None
+        raise SyntaxError("문법 오류%s: %s" % (where, exc.msg)) from None
+
+
 def load(source):
     """정의를 실행하고 Puzzle 을 찾아 돌려준다.
 
@@ -54,9 +73,17 @@ def load(source):
     한다.
     """
     ns = _namespace()
-    exec(compile(source, "<정의>", "exec"), ns)
+    exec(_compile(source), ns)
     found = [v for v in ns.values() if isinstance(v, Puzzle)]
     if not found:
+        # 예제 파일을 통째로 붙여 넣으면 정의가 함수 안에 있고 아무도 안 부른다
+        callables = [k for k, v in ns.items()
+                     if callable(v) and getattr(v, "__module__", None) == "__cutpattern__"]
+        if callables:
+            raise ValueError(
+                "정의가 함수 %s 안에 있고 아무도 부르지 않았다. 함수를 벗기거나 "
+                "맨 아래에서 호출한다." % ", ".join(sorted(callables))
+            )
         raise ValueError("정의에 puzzle 블록이 없다. with puzzle(...) as p: 로 감싼다")
     return found[-1]
 
