@@ -56,18 +56,46 @@ def test_default_definition_runs_and_reports_its_inputs(browser_globals):
 
 
 def test_evaluate_returns_a_scene_the_renderer_can_draw(browser_globals):
-    """render.js 가 읽는 필드가 전부 있고 길이가 맞는가."""
-    browser_globals["prepare"](DEFAULT_SOURCE)
-    out = json.loads(browser_globals["evaluate"](json.dumps({"faces": 63.25}), 0.03))
+    """render.js 가 읽는 필드가 전부 있고 길이가 맞는가.
 
-    scene = out["scene"]
-    assert set(scene) == {"xyz", "starts", "counts", "groups", "kinds", "labels", "axisSets"}
-    n = len(scene["starts"])
-    assert len(scene["counts"]) == n == len(scene["groups"]) == len(scene["kinds"])
-    assert len(scene["xyz"]) == 3 * sum(scene["counts"])
-    assert all(0 <= g < len(scene["axisSets"]) for g in scene["groups"])
+    좌표는 여기 없다. JSON 을 태우면 평탄화로 아낀 것을 문자열 파싱으로 도로
+    쓰므로 `scene_bytes` 로 따로 간다 (§11.1).
+    """
+    browser_globals["prepare"](DEFAULT_SOURCE)
+    out = browser_globals["evaluate"](json.dumps({"faces": 63.25}), 0.03)
+
+    assert set(out) == {
+        "starts", "counts", "groups", "kinds", "labels", "axisSets",
+        "carriers", "length", "note",
+    }
+    n = len(out["starts"])
+    assert len(out["counts"]) == n == len(out["groups"]) == len(out["kinds"])
+    assert all(0 <= g < len(out["axisSets"]) for g in out["groups"])
     assert out["carriers"] > 0 and out["length"] > 0
     assert out["note"] == ""   # 이 각도에서는 잘리지 않는다
+
+
+def test_coordinates_come_over_as_float64_bytes(browser_globals):
+    """바이트열이 좌표와 정확히 같은가.
+
+    JS 는 이 버퍼를 그대로 Float64Array 로 감싼다. 길이나 자릿수가 어긋나면
+    호가 통째로 엉뚱한 자리에 그려지는데, 파싱 단계가 없어 오류도 안 난다.
+    """
+    import array
+
+    browser_globals["prepare"](DEFAULT_SOURCE)
+    out = browser_globals["evaluate"](json.dumps({"faces": 63.25}), 0.03)
+    raw = browser_globals["scene_bytes"]()
+
+    assert isinstance(raw, bytes)
+    assert len(raw) % 8 == 0
+    values = array.array("d")
+    values.frombytes(raw)
+    assert len(values) == 3 * sum(out["counts"])
+
+    # float64 라 왕복해도 값이 그대로다. 자릿수를 줄이지 않는다
+    scene = browser_globals["_state"]["scene"]
+    assert list(values) == scene.xyz
 
 
 def test_illegal_turn_is_reported_not_raised(browser_globals):
@@ -75,7 +103,7 @@ def test_illegal_turn_is_reported_not_raised(browser_globals):
     browser_globals["prepare"](DEFAULT_SOURCE)
     notes = []
     for theta in (5.0, 20.0, 44.0, 63.25, 80.0, 120.0, 170.0):
-        out = json.loads(browser_globals["evaluate"](json.dumps({"faces": theta}), 0.12))
+        out = browser_globals["evaluate"](json.dumps({"faces": theta}), 0.12)
         notes.append(out["note"])
     assert any(n == "" for n in notes), "전 각도가 잘리면 정의가 잘못된 것이다"
 
