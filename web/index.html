@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cut Pattern Explorer — Canvas 2D 프로토타입</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    margin: 0; font: 14px ui-sans-serif, system-ui, sans-serif;
+    background: #fbfbfd; color: #1b1e26;
+    display: grid; grid-template-columns: 1fr 240px; height: 100vh;
+  }
+  #stage { position: relative; }
+  canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  aside { border-left: 1px solid #e3e6ee; padding: 18px 16px; overflow-y: auto; }
+  h1 { font-size: 13px; margin: 0 0 14px; letter-spacing: .02em; color: #5b6172; }
+  label { display: block; margin: 6px 0; cursor: pointer; }
+  select { width: 100%; padding: 5px; margin-bottom: 16px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .note { color: #7b8194; font-size: 12px; line-height: 1.6; margin-top: 18px; }
+  #stat { position: absolute; left: 14px; bottom: 12px; color: #7b8194; font-size: 12px; }
+</style>
+
+<div id="stage"><canvas id="c"></canvas><div id="stat"></div></div>
+<aside>
+  <h1>Cut Pattern Explorer</h1>
+  <select id="pick"></select>
+  <div id="sets"></div>
+  <label><input type="checkbox" id="mk" checked> 축 마커</label>
+  <label><input type="checkbox" id="lb" checked> 축 라벨</label>
+  <p class="note">
+    끌어서 돌린다. 뒤쪽 호는 반투명 구를 통해 흐리게 보인다 (§11.3).
+    축 집합을 끄면 그 호와 마커가 함께 사라진다 — 재료는 그대로 있고 그리지만
+    않는다 (§11.5).
+  </p>
+</aside>
+
+<script src="scenes.js"></script>
+<script src="render.js"></script>
+<script>
+"use strict";
+const view = new SphereView(document.getElementById("c"));
+const pick = document.getElementById("pick");
+const sets = document.getElementById("sets");
+const stat = document.getElementById("stat");
+
+for (const name of Object.keys(window.SCENES)) {
+  pick.append(new Option(name, name));
+}
+
+function load(name) {
+  const raw = window.SCENES[name];
+  view.hidden.clear();
+  view.setScene({ ...raw, xyz: Float64Array.from(raw.xyz) });
+
+  sets.replaceChildren();
+  raw.axisSets.forEach((id, i) => {
+    const rgb = PALETTE[i % PALETTE.length];
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox"; box.checked = true;
+    box.onchange = () => {
+      box.checked ? view.hidden.delete(i) : view.hidden.add(i);
+      view.draw(); report();
+    };
+    const sw = document.createElement("span");
+    sw.className = "sw"; sw.style.background = `rgb(${rgb})`;
+    label.append(box, sw, document.createTextNode(id));
+    sets.append(label);
+  });
+  report();
+}
+
+function report() {
+  const s = view.scene;
+  const shown = s.starts.filter((_, i) => !view.hidden.has(s.groups[i])).length;
+  const hidden = [...view.hidden].map((i) => s.axisSets[i]);
+  stat.textContent =
+    `폴리라인 ${shown}/${s.starts.length}  점 ${s.xyz.length / 3}` +
+    (hidden.length ? `  |  숨긴 축 집합: ${hidden.join(", ")} (재료는 그대로 있다)` : "");
+}
+
+pick.onchange = () => load(pick.value);
+document.getElementById("mk").onchange = (e) => { view.showMarkers = e.target.checked; view.draw(); };
+document.getElementById("lb").onchange = (e) => { view.showLabels = e.target.checked; view.draw(); };
+addEventListener("resize", () => view.draw());
+load(pick.value);
+</script>
