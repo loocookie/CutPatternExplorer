@@ -128,4 +128,67 @@ with puzzle("두 번째", edges) as q:
 def test_page_scripts_are_loaded_in_dependency_order():
     """render.js 는 app.js 보다 먼저 와야 하고, engine.js 가 제일 앞이다."""
     order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
-    assert order == ["engine.js", "render.js", "app.js"]
+    assert order == ["engine.js", "render.js", "share.js", "app.js"]
+
+
+# ---- 링크 공유 (§19.4) --------------------------------------------------
+
+
+def _function_body(text: str, header: str) -> str:
+    """중괄호를 세어 함수 본문을 잘라낸다."""
+    start = text.index(header) + len(header)
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    raise AssertionError(f"{header!r} 의 끝을 못 찾았다")
+
+
+def test_shared_code_is_never_run_automatically():
+    """**이 파일에서 제일 중요한 검사다.**
+
+    링크를 여는 것이 곧 임의 코드 실행이 되면 안 된다. 받은 정의는 편집창에
+    채워만 넣고 사람이 읽고 누른다. 브라우저 샌드박스는 파일 접근과 다른 출처
+    요청은 막지만, 무한 루프로 탭을 멈추는 것이나 fetch 로 데이터를 보내는
+    것은 막지 못한다.
+
+    이 성질은 눈으로 확인하기 어렵다 — 링크를 열어 그림이 나오면 오히려
+    '잘 된다'로 보인다. 그래서 구조로 못 박는다.
+    """
+    body = _function_body(PAGE, "async function start()")
+    guard = "if (shared === null) {"
+    assert guard in body, "받은 정의와 기본 정의를 가르는 분기가 없다"
+
+    head, tail = body.split(guard, 1)
+    branch, rest = tail.split("}", 1)
+
+    assert "run()" not in head, "부팅 직후 무조건 실행하고 있다"
+    assert "run()" in branch, "기본 정의는 자동 실행해야 한다"
+    assert "run()" not in rest, "받은 정의를 자동 실행하고 있다"
+    assert "els.src.value = shared" in rest, "받은 정의를 편집창에 넣지 않는다"
+
+
+def test_shared_code_shows_a_warning():
+    """읽어 보라고 말해야 한다. 조용히 채워 넣으면 자기 코드로 착각한다."""
+    body = _function_body(PAGE, "async function start()")
+    assert "els.shared.style.display" in body
+    for word in ("남이 쓴", "브라우저에서", "실행을 누른다"):
+        assert word in body, word
+
+
+def test_link_carries_code_only_in_the_fragment():
+    """fragment 는 서버로 전송되지 않는다. 호스팅에 남의 정의가 안 남는다."""
+    share = (ROOT / "web" / "share.js").read_text(encoding="utf-8")
+    assert 'KEY = "code="' in share
+    body = _function_body(share, "async function shareLink(text, baseUrl)")
+    assert 'split("#")[0]' in body, "기존 fragment 를 떼지 않으면 겹쳐 쌓인다"
+    assert '"#" + KEY' in body, "질의 문자열이 아니라 fragment 여야 한다"
+
+
+def test_page_loads_share_before_app():
+    order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
+    assert order.index("share.js") < order.index("app.js")

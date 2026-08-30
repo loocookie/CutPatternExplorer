@@ -42,6 +42,12 @@
         margin-right: 6px; vertical-align: -1px; }
   #err { color: #b3261e; font: 12px/1.5 ui-monospace, monospace;
          white-space: pre-wrap; display: none; }
+  /* 링크로 받은 정의는 남이 쓴 코드다. 실행 전에 눈에 띄어야 한다 (§19.4) */
+  #shared { display: none; border: 1px solid #e8c46a; background: #fdf7e6;
+            border-radius: 6px; padding: 10px 12px; font-size: 12px;
+            line-height: 1.6; color: #5c4a12; }
+  .bar { display: flex; gap: 8px; align-items: center; }
+  .bar .msg { font-size: 12px; color: #7b8194; }
 </style>
 
 <div id="stage">
@@ -52,8 +58,13 @@
 
 <aside>
   <h1>Cut Pattern Explorer</h1>
+  <div id="shared"></div>
   <textarea id="src" spellcheck="false"></textarea>
-  <div><button id="run">실행</button></div>
+  <div class="bar">
+    <button id="run">실행</button>
+    <button id="share">공유 링크 복사</button>
+    <span class="msg" id="msg"></span>
+  </div>
   <div id="err"></div>
   <fieldset id="sliders"><legend>절단 각도</legend></fieldset>
   <fieldset id="sets"><legend>축 집합</legend></fieldset>
@@ -65,6 +76,7 @@
 
 <script src="engine.js"></script>
 <script src="render.js"></script>
+<script src="share.js"></script>
 <script src="app.js"></script>
 <script>
 "use strict";
@@ -91,9 +103,9 @@ const els = {
   src: document.getElementById("src"), run: document.getElementById("run"),
   err: document.getElementById("err"), sliders: document.getElementById("sliders"),
   sets: document.getElementById("sets"), stat: document.getElementById("stat"),
-  boot: document.getElementById("boot"),
+  boot: document.getElementById("boot"), shared: document.getElementById("shared"),
+  share: document.getElementById("share"), msg: document.getElementById("msg"),
 };
-els.src.value = DEFAULT_SOURCE;
 
 const engine = new Engine((msg) => { els.boot.textContent = msg; els.boot.style.display = msg ? "grid" : "none"; });
 let angles = {};
@@ -185,6 +197,24 @@ function run() {
   } catch (e) { fail(e); }
 }
 
+// ---- 공유 링크 (§19.4) ------------------------------------------------
+
+els.share.onclick = async () => {
+  const link = await Share.shareLink(els.src.value, location.href);
+  try {
+    await navigator.clipboard.writeText(link);
+    els.msg.textContent = `복사했다 (${link.length}자)`;
+  } catch (_) {
+    // 클립보드가 막힌 환경이면 주소창에라도 남긴다
+    location.hash = link.split("#")[1];
+    els.msg.textContent = "주소창에 넣었다. 복사해서 쓴다";
+  }
+  if (link.length > Share.SAFE_URL_LENGTH) {
+    els.msg.textContent += " — 너무 길어 잘릴 수 있다";
+  }
+  setTimeout(() => { els.msg.textContent = ""; }, 4000);
+};
+
 els.run.onclick = run;
 els.src.onkeydown = (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
@@ -195,5 +225,29 @@ document.getElementById("lb").onchange = (e) => { view.showLabels = e.target.che
 // 놓치므로 요소를 직접 관찰한다
 new ResizeObserver(() => view.draw()).observe(document.getElementById("stage"));
 
-engine.boot().then(run).catch((e) => { els.boot.style.display = "none"; fail(e); });
+// 링크로 받은 정의는 **실행하지 않는다.** 편집창에 채워만 넣고 사람이 읽고
+// 누른다. 링크를 여는 것이 곧 임의 코드 실행이 되면 안 된다 (§19.4)
+async function start() {
+  let shared = null;
+  try {
+    shared = await Share.sourceFromHash(location.hash);
+  } catch (e) {
+    fail("링크의 정의를 읽지 못했다: " + e.message);
+  }
+
+  await engine.boot();
+
+  if (shared === null) {
+    els.src.value = DEFAULT_SOURCE;
+    run();                      // 우리가 쓴 기본 정의다
+    return;
+  }
+  els.src.value = shared;
+  els.shared.style.display = "block";
+  els.shared.textContent =
+    "링크에서 정의를 불러왔다. 남이 쓴 파이썬 코드이고, 실행하면 이 브라우저에서 " +
+    "돈다. 내용을 읽어 보고 실행을 누른다.";
+}
+
+start().catch((e) => { els.boot.style.display = "none"; fail(e); });
 </script>
