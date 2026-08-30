@@ -62,6 +62,7 @@
   <textarea id="src" spellcheck="false"></textarea>
   <div class="bar">
     <button id="run">실행</button>
+    <button id="stop" disabled>중지</button>
     <button id="share">공유 링크 복사</button>
     <span class="msg" id="msg"></span>
   </div>
@@ -74,7 +75,6 @@
   </fieldset>
 </aside>
 
-<script src="engine.js"></script>
 <script src="render.js"></script>
 <script src="share.js"></script>
 <script src="app.js"></script>
@@ -105,13 +105,13 @@ const els = {
   sets: document.getElementById("sets"), stat: document.getElementById("stat"),
   boot: document.getElementById("boot"), shared: document.getElementById("shared"),
   share: document.getElementById("share"), msg: document.getElementById("msg"),
+  stop: document.getElementById("stop"),
 };
 
 const engine = new Engine((msg) => { els.boot.textContent = msg; els.boot.style.display = msg ? "grid" : "none"; });
 let angles = {};
 let info = null;
 let settleTimer = null;
-let pending = false;
 
 function fail(e) {
   els.err.style.display = "block";
@@ -120,25 +120,34 @@ function fail(e) {
 
 function clearError() { els.err.style.display = "none"; els.err.textContent = ""; }
 
-function refresh(maxStep) {
-  if (pending) return;
-  pending = true;
-  requestAnimationFrame(() => {
-    pending = false;
-    try {
-      const t0 = performance.now();
-      const out = engine.evaluate(angles, maxStep);
-      const ms = performance.now() - t0;
-      view.setScene(out.scene);
-      const hidden = [...view.hidden].map((i) => out.scene.axisSets[i]);
-      els.stat.textContent =
-        `carrier ${out.carriers}  폴리라인 ${out.scene.starts.length}  ` +
-        `총 호 길이 ${out.length.toFixed(3)}  평가 ${ms.toFixed(0)}ms` +
-        (out.note ? `  |  ${out.note}` : "") +
-        (hidden.length ? `  |  숨긴 축 집합: ${hidden.join(", ")} (재료는 그대로 있다)` : "");
-      clearError();
-    } catch (e) { fail(e); }
-  });
+// 평가가 worker 에서 도므로 여기서 기다려도 UI 가 안 멈춘다. 다만 슬라이더가
+// 평가보다 빨리 움직이므로, 도는 중이면 마지막 요청만 남겨 두고 합친다
+let inFlight = false;
+let queued = null;
+
+async function refresh(maxStep) {
+  if (inFlight) { queued = maxStep; return; }
+  inFlight = true;
+  els.stop.disabled = false;
+  try {
+    const t0 = performance.now();
+    const out = await engine.evaluate(angles, maxStep);
+    const ms = performance.now() - t0;
+    view.setScene(out.scene);
+    const hidden = [...view.hidden].map((i) => out.scene.axisSets[i]);
+    els.stat.textContent =
+      `carrier ${out.carriers}  폴리라인 ${out.scene.starts.length}  ` +
+      `총 호 길이 ${out.length.toFixed(3)}  평가 ${ms.toFixed(0)}ms` +
+      (out.note ? `  |  ${out.note}` : "") +
+      (hidden.length ? `  |  숨긴 축 집합: ${hidden.join(", ")} (재료는 그대로 있다)` : "");
+    clearError();
+  } catch (e) {
+    fail(e);
+  } finally {
+    inFlight = false;
+    els.stop.disabled = true;
+    if (queued !== null) { const next = queued; queued = null; refresh(next); }
+  }
 }
 
 function scheduleFinal() {
@@ -187,15 +196,30 @@ function buildToggles() {
   });
 }
 
-function run() {
+async function run() {
   try {
-    info = engine.prepare(els.src.value);
+    els.stop.disabled = false;
+    info = await engine.prepare(els.src.value);
     clearError();
+    els.shared.style.display = "none";
     buildSliders();
     buildToggles();
-    refresh(FINAL_STEP);
+    await refresh(FINAL_STEP);
   } catch (e) { fail(e); }
+  finally { els.stop.disabled = !engine.running; }
 }
+
+// 무한 루프에 빠진 정의를 죽인다. worker 가 아니면 할 수 없는 일이다 (§19.5)
+els.stop.onclick = async () => {
+  engine.stop();
+  els.stop.disabled = true;
+  queued = null; inFlight = false;
+  fail("정의를 중지했다. 엔진을 다시 올린다.");
+  await engine.boot();
+  clearError();
+  els.msg.textContent = "엔진을 다시 올렸다";
+  setTimeout(() => { els.msg.textContent = ""; }, 4000);
+};
 
 // ---- 공유 링크 (§19.4) ------------------------------------------------
 

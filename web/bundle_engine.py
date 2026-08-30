@@ -27,7 +27,10 @@ TARGET = ROOT / "web" / "engine.js"
 # 브라우저에서 쓰지 않고 외부 의존이 있는 것
 EXCLUDE = {"render/vpython_view.py"}
 
-HEADER = "// python web/bundle_engine.py 가 만든다. 손으로 고치지 않는다.\n"
+HEADER = (
+    "// python web/bundle_engine.py 가 만든다. 손으로 고치지 않는다.\n"
+    "// worker 안에서 읽으므로 window 가 아니라 globalThis 에 붙인다 (§19.5).\n"
+)
 
 
 def collect() -> dict[str, str]:
@@ -44,7 +47,7 @@ def collect() -> dict[str, str]:
 
 
 def render(sources: dict[str, str]) -> str:
-    return HEADER + "window.ENGINE_SOURCES = " + json.dumps(
+    return HEADER + "globalThis.ENGINE_SOURCES = " + json.dumps(
         sources, ensure_ascii=False, sort_keys=True, indent=0
     ) + ";\n"
 

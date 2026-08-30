@@ -1,6 +1,6 @@
 """브라우저에서 도는 파이썬. 설계 문서 §19.
 
-`web/app.js` 안의 BOOT 코드와 `web/index.html` 의 기본 정의는 Pyodide 에서만
+`web/worker.js` 안의 BOOT 코드와 `web/index.html` 의 기본 정의는 Pyodide 에서만
 실행된다. 그래서 오타 하나가 브라우저를 열기 전까지 안 잡힌다.
 
 여기서는 그 두 문자열을 **파일에서 꺼내** CPython 으로 돌린다. Pyodide 는
@@ -17,6 +17,7 @@ import re
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+WORKER = (ROOT / "web" / "worker.js").read_text(encoding="utf-8")
 APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 PAGE = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
@@ -28,16 +29,16 @@ def _between(text: str, marker: str) -> str:
     return text[start:end]
 
 
-BOOT = _between(APP, "const BOOT = `")
+BOOT = _between(WORKER, "const BOOT = `")
 DEFAULT_SOURCE = _between(PAGE, "const DEFAULT_SOURCE = `")
 
 
 @pytest.fixture
 def browser_globals():
-    """BOOT 를 실행한 namespace. 브라우저가 보는 것과 같다."""
+    """BOOT 를 실행한 namespace. worker 가 보는 것과 같다."""
     ns: dict = {"__name__": "__browser__"}
     # sys.path.insert 는 Pyodide 파일 시스템용이라 여기선 무해하다
-    exec(compile(BOOT, "<app.js BOOT>", "exec"), ns)
+    exec(compile(BOOT, "<worker.js BOOT>", "exec"), ns)
     return ns
 
 
@@ -48,7 +49,7 @@ def test_boot_defines_the_contract(browser_globals):
 
 def test_default_definition_runs_and_reports_its_inputs(browser_globals):
     """페이지가 처음 띄우는 정의가 실제로 도는가."""
-    info = json.loads(browser_globals["prepare"](DEFAULT_SOURCE))
+    info = browser_globals["prepare"](DEFAULT_SOURCE)
     assert info["name"] == "OctoCube Master"
     assert info["inputs"] == ["faces"]
     assert info["axisSets"] == ["faces"]
@@ -120,7 +121,7 @@ edges = S.rhombic_dodecahedron("edges")
 with puzzle("두 번째", edges) as q:
     split(edges)
 """
-    info = json.loads(browser_globals["prepare"](source))
+    info = browser_globals["prepare"](source)
     assert info["name"] == "두 번째"
     assert info["axisSets"] == ["edges"]
 
@@ -128,7 +129,9 @@ with puzzle("두 번째", edges) as q:
 def test_page_scripts_are_loaded_in_dependency_order():
     """render.js 는 app.js 보다 먼저 와야 하고, engine.js 가 제일 앞이다."""
     order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
-    assert order == ["engine.js", "render.js", "share.js", "app.js"]
+    # engine.js 는 worker 만 읽는다. 메인 스레드가 135KB 를 파싱할 이유가 없다
+    assert order == ["render.js", "share.js", "app.js"]
+    assert "engine.js" in WORKER
 
 
 # ---- 링크 공유 (§19.4) --------------------------------------------------
@@ -192,3 +195,50 @@ def test_link_carries_code_only_in_the_fragment():
 def test_page_loads_share_before_app():
     order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
     assert order.index("share.js") < order.index("app.js")
+
+
+# ---- worker 격리 (§19.5) ------------------------------------------------
+
+
+def test_definitions_run_only_in_the_worker():
+    """**받은 코드가 DOM 에 닿지 않는다는 근거다.**
+
+    worker 에는 document 가 없으므로, 정의가 페이지를 바꿔치기하거나 다른 곳으로
+    보낼 수 없다. 그 성질은 Pyodide 가 worker 안에서만 돌 때만 성립한다.
+    메인 스레드에 파이썬 실행 경로가 하나라도 생기면 근거가 무너진다.
+    """
+    for name, text in (("app.js", APP), ("index.html", PAGE)):
+        for forbidden in ("loadPyodide", "runPython", "pyodide.mjs", "ENGINE_SOURCES"):
+            assert forbidden not in text, f"{name} 에 {forbidden!r} 이 있다"
+
+    assert "loadPyodide" in WORKER
+    assert "runPython" in WORKER
+
+
+def test_worker_is_spawned_as_a_module_worker():
+    """worker.js 가 engine.js 를 import 하므로 classic worker 로는 안 된다."""
+    assert 'new Worker("worker.js", { type: "module" })' in APP
+
+
+def test_engine_can_be_killed():
+    """무한 루프는 terminate 말고 끊을 방법이 없다.
+
+    메인 스레드에서 돌면 자기 루프를 자기가 끊을 수 없어 탭을 닫아야 한다.
+    """
+    assert "terminate()" in APP
+    body = _function_body(APP, "stop()")
+    assert "this.worker.terminate()" in body
+    assert "this.worker = null" in body
+    assert "slot.reject" in body, "대기 중인 요청을 그냥 두면 영원히 안 끝난다"
+
+    assert 'id="stop"' in PAGE
+    assert "engine.stop()" in PAGE
+    assert "await engine.boot()" in PAGE, "죽인 뒤 다시 올리지 않으면 못 쓴다"
+
+
+def test_coordinates_are_transferred_not_copied():
+    """좌표 버퍼는 transferable 이다. worker 로 옮기면서 복사가 오히려 줄었다."""
+    assert "buffer ? [buffer] : []" in WORKER
+    assert "new Float64Array(msg.buffer)" in APP
+    # WASM 메모리를 가리키는 view 를 그대로 넘기면 안 된다
+    assert "view.slice().buffer" in WORKER
