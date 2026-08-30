@@ -275,12 +275,19 @@ async function showVocabulary() {
   const groups = await engine.names();
   const box = document.getElementById("vocabList");
   box.replaceChildren();
-  for (const [group, items] of Object.entries(groups)) {
+  // Map 이 섞여 들어오면 Object.entries 가 조용히 빈 배열을 준다. 화면만 비고
+  // 오류는 없어서 알아채기 어렵다. 두 모양을 모두 받고, 비면 말한다
+  const pairs = groups instanceof Map ? [...groups] : Object.entries(groups || {});
+  if (pairs.length === 0) {
+    box.textContent = "이름 목록을 받지 못했다.";
+    return;
+  }
+  for (const [group, items] of pairs) {
     const head = document.createElement("div");
     head.className = "grp";
     head.textContent = group;
     const body = document.createElement("code");
-    body.textContent = items.join(", ");
+    body.textContent = Array.from(items).join(", ");
     box.append(head, body);
   }
 }

@@ -336,3 +336,21 @@ def test_the_preloaded_names_are_listed_for_the_reader(browser_globals):
         assert name in listed, name
     assert 'id="vocab"' in PAGE
     assert "engine.names()" in PAGE
+
+
+def test_worker_results_are_plain_objects():
+    """Pyodide 의 toJs 가 dict 를 Map 으로 주면 Object.entries 가 **조용히**
+    빈 배열을 돌려준다. 화면만 비고 오류는 없어서 알아채기 어렵다.
+
+    경계에서 한 번 눌러 평범한 객체로 만든다. prepare / evaluate / names 가
+    전부 이 경로를 지난다.
+    """
+    assert "function toPlain" in WORKER
+    assert "value instanceof Map" in WORKER
+    assert "return toPlain(out)" in WORKER, "call() 이 눌러서 돌려주지 않는다"
+
+
+def test_empty_vocabulary_says_so():
+    """비면 조용히 넘어가지 말아야 한다. 빈 패널은 원인을 안 알려 준다."""
+    assert "이름 목록을 받지 못했다" in PAGE
+    assert "groups instanceof Map" in PAGE, "두 모양을 모두 받아야 한다"

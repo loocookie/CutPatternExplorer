@@ -162,13 +162,27 @@ async function boot() {
   status("");
 }
 
+// Pyodide 의 toJs 는 dict_converter 를 주지 않으면 dict 를 Map 으로 준다.
+// 주더라도 판본에 따라 중첩까지 미치지 않을 수 있는데, Map 이 섞이면
+// Object.entries 가 **조용히 빈 배열**을 돌려준다. 화면이 비는데 오류는 없다.
+// 경계에서 한 번 눌러 평범한 객체로 만든다.
+function toPlain(value) {
+  if (value instanceof Map) {
+    const out = {};
+    for (const [k, v] of value) out[k] = toPlain(v);
+    return out;
+  }
+  if (Array.isArray(value)) return value.map(toPlain);
+  return value;
+}
+
 function call(name, args) {
   const fn = py.globals.get(name);
   const proxy = fn(...args);
   const out = proxy.toJs ? proxy.toJs({ dict_converter: Object.fromEntries }) : proxy;
   if (proxy.destroy) proxy.destroy();
   fn.destroy();
-  return out;
+  return toPlain(out);
 }
 
 function sceneBytes() {
