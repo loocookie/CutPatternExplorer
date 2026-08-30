@@ -35,8 +35,10 @@ HEADER = (
 
 
 def collect() -> dict[str, str]:
-    """{`cutpattern/...` 상대 경로: 소스} 를 모은다."""
+    """{경로: 소스} 를 모은다. 엔진과 정의 실행 층(`boot.py`)."""
     out: dict[str, str] = {}
+    # 정의 실행 층. 엔진이 아니라 브라우저 글루라 web/ 에 둔다
+    out["boot.py"] = (ROOT / "web" / "boot.py").read_text(encoding="utf-8")
     for path in sorted(PACKAGE.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue

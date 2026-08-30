@@ -222,6 +222,10 @@ function buildToggles() {
 }
 
 async function run() {
+  if (!engine.ready) {
+    fail("엔진이 올라와 있지 않다. 새로고침한다.");
+    return;
+  }
   try {
     els.stop.disabled = false;
     info = await engine.prepare(els.src.value);
@@ -240,7 +244,13 @@ els.stop.onclick = async () => {
   els.stop.disabled = true;
   queued = null; inFlight = false;
   fail("정의를 중지했다. 엔진을 다시 올린다.");
-  await engine.boot();
+  try {
+    await engine.boot();
+  } catch (e) {
+    // 재부팅이 실패하면 "중지했다" 가 그대로 남아 원인을 가린다
+    fail("엔진을 다시 올리지 못했다: " + e.message);
+    return;
+  }
   clearError();
   els.msg.textContent = "엔진을 다시 올렸다";
   setTimeout(() => { els.msg.textContent = ""; }, 4000);
@@ -309,18 +319,22 @@ async function start() {
     fail("링크의 정의를 읽지 못했다: " + e.message);
   }
 
-  await engine.boot();
-
+  // 편집창부터 채운다. 부팅이 실패해도 코드는 보여야 하고, 링크로 받은 정의가
+  // 사라지면 안 된다
   if (shared === null) {
     els.src.value = DEFAULT_SOURCE;
-    run();                      // 우리가 쓴 기본 정의다
-    return;
+  } else {
+    els.src.value = shared;
+    els.shared.style.display = "block";
+    els.shared.textContent =
+      "링크에서 정의를 불러왔다. 남이 쓴 파이썬 코드이고, 실행하면 이 브라우저에서 " +
+      "돈다. 내용을 읽어 보고 실행을 누른다.";
   }
-  els.src.value = shared;
-  els.shared.style.display = "block";
-  els.shared.textContent =
-    "링크에서 정의를 불러왔다. 남이 쓴 파이썬 코드이고, 실행하면 이 브라우저에서 " +
-    "돈다. 내용을 읽어 보고 실행을 누른다.";
+
+  await engine.boot();
+
+  // 받은 정의는 자동 실행하지 않는다 (§19.4). 우리가 쓴 기본 정의만 돌린다
+  if (shared === null) run();
 }
 
 start().catch((e) => { els.boot.style.display = "none"; fail(e); });

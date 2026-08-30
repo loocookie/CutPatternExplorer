@@ -1,7 +1,12 @@
 """브라우저에서 도는 파이썬. 설계 문서 §19.
 
-`web/worker.js` 안의 BOOT 코드와 `web/index.html` 의 기본 정의는 Pyodide 에서만
-실행된다. 그래서 오타 하나가 브라우저를 열기 전까지 안 잡힌다.
+`web/boot.py` 와 `web/index.html` 의 기본 정의는 Pyodide 에서만 실행된다.
+그래서 오타 하나가 브라우저를 열기 전까지 안 잡힌다.
+
+`boot.py` 는 **파일**이다. 전에는 worker.js 의 백틱 템플릿 리터럴 안에 있었는데,
+파이썬 docstring 이 백틱을 쓰는 순간 리터럴이 거기서 끊겨 worker.js 전체가
+문법 오류가 됐다. 브라우저는 빈 메시지의 로드 실패만 알려 주므로 원인을 찾기
+어렵다.
 
 여기서는 그 두 문자열을 **파일에서 꺼내** CPython 으로 돌린다. Pyodide 는
 CPython 의 WASM 빌드이므로 (§19.1) 파이썬 계층의 계약은 그대로다. 확인 못 하는
@@ -29,7 +34,7 @@ def _between(text: str, marker: str) -> str:
     return text[start:end]
 
 
-BOOT = _between(WORKER, "const BOOT = `")
+BOOT = (ROOT / "web" / "boot.py").read_text(encoding="utf-8")
 DEFAULT_SOURCE = _between(PAGE, "const DEFAULT_SOURCE = `")
 
 
@@ -38,7 +43,7 @@ def browser_globals():
     """BOOT 를 실행한 namespace. worker 가 보는 것과 같다."""
     ns: dict = {"__name__": "__browser__"}
     # sys.path.insert 는 Pyodide 파일 시스템용이라 여기선 무해하다
-    exec(compile(BOOT, "<worker.js BOOT>", "exec"), ns)
+    exec(compile(BOOT, "<web/boot.py>", "exec"), ns)
     return ns
 
 
@@ -163,16 +168,11 @@ def test_shared_code_is_never_run_automatically():
     '잘 된다'로 보인다. 그래서 구조로 못 박는다.
     """
     body = _function_body(PAGE, "async function start()")
-    guard = "if (shared === null) {"
-    assert guard in body, "받은 정의와 기본 정의를 가르는 분기가 없다"
+    assert "els.src.value = shared" in body, "받은 정의를 편집창에 넣지 않는다"
 
-    head, tail = body.split(guard, 1)
-    branch, rest = tail.split("}", 1)
-
-    assert "run()" not in head, "부팅 직후 무조건 실행하고 있다"
-    assert "run()" in branch, "기본 정의는 자동 실행해야 한다"
-    assert "run()" not in rest, "받은 정의를 자동 실행하고 있다"
-    assert "els.src.value = shared" in rest, "받은 정의를 편집창에 넣지 않는다"
+    # 실행은 단 한 곳, 기본 정의일 때만이다
+    runs = [line.strip() for line in body.splitlines() if "run()" in line]
+    assert runs == ["if (shared === null) run();"], runs
 
 
 def test_shared_code_shows_a_warning():
@@ -213,6 +213,7 @@ def test_definitions_run_only_in_the_worker():
 
     assert "loadPyodide" in WORKER
     assert "runPython" in WORKER
+    assert "boot.py" in WORKER, "정의 실행 층을 파일로 받아야 한다"
 
 
 def test_worker_is_spawned_as_a_module_worker():
@@ -226,10 +227,11 @@ def test_engine_can_be_killed():
     메인 스레드에서 돌면 자기 루프를 자기가 끊을 수 없어 탭을 닫아야 한다.
     """
     assert "terminate()" in APP
-    body = _function_body(APP, "stop()")
+    body = _function_body(APP, "_die(err)")
     assert "this.worker.terminate()" in body
     assert "this.worker = null" in body
     assert "slot.reject" in body, "대기 중인 요청을 그냥 두면 영원히 안 끝난다"
+    assert "_die(new Error" in _function_body(APP, "stop()")
 
     assert 'id="stop"' in PAGE
     assert "engine.stop()" in PAGE
@@ -448,3 +450,52 @@ def test_the_script_contract_is_stated_up_front():
     """오류로 가르치기 전에 미리 알 수 있어야 한다."""
     assert "정의는 <b>스크립트</b>다" in PAGE
     assert "return" in PAGE and "with puzzle(...) as p:" in PAGE
+
+
+def test_browser_javascript_actually_parses():
+    """**이걸 안 봐서 오래 헤맸다.**
+
+    worker.js 안에 파이썬을 백틱 템플릿 리터럴로 박아 뒀는데, 파이썬 docstring
+    이 백틱을 쓰는 순간 리터럴이 거기서 끊겨 파일 전체가 문법 오류가 됐다.
+    브라우저는 빈 메시지의 로드 실패만 알려 주므로 원인이 안 보인다.
+
+    파이썬 테스트는 전부 통과하고 있었다 — 문자열을 오려내는 방식이라 JS 문법과
+    무관했기 때문이다. node 로 실제 파싱을 확인한다.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("node") is None:
+        pytest.skip("node 가 없다")
+    proc = subprocess.run(
+        ["node", str(ROOT / "web" / "syntax.test.js")],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_a_dead_worker_fails_fast():
+    """죽은 worker 에 보내면 답이 영영 안 온다.
+
+    부팅이 실패했는데 worker 객체가 남아 있으면, 실행을 눌러도 아무 일도 안
+    일어나고 오류도 안 뜬다. 무슨 일인지 알 방법이 없다.
+    """
+    boot = _function_body(APP, "async boot()")
+    assert "this._die(e)" in boot, "실패한 부팅이 worker 를 남겨 둔다"
+
+    send = _function_body(APP, "_send(payload, transfer)")
+    assert "if (!this.worker)" in send
+    assert "this.failure" in send, "왜 죽었는지를 알려야 한다"
+
+    assert "if (!engine.ready)" in PAGE, "실행 버튼이 죽은 엔진을 확인하지 않는다"
+
+
+def test_a_failed_reboot_is_reported():
+    """재부팅이 실패하면 '중지했다' 가 그대로 남아 원인을 가린다."""
+    assert "엔진을 다시 올리지 못했다" in PAGE
+
+
+def test_the_editor_is_filled_before_booting():
+    """부팅이 실패해도 코드는 보여야 하고, 링크로 받은 정의가 사라지면 안 된다."""
+    body = _function_body(PAGE, "async function start()")
+    assert body.index("els.src.value") < body.index("await engine.boot()")

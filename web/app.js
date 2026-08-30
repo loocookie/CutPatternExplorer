@@ -11,6 +11,7 @@
 class Engine {
   constructor(onStatus) {
     this.worker = null;
+    this.failure = null;
     this.onStatus = onStatus || (() => {});
     this.pending = new Map();
     this.nextId = 1;
@@ -21,6 +22,7 @@ class Engine {
     this.worker.onmessage = (ev) => {
       const msg = ev.data;
       if (msg.type === "status") { this.onStatus(msg.text); return; }
+      if (msg.type === "fatal") { this._die(new Error(msg.error)); return; }
       const slot = this.pending.get(msg.id);
       if (!slot) return;
       this.pending.delete(msg.id);
@@ -28,14 +30,28 @@ class Engine {
       else slot.reject(new Error(msg.error));
     };
     this.worker.onerror = (ev) => {
-      const err = new Error(ev.message || "worker 오류");
-      for (const slot of this.pending.values()) slot.reject(err);
-      this.pending.clear();
+      // 모듈 worker 의 로드/파싱 실패는 message 가 비어 온다. 있는 것을 다 모은다
+      const where = [ev && ev.filename, ev && ev.lineno].filter(Boolean).join(":");
+      this._die(new Error(
+        (ev && ev.message) ||
+        ("worker 를 불러오지 못했다" + (where ? " (" + where + ")" : ""))
+      ));
     };
   }
 
+  /** worker 가 죽었다. 기다리는 요청을 전부 깨우고 다시 못 쓰게 표시한다. */
+  _die(err) {
+    this.failure = err;
+    if (this.worker) { this.worker.terminate(); this.worker = null; }
+    for (const slot of this.pending.values()) slot.reject(err);
+    this.pending.clear();
+  }
+
   _send(payload, transfer) {
-    if (!this.worker) return Promise.reject(new Error("엔진이 멈춰 있다"));
+    // 죽은 worker 에 보내면 답이 영영 안 온다. 기다리지 않고 바로 알린다
+    if (!this.worker) {
+      return Promise.reject(this.failure || new Error("엔진이 멈춰 있다"));
+    }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -44,17 +60,24 @@ class Engine {
   }
 
   async boot() {
+    this.failure = null;
     this._spawn();
-    await this._send({ type: "boot" });
+    try {
+      await this._send({ type: "boot" });
+    } catch (e) {
+      this._die(e);   // 다음 요청이 매달리지 않게 한다
+      throw e;
+    }
+  }
+
+  get ready() {
+    return this.worker !== null && this.failure === null;
   }
 
   /** 무한 루프에 빠진 정의를 죽인다. 메인 스레드에서는 할 수 없는 일이다. */
   stop() {
     if (!this.worker) return;
-    this.worker.terminate();
-    this.worker = null;
-    for (const slot of this.pending.values()) slot.reject(new Error("중지했다"));
-    this.pending.clear();
+    this._die(new Error("중지했다"));
   }
 
   get running() {
