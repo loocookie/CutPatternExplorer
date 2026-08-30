@@ -112,8 +112,13 @@ class SphereView {
     const ctx = this.ctx, canvas = this.canvas;
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr; canvas.height = h * dpr;
+    // 레이아웃 전이면 0 이다. 그때 그리면 캔버스만 지우고 끝난다
+    if (!w || !h) return;
+    // w * dpr 은 소수일 수 있다. 대입하면 잘리므로 비교가 늘 참이 되어 매
+    // 프레임 캔버스를 다시 잡게 된다. 반올림한 값으로 비교하고 대입한다
+    const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) {
+      canvas.width = pw; canvas.height = ph;
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);

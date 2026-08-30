@@ -138,5 +138,57 @@ for (const name of Object.keys(window.SCENES)) {
   check(name + ": 축 집합을 끄면 덜 그린다", ctx.calls.length < before);
 }
 
+// ---- 크기 변화 -------------------------------------------------------
+//
+// 캔버스 내부 해상도는 dpr 배라 CSS 폭보다 크다. grid 항목의 min-width 가
+// auto 면 그 값이 min-content 로 잡혀 열이 넓어지고, 넓어진 폭으로 다시 내부
+// 해상도를 키우는 되먹임이 생긴다. CSS 로 고리를 끊었고 (index.html),
+// 여기서는 그리기 쪽 몫을 본다.
+
+function sizedView(w, h, dpr) {
+  const ctx = stubCtx();
+  const canvas = {
+    getContext: () => ctx, addEventListener: () => {},
+    clientWidth: w, clientHeight: h, width: 0, height: 0,
+  };
+  const saved = global.window.devicePixelRatio;
+  global.window.devicePixelRatio = dpr;
+  const v = new window.SphereView(canvas);
+  v.ctx = ctx;
+  v.scene = {
+    xyz: new Float64Array([0, 0, 1, 1, 0, 0, 0, 1, 0]),
+    starts: [0], counts: [3], groups: [0], kinds: [0], labels: [], axisSets: ["a"],
+  };
+  v.view = new Float64Array(v.scene.xyz.length);
+  global.window.devicePixelRatio = saved;
+  return { v, ctx, canvas, dpr };
+}
+
+{
+  // 레이아웃 전에는 폭이 0 이다. 그때 그리면 캔버스만 지우고 끝난다
+  const { v, ctx } = sizedView(0, 0, 1);
+  v.draw();
+  check("크기가 0 이면 아무것도 그리지 않는다", ctx.calls.length === 0, ctx.calls.length);
+}
+
+{
+  // dpr 이 소수면 w * dpr 도 소수다. 반올림해서 비교하지 않으면 매 프레임
+  // 캔버스를 다시 잡고, 그때마다 화면이 지워진다
+  const { v, canvas, dpr } = sizedView(813, 611, 1.25);
+  global.window.devicePixelRatio = dpr;
+  v.draw();
+  const first = [canvas.width, canvas.height];
+  check("내부 해상도가 정수다",
+    Number.isInteger(canvas.width) && Number.isInteger(canvas.height), first);
+  canvas.width = first[0]; canvas.height = first[1];
+  let resized = 0;
+  Object.defineProperty(canvas, "width", {
+    get: () => first[0], set: () => { resized++; }, configurable: true,
+  });
+  v.draw();
+  check("같은 크기로 다시 그려도 캔버스를 다시 잡지 않는다", resized === 0, resized);
+  global.window.devicePixelRatio = undefined;
+}
+
 console.log(failures === 0 ? "\n전부 통과" : `\n실패 ${failures}개`);
 process.exit(failures === 0 ? 0 : 1);

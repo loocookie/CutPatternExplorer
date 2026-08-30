@@ -9,8 +9,14 @@
     background: #fbfbfd; color: #1b1e26;
     display: grid; grid-template-columns: 1fr 340px; height: 100vh;
   }
-  #stage { position: relative; }
-  canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  /* grid 항목은 min-width/min-height 가 auto 라 내용보다 작아지지 않는다.
+     캔버스 내부 해상도(= dpr 배)가 min-content 로 잡히면 열이 넓어지고,
+     넓어진 폭으로 다시 내부 해상도를 키우는 되먹임이 생긴다. 고리를 끊는다 */
+  #stage, aside { min-width: 0; min-height: 0; }
+  #stage { position: relative; overflow: hidden; }
+  /* absolute 로 띄워 레이아웃 계산에서 아예 빠지게 한다 */
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%;
+           display: block; touch-action: none; cursor: grab; }
   canvas:active { cursor: grabbing; }
   #stat { position: absolute; left: 16px; bottom: 12px; right: 16px;
           color: #7b8194; font-size: 12px; line-height: 1.5; }
@@ -185,7 +191,9 @@ els.src.onkeydown = (e) => {
 };
 document.getElementById("mk").onchange = (e) => { view.showMarkers = e.target.checked; view.draw(); };
 document.getElementById("lb").onchange = (e) => { view.showLabels = e.target.checked; view.draw(); };
-addEventListener("resize", () => view.draw());
+// window resize 는 창 크기만 본다. 패널이나 폰트 변화로 캔버스만 바뀌는 경우를
+// 놓치므로 요소를 직접 관찰한다
+new ResizeObserver(() => view.draw()).observe(document.getElementById("stage"));
 
 engine.boot().then(run).catch((e) => { els.boot.style.display = "none"; fail(e); });
 </script>
