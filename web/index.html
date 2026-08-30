@@ -163,6 +163,9 @@ async function refresh(maxStep) {
     els.stat.textContent =
       `carrier ${out.carriers}  폴리라인 ${out.scene.starts.length}  ` +
       `총 호 길이 ${out.length.toFixed(3)}  평가 ${ms.toFixed(0)}ms` +
+      // 0 과 180 은 퇴화원이라 자를 것이 없다. 남는 폴리라인은 축 마커뿐인데
+      // 그것만 보이면 고장난 것처럼 읽힌다 (§14)
+      (out.carriers === 0 ? "  |  절단 없음 (0° 와 180° 는 반지름 0)" : "") +
       (out.note ? `  |  ${out.note}` : "") +
       (hidden.length ? `  |  숨긴 축 집합: ${hidden.join(", ")} (재료는 그대로 있다)` : "");
     clearError();
@@ -188,7 +191,9 @@ function buildSliders() {
     row.className = "row";
     const name = document.createElement("b");
     const range = document.createElement("input");
-    range.type = "range"; range.min = 0.01; range.max = 179.99; range.step = 0.05;
+    // 0 과 180 은 퇴화원이다 (r = 0). 터지지 않고 "자를 게 없는 상태" 로
+    // 나온다 — RADIUS_EPS 판정이 split 과 build_arcs 에서 걸러 낸다 (§14)
+    range.type = "range"; range.min = 0; range.max = 180; range.step = 0.05;
     range.value = angles[id];
     const show = () => { name.textContent = `${id}   ${Number(range.value).toFixed(2)}°`; };
     range.oninput = () => {

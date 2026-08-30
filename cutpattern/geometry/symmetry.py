@@ -35,12 +35,20 @@ __all__ = [
 
 # 회전군과, 반사를 포함한 전체군.
 #   Td 는 T 에 반사면을 더한 것으로 반전 -I 를 포함하지 않는다.
-#   Oh = O x {I, -I},  Ih = I x {I, -I} 이므로 반전을 생성원에 더하면 된다.
+#   Th = T x {I, -I},  Oh = O x {I, -I},  Ih = I x {I, -I} 이므로 반전을
+#   생성원에 더하면 된다.
+#
+#   Td 와 Th 는 크기가 같지만 다른 군이다. 황철석 십이면체(pyritohedron)의
+#   대칭이 Th 다 — 정육면체의 면을 잘랐지만 정사면체 대칭만 남은 모양이라
+#   씨앗 (1, h, 0) 의 궤도가 12개가 된다.
 #
 # 면 법선이 |회전군| 을 넘는 개수로 필요하면 (예: 마름모삼십면체 계열의 120면)
 # 회전군만으로는 한 궤도에서 나올 수 없어 전체군이 필요하다. 반대로 손대칭
 # 입체(깎은육팔면체 계열)는 반사를 넣으면 반대 손까지 생기므로 회전군만 쓴다.
-GROUP_ORDERS = {"T": 12, "O": 24, "I": 60, "Td": 24, "Oh": 48, "Ih": 120}
+GROUP_ORDERS = {
+    "T": 12, "O": 24, "I": 60,
+    "Td": 24, "Th": 24, "Oh": 48, "Ih": 120,
+}
 
 # 방향이 같다고 볼 허용 오차. 군 원소를 곱해 쌓는 과정의 오차보다 넉넉하게.
 _DIR_TOL = 1e-9
@@ -106,7 +114,7 @@ def rotation_group(name: str) -> list[Mat3]:
 
     "T", "O", "I" 는 회전군이고 "Td", "Oh", "Ih" 는 반사를 포함한 전체군이다.
     """
-    name = {"td": "Td", "oh": "Oh", "ih": "Ih"}.get(name.lower(), name.upper())
+    name = {"td": "Td", "th": "Th", "oh": "Oh", "ih": "Ih"}.get(name.lower(), name.upper())
     if name in _GROUP_CACHE:
         return _GROUP_CACHE[name]
     if name not in GROUP_ORDERS:
@@ -121,7 +129,7 @@ def rotation_group(name: str) -> list[Mat3]:
             _axis_rotation((1, 1, 1), 2 * math.pi / 3),
             Mat3(((0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0))),  # x<->y 반사
         ]
-    elif name in ("Oh", "Ih"):
+    elif name in ("Th", "Oh", "Ih"):
         gens = list(rotation_group(name[0])) + [-IDENTITY3]
     elif name == "O":
         gens = [
@@ -142,7 +150,8 @@ def rotation_group(name: str) -> list[Mat3]:
         ]
 
     group = _close_group(
-        gens, expected=GROUP_ORDERS[name], allow_improper=name in ("Td", "Oh", "Ih")
+        gens, expected=GROUP_ORDERS[name],
+        allow_improper=name in ("Td", "Th", "Oh", "Ih"),
     )
     _GROUP_CACHE[name] = group
     return group

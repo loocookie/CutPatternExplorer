@@ -209,3 +209,36 @@ def test_closing_a_rotation_group_rejects_a_reflected_generator():
     assert _close_group(
         [_axis_rotation((0, 0, 1), math.pi / 2), mirror], allow_improper=True
     )
+
+
+def test_pyritohedral_group_is_available():
+    """황철석 십이면체(pyritohedron)의 대칭은 Th 다 (§2.5).
+
+    회전 대칭이야 for 문으로 되지만 정다면체 대칭은 손으로 쓰기 어렵다.
+    씨앗과 군 이름만으로 축을 복제할 수 있어야 한다.
+    """
+    assert GROUP_ORDERS["Th"] == 24
+    group = rotation_group("Th")
+    assert len(group) == 24
+    dets = {round(float(np.linalg.det(np.asarray(m))), 6) for m in group}
+    assert dets == {1.0, -1.0}, "Th = T x {I, -I} 이므로 반전을 포함한다"
+
+
+def test_th_is_not_td():
+    """크기는 같지만 다른 군이다. 원소가 같으면 하나는 필요 없다."""
+    th = {tuple(round(v, 9) for row in m for v in row) for m in rotation_group("Th")}
+    td = {tuple(round(v, 9) for row in m for v in row) for m in rotation_group("Td")}
+    assert len(th) == len(td) == 24
+    assert th != td
+
+
+def test_a_generic_seed_gives_twelve_faces_under_th():
+    """(1, h, 0) 이 pyritohedron 의 씨앗이다. h 를 바꾸면 면이 기울어진다."""
+    for h in (0.2, 0.5, 0.8):
+        assert len(orbit((1, h, 0), "Th")) == 12
+        # 정육면체 대칭이면 24개가 되어 다른 입체가 된다
+        assert len(orbit((1, h, 0), "O")) == 24
+
+
+def test_group_names_are_case_insensitive():
+    assert len(rotation_group("th")) == len(rotation_group("Th"))

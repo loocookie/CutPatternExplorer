@@ -318,3 +318,38 @@ def test_pentagonal_icositetrahedron_groups_by_cube_symmetry():
     groups = group_by_nearest(S.pentagonal_icositetrahedron(), S.cube())
     assert len(groups) == 6
     assert sorted(len(v) for v in groups.values()) == [4] * 6
+
+
+# ---- 저작용 궤도 (§2.5) ------------------------------------------------
+
+
+def test_from_orbit_works_without_knowing_the_count():
+    """저작 중에는 궤도 크기를 미리 모르는 것이 보통이다.
+
+    expected 를 필수로 두면 세어 보기 전에는 쓸 수 없다.
+    """
+    pyrito = S.from_orbit("pyrito", (1, 0.6, 0), "Th")
+    assert len(pyrito) == 12
+    assert all(a.id.startswith("a") for a in pyrito)
+
+
+def test_from_orbit_still_verifies_when_told_to():
+    """씨앗이 틀렸는데 그럴듯한 개수가 나오는 것이 제일 나쁘다."""
+    assert len(S.from_orbit("x", (1, 1, 1), "O", 8)) == 8
+    with pytest.raises(ValueError, match="궤도 크기"):
+        S.from_orbit("x", (1, 1, 1), "O", 6)
+
+
+def test_presets_still_pass_their_expected_count():
+    """프리셋은 검증을 놓으면 안 된다. 완화한 것은 저작 쪽 편의다."""
+    import inspect
+
+    source = inspect.getsource(S)
+    for name, count, _prefix in PLATONIC_COUNTS:
+        assert len(name()) == count
+
+
+def test_orbit_machinery_is_exposed_for_authoring():
+    """편집창에서 바로 쓸 수 있어야 한다 (§19.7)."""
+    for name in ("orbit", "rotation_group", "GROUP_ORDERS", "from_orbit", "from_normals"):
+        assert name in S.__all__, name

@@ -499,3 +499,35 @@ def test_the_editor_is_filled_before_booting():
     """부팅이 실패해도 코드는 보여야 하고, 링크로 받은 정의가 사라지면 안 된다."""
     body = _function_body(PAGE, "async function start()")
     assert body.index("els.src.value") < body.index("await engine.boot()")
+
+
+# ---- 절단 각도 범위 (§14) ----------------------------------------------
+
+
+def test_degenerate_angles_do_not_break(browser_globals):
+    """0 과 180 은 퇴화원(r = 0)이다. 회피하지 않고 처리한다.
+
+    RADIUS_EPS 판정이 split 과 build_arcs 에서 걸러 내므로 터지지 않고
+    "자를 것이 없는 상태" 로 나온다. 그래서 슬라이더를 0~180 으로 연다.
+    """
+    browser_globals["prepare"](DEFAULT_SOURCE)
+    for theta in (0.0, 180.0):
+        out = browser_globals["evaluate"](json.dumps({"faces": theta}), 0.03)
+        assert out["carriers"] == 0
+        assert out["length"] == pytest.approx(0.0)
+        assert out["note"] == "", "불법 회전으로 잘리면 안 된다"
+
+    # 바로 옆은 정상이다
+    out = browser_globals["evaluate"](json.dumps({"faces": 0.05}), 0.03)
+    assert out["carriers"] > 0 and out["length"] > 0
+
+
+def test_sliders_span_the_whole_range():
+    assert "range.min = 0; range.max = 180;" in PAGE
+    assert "0.01" not in PAGE or "179.99" not in PAGE
+
+
+def test_an_empty_cut_says_so():
+    """carrier 0 인데 폴리라인이 남으면(축 마커) 고장난 것처럼 읽힌다."""
+    assert "절단 없음" in PAGE
+    assert "out.carriers === 0" in PAGE

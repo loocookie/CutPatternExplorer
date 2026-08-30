@@ -23,11 +23,15 @@ from __future__ import annotations
 
 import math
 
-from .geometry.symmetry import orbit
+from .geometry.symmetry import GROUP_ORDERS, orbit, rotation_group
 from .geometry.vector import Vec3, cross, normalize
 
 __all__ = [
     "PHI",
+    # 대칭군으로 축을 복제하는 길. 저작 계층에 그대로 연다 (§2.5)
+    "GROUP_ORDERS",
+    "orbit",
+    "rotation_group",
     "from_normals",
     "from_orbit",
     "tetrahedron",
@@ -78,11 +82,23 @@ def from_normals(id: str, normals, prefix: str, turns=(), name: str = ""):
     return s
 
 
-def from_orbit(id: str, seed, group, expected: int, prefix: str, turns=(), name: str = ""):
-    """씨앗과 대칭군의 궤도로 축 집합을 만든다.
+def from_orbit(
+    id: str, seed, group, expected: int | None = None, prefix: str = "a",
+    turns=(), name: str = "",
+):
+    """씨앗과 대칭군의 궤도로 축 집합을 만든다 (§2.5).
 
-    expected 로 궤도 크기를 검증한다. 씨앗이 대칭축 위에 얹히는 등 잘못되면
-    궤도가 작아지므로 바로 잡힌다.
+    회전 대칭이야 `for` 문으로 되지만 정다면체 대칭은 손으로 쓰기 어렵다.
+    씨앗 방향 하나와 군 이름만 주면 된다.
+
+        pyrito = from_orbit("pyrito", (1, 0.6, 0), "Th")     # 황철석 십이면체
+        axes   = from_orbit("axes", (1, 1, 1), "O")          # 정팔면체 8축
+
+    expected 를 주면 궤도 크기를 검증한다. 씨앗이 대칭축 위에 얹히는 등 잘못되면
+    궤도가 작아지므로 바로 잡힌다. **프리셋은 반드시 준다** — 씨앗이 틀렸는데
+    그럴듯한 개수가 나오는 것이 제일 나쁘다.
+
+    저작 중에는 크기를 미리 모르는 것이 보통이라 생략할 수 있다.
     """
     return from_normals(id, orbit(seed, group, expected=expected), prefix, turns, name)
 

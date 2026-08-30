@@ -135,8 +135,9 @@ class SphereView:
             self._needs_final = True
 
         slider = vp.slider(
-            min=0.01,
-            max=179.99,
+            # 0 과 180 은 퇴화원이라 자를 것이 없다. 터지지는 않는다 (§14)
+            min=0.0,
+            max=180.0,
             step=0.05,
             value=self.cut_angles[input_id],
             length=520,
