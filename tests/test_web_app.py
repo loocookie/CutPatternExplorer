@@ -130,7 +130,7 @@ def test_page_scripts_are_loaded_in_dependency_order():
     """render.js 는 app.js 보다 먼저 와야 하고, engine.js 가 제일 앞이다."""
     order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
     # engine.js 는 worker 만 읽는다. 메인 스레드가 135KB 를 파싱할 이유가 없다
-    assert order == ["render.js", "share.js", "app.js"]
+    assert order == ["render.js", "editor.js", "share.js", "app.js"]
     assert "engine.js" in WORKER
 
 
@@ -242,3 +242,31 @@ def test_coordinates_are_transferred_not_copied():
     assert "new Float64Array(msg.buffer)" in APP
     # WASM 메모리를 가리키는 view 를 그대로 넘기면 안 된다
     assert "view.slice().buffer" in WORKER
+
+
+# ---- 편집창 (§19.6) -----------------------------------------------------
+
+
+def test_tab_is_captured_for_indentation():
+    """textarea 는 Tab 이 포커스 이동이다. 파이썬은 들여쓰기가 문법이라
+    가로채지 않으면 정의를 쓸 수 없다."""
+    assert 'Editor.attach(document.getElementById("src"))' in PAGE
+    editor = (ROOT / "web" / "editor.js").read_text(encoding="utf-8")
+    assert 'if (ev.key === "Tab"' in editor or '"Tab"' in editor
+    assert "preventDefault()" in editor
+
+
+def test_there_is_a_way_out_of_the_editor_by_keyboard():
+    """Tab 을 가로채면 키보드로 빠져나갈 길이 막힌다. Esc 다음 Tab 이 탈출구다."""
+    editor = (ROOT / "web" / "editor.js").read_text(encoding="utf-8")
+    assert '"Escape"' in editor
+    assert "escaped" in editor
+    # 페이지가 그 규약을 알려야 한다. 모르면 갇힌 것과 같다
+    assert "Esc" in PAGE and "포커스" in PAGE
+
+
+def test_edits_are_minimal_so_undo_still_works():
+    """전체 텍스트를 갈아치우면 되돌리기가 뭉텅이가 된다."""
+    editor = (ROOT / "web" / "editor.js").read_text(encoding="utf-8")
+    assert "setRangeText(edit.insert, edit.from, edit.to" in editor
+    assert "textarea.value =" not in editor, "전체 대입은 되돌리기 기록을 지운다"

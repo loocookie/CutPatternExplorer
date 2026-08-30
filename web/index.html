@@ -40,6 +40,8 @@
   label.tog { display: block; margin: 4px 0; cursor: pointer; font-size: 13px; }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
         margin-right: 6px; vertical-align: -1px; }
+  .note { color: #7b8194; font-size: 12px; line-height: 1.7; margin: 0; }
+  .note b { font-weight: 600; color: #4a5163; }
   #err { color: #b3261e; font: 12px/1.5 ui-monospace, monospace;
          white-space: pre-wrap; display: none; }
   /* 링크로 받은 정의는 남이 쓴 코드다. 실행 전에 눈에 띄어야 한다 (§19.4) */
@@ -73,9 +75,16 @@
     <label class="tog"><input type="checkbox" id="mk" checked> 축 마커</label>
     <label class="tog"><input type="checkbox" id="lb" checked> 축 라벨</label>
   </fieldset>
+  <p class="note">
+    편집창에서 <b>Tab</b> 은 4칸 들여쓰기, <b>Shift+Tab</b> 은 내어쓰기다.
+    콜론으로 끝난 줄에서 Enter 를 치면 한 단 더 들어간다.
+    <b>Esc</b> 를 누른 뒤 Tab 은 원래대로 포커스를 옮긴다.
+    <b>Ctrl+Enter</b> 로 실행한다.
+  </p>
 </aside>
 
 <script src="render.js"></script>
+<script src="editor.js"></script>
 <script src="share.js"></script>
 <script src="app.js"></script>
 <script>
@@ -99,6 +108,9 @@ const FINAL_STEP = 0.03;
 const SETTLE_MS = 220;
 
 const view = new SphereView(document.getElementById("c"));
+// textarea 는 Tab 이 포커스 이동이다. 파이썬은 들여쓰기가 문법이라 그대로는
+// 정의를 쓸 수 없다 (§19.6)
+Editor.attach(document.getElementById("src"));
 const els = {
   src: document.getElementById("src"), run: document.getElementById("run"),
   err: document.getElementById("err"), sliders: document.getElementById("sliders"),
