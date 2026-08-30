@@ -43,19 +43,6 @@ def _namespace():
     return ns
 
 
-def names():
-    """미리 넣어 둔 이름들. 편집창이 보여 준다.
-
-    이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알 길이 없다. 암묵 import 의
-    값이자 대가다.
-    """
-    return {
-        "정의와 질의": list(_dsl.__all__),
-        "축 집합": list(_solids.__all__),
-        "그 밖": ["math", "S (= solids)"],
-    }
-
-
 def load(source):
     """정의를 실행하고 Puzzle 을 찾아 돌려준다.
 
@@ -196,7 +183,6 @@ function sceneBytes() {
 }
 
 const HANDLERS = {
-  names: () => ({ result: call("names", []) }),
   prepare: (msg) => ({ result: call("prepare", [msg.source]) }),
   evaluate: (msg) => {
     const result = call("evaluate", [JSON.stringify(msg.angles), msg.maxStep]);

@@ -23,6 +23,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "cutpattern"
 TARGET = ROOT / "web" / "engine.js"
+VOCAB = ROOT / "web" / "vocab.js"
 
 # 브라우저에서 쓰지 않고 외부 의존이 있는 것
 EXCLUDE = {"render/vpython_view.py"}
@@ -52,12 +53,39 @@ def render(sources: dict[str, str]) -> str:
     ) + ";\n"
 
 
+def vocabulary() -> dict[str, list[str]]:
+    """편집창이 미리 넣어 두는 이름들 (§19.7).
+
+    정적 데이터다. worker 를 거쳐 가져오면 비동기, 메시지 왕복, Pyodide 의 타입
+    변환이 끼어드는데 그중 하나만 어긋나도 목록이 **조용히 빈다**. 번들을 만들
+    때 같은 `__all__` 에서 뽑아 두면 그 셋이 다 사라진다.
+    """
+    sys.path.insert(0, str(ROOT))
+    import cutpattern.dsl as dsl
+    from cutpattern import solids
+
+    clash = set(dsl.__all__) & set(solids.__all__)
+    if clash:
+        raise RuntimeError(f"저작 계층 이름이 겹친다: {sorted(clash)}")
+    return {
+        "정의와 질의": list(dsl.__all__),
+        "축 집합": list(solids.__all__),
+        "그 밖": ["math", "S (= solids)"],
+    }
+
+
 def main() -> None:
     sources = collect()
     text = render(sources)
     TARGET.write_text(text, encoding="utf-8")
     total = sum(len(s) for s in sources.values())
     print(f"  파일 {len(sources)}개  소스 {total / 1024:.0f}KB  -> {TARGET.name} {len(text) / 1024:.0f}KB")
+
+    groups = vocabulary()
+    header = "// python web/bundle_engine.py 가 만든다. 손으로 고치지 않는다.\n"
+    body = "globalThis.VOCAB = " + json.dumps(groups, ensure_ascii=False) + ";\n"
+    VOCAB.write_text(header + body, encoding="utf-8")
+    print(f"  이름 {sum(len(v) for v in groups.values())}개  -> {VOCAB.name}")
     for name in sorted(sources):
         print(f"    {name}")
 

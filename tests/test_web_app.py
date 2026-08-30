@@ -130,7 +130,7 @@ def test_page_scripts_are_loaded_in_dependency_order():
     """render.js 는 app.js 보다 먼저 와야 하고, engine.js 가 제일 앞이다."""
     order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
     # engine.js 는 worker 만 읽는다. 메인 스레드가 135KB 를 파싱할 이유가 없다
-    assert order == ["render.js", "editor.js", "share.js", "app.js"]
+    assert order == ["vocab.js", "render.js", "editor.js", "share.js", "app.js"]
     assert "engine.js" in WORKER
 
 
@@ -326,16 +326,38 @@ with puzzle("명시적 import", faces) as p:
     assert info["name"] == "명시적 import"
 
 
-def test_the_preloaded_names_are_listed_for_the_reader(browser_globals):
-    """이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알 길이 없다."""
-    groups = browser_globals["names"]()
-    listed = {n for items in groups.values() for n in items}
-    import cutpattern.dsl as dsl
+def test_the_preloaded_names_are_listed_for_the_reader():
+    """이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알 길이 없다.
 
-    for name in dsl.__all__:
+    목록은 **정적 데이터**다. worker 를 거쳐 가져오면 비동기, 메시지 왕복,
+    Pyodide 의 타입 변환이 끼어드는데 그중 하나만 어긋나도 목록이 조용히 빈다.
+    실제로 그렇게 비었다. 번들을 만들 때 같은 `__all__` 에서 뽑아 둔다.
+    """
+    import bundle_engine
+    import cutpattern.dsl as dsl
+    from cutpattern import solids
+
+    groups = bundle_engine.vocabulary()
+    listed = {n for items in groups.values() for n in items}
+    for name in list(dsl.__all__) + list(solids.__all__):
         assert name in listed, name
+
     assert 'id="vocab"' in PAGE
-    assert "engine.names()" in PAGE
+    assert "globalThis.VOCAB" in PAGE
+    assert "engine.names" not in PAGE, "worker 왕복이 남아 있다"
+
+
+def test_vocab_file_matches_the_sources():
+    """`vocab.js` 도 생성물이라 낡을 수 있다."""
+    import json as _json
+
+    import bundle_engine
+
+    text = (ROOT / "web" / "vocab.js").read_text(encoding="utf-8")
+    start, end = text.index("{"), text.rindex("}") + 1
+    assert _json.loads(text[start:end]) == bundle_engine.vocabulary(), (
+        "python web/bundle_engine.py 를 돌린다"
+    )
 
 
 def test_worker_results_are_plain_objects():
@@ -352,5 +374,11 @@ def test_worker_results_are_plain_objects():
 
 def test_empty_vocabulary_says_so():
     """비면 조용히 넘어가지 말아야 한다. 빈 패널은 원인을 안 알려 준다."""
-    assert "이름 목록을 받지 못했다" in PAGE
-    assert "groups instanceof Map" in PAGE, "두 모양을 모두 받아야 한다"
+    assert "vocab.js 가 없다" in PAGE
+
+
+def test_vocabulary_does_not_wait_for_pyodide():
+    """정적 데이터를 Pyodide 뒤에 두면 부팅이 실패할 때 목록도 같이 사라진다."""
+    body = _function_body(PAGE, "async function start()")
+    assert "showVocabulary" not in body, "부팅 흐름과 묶여 있다"
+    assert "showVocabulary();   // Pyodide 와 무관하다" in PAGE

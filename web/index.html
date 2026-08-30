@@ -92,6 +92,7 @@
   </p>
 </aside>
 
+<script src="vocab.js"></script>
 <script src="render.js"></script>
 <script src="editor.js"></script>
 <script src="share.js"></script>
@@ -270,27 +271,29 @@ new ResizeObserver(() => view.draw()).observe(document.getElementById("stage"));
 // 링크로 받은 정의는 **실행하지 않는다.** 편집창에 채워만 넣고 사람이 읽고
 // 누른다. 링크를 여는 것이 곧 임의 코드 실행이 되면 안 된다 (§19.4)
 // 이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알 길이 없다. 암묵 import 의
-// 값이자 대가다 (§19.7)
-async function showVocabulary() {
-  const groups = await engine.names();
+// 값이자 대가다 (§19.7).
+//
+// vocab.js 는 번들을 만들 때 같은 __all__ 에서 뽑아 둔 정적 데이터다. worker 를
+// 거쳐 가져오면 비동기, 메시지 왕복, Pyodide 의 타입 변환이 끼어드는데 그중
+// 하나만 어긋나도 목록이 조용히 빈다. Pyodide 를 기다릴 이유도 없다
+function showVocabulary() {
   const box = document.getElementById("vocabList");
   box.replaceChildren();
-  // Map 이 섞여 들어오면 Object.entries 가 조용히 빈 배열을 준다. 화면만 비고
-  // 오류는 없어서 알아채기 어렵다. 두 모양을 모두 받고, 비면 말한다
-  const pairs = groups instanceof Map ? [...groups] : Object.entries(groups || {});
-  if (pairs.length === 0) {
-    box.textContent = "이름 목록을 받지 못했다.";
+  const groups = globalThis.VOCAB;
+  if (!groups) {
+    box.textContent = "vocab.js 가 없다. python web/bundle_engine.py 를 돌린다.";
     return;
   }
-  for (const [group, items] of pairs) {
+  for (const [group, items] of Object.entries(groups)) {
     const head = document.createElement("div");
     head.className = "grp";
-    head.textContent = group;
+    head.textContent = `${group} (${items.length})`;
     const body = document.createElement("code");
-    body.textContent = Array.from(items).join(", ");
+    body.textContent = items.join(", ");
     box.append(head, body);
   }
 }
+showVocabulary();   // Pyodide 와 무관하다. 바로 보인다
 
 async function start() {
   let shared = null;
@@ -301,7 +304,6 @@ async function start() {
   }
 
   await engine.boot();
-  await showVocabulary();
 
   if (shared === null) {
     els.src.value = DEFAULT_SOURCE;
