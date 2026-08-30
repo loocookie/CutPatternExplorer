@@ -531,3 +531,42 @@ def test_an_empty_cut_says_so():
     """carrier 0 인데 폴리라인이 남으면(축 마커) 고장난 것처럼 읽힌다."""
     assert "절단 없음" in PAGE
     assert "out.carriers === 0" in PAGE
+
+
+# ---- 각도 직접 입력 (§19.8) --------------------------------------------
+
+
+def test_the_angle_can_be_typed_exactly():
+    """슬라이더 스텝은 0.05 라 정다면체의 특징적인 각에 닿을 수 없다.
+
+    정육면체 꼭짓점각이 54.7356°, 면과 꼭짓점 사이가 63.4349° 다. 슬라이더로는
+    영원히 못 맞춘다.
+    """
+    import math
+
+    for angle in (54.7356, 63.4349):
+        assert round(angle / 0.05) * 0.05 != pytest.approx(angle, abs=1e-4), (
+            f"{angle} 가 슬라이더 격자에 걸린다"
+        )
+
+    assert 'val.onclick' in PAGE, "숫자를 눌러 고칠 수 없다"
+    assert 'box.step = "any"' in PAGE, "입력이 슬라이더 격자에 묶여 있다"
+
+
+def test_typed_angles_stay_in_range():
+    """0~180 밖은 잘라 낸다. 음수 각은 cos 이 같은 값을 주어 조용히 헷갈린다."""
+    assert "Math.min(180, Math.max(0, Number(value)))" in PAGE
+    assert "Number.isFinite(next)" in PAGE, "빈 칸이나 글자가 들어오면 NaN 이다"
+
+
+def test_escape_cancels_the_edit():
+    """되돌릴 길이 없으면 잘못 누른 것이 그대로 반영된다."""
+    body = PAGE[PAGE.index("val.onclick") : PAGE.index("row.append(name, range)")]
+    assert '"Escape"' in body and "finish(false)" in body
+    assert '"Enter"' in body and "finish(true)" in body
+    assert "box.onblur" in body, "딴 데를 눌러도 값이 살아야 한다"
+
+
+def test_the_displayed_angle_shows_enough_digits():
+    """두 자리로 보여 주면 정확히 넣은 값이 반올림되어 보인다."""
+    assert "toFixed(4)" in PAGE

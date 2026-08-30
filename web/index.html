@@ -36,6 +36,12 @@
   legend { font-size: 12px; color: #7b8194; padding: 0 0 6px; }
   .row { display: grid; grid-template-columns: 1fr; gap: 2px; margin-bottom: 10px; }
   .row b { font-weight: 500; font-size: 12px; color: #4a5163; }
+  /* 숫자를 눌러 정확한 값을 넣는다. 슬라이더 스텝(0.05)으로는 63.4349 같은
+     값에 닿을 수 없다 (§19.8) */
+  .val { cursor: text; border-bottom: 1px dotted #c2c8d6; padding: 0 1px; }
+  .val:hover { background: #eef1f7; }
+  .row input.num { width: 84px; font: inherit; padding: 0 2px;
+                   border: 1px solid #7aa7e8; border-radius: 3px; }
   input[type=range] { width: 100%; }
   label.tog { display: block; margin: 4px 0; cursor: pointer; font-size: 13px; }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
@@ -190,16 +196,56 @@ function buildSliders() {
     const row = document.createElement("div");
     row.className = "row";
     const name = document.createElement("b");
+    const label = document.createTextNode(id + "   ");
+    const val = document.createElement("span");
+    val.className = "val";
+    val.title = "눌러서 정확한 값을 넣는다";
+    name.append(label, val);
+
     const range = document.createElement("input");
     // 0 과 180 은 퇴화원이다 (r = 0). 터지지 않고 "자를 게 없는 상태" 로
     // 나온다 — RADIUS_EPS 판정이 split 과 build_arcs 에서 걸러 낸다 (§14)
     range.type = "range"; range.min = 0; range.max = 180; range.step = 0.05;
     range.value = angles[id];
-    const show = () => { name.textContent = `${id}   ${Number(range.value).toFixed(2)}°`; };
-    range.oninput = () => {
-      angles[id] = Number(range.value);
-      show(); refresh(DRAG_STEP); scheduleFinal();
+
+    const show = () => { val.textContent = Number(angles[id]).toFixed(4) + "°"; };
+
+    const setAngle = (value, coarse) => {
+      const next = Math.min(180, Math.max(0, Number(value)));
+      if (!Number.isFinite(next)) return;
+      angles[id] = next;
+      range.value = next;
+      show();
+      refresh(coarse ? DRAG_STEP : FINAL_STEP);
+      if (coarse) scheduleFinal();
     };
+
+    range.oninput = () => setAngle(range.value, true);
+
+    // 숫자를 눌러 그 자리에서 고친다. 슬라이더는 스텝이 0.05 라 정다면체의
+    // 특징적인 각(63.4349 등)에 닿을 수 없다 (§19.8)
+    val.onclick = () => {
+      const box = document.createElement("input");
+      box.type = "number"; box.className = "num";
+      box.min = 0; box.max = 180; box.step = "any";
+      box.value = Number(angles[id]).toFixed(4);
+      let done = false;
+      const finish = (commit) => {
+        if (done) return;
+        done = true;
+        box.replaceWith(val);
+        if (commit) setAngle(box.value, false);
+      };
+      box.onkeydown = (ev) => {
+        if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+        else if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+      };
+      box.onblur = () => finish(true);
+      val.replaceWith(box);
+      box.focus();
+      box.select();
+    };
+
     show();
     row.append(name, range);
     els.sliders.append(row);
