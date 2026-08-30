@@ -1502,6 +1502,10 @@ Canvas 2D 든 그대로 받는다. 외부 의존이 있는 파일은 `render/vpy
   `Shift+Tab`, 콜론 뒤 `Enter`, 주석 안의 콜론 (`node web/editor.test.js`)
 - 편집창에서 키보드로 빠져나갈 길이 있고 그 규약이 페이지에 적혀 있는가
 - 편집이 바뀐 구간만 건드려 되돌리기가 살아 있는가
+- 저작 계층 이름이 전부 미리 들어가 있는가. `dsl` 과 `solids` 가 이름을
+  겹치면 거부하는가 (§19.7)
+- 명시적 import 도 여전히 동작하는가. 예전 공유 링크가 살아 있어야 한다
+- 미리 넣은 이름 목록을 보여 주는가
 
 ### 렌더 (§11.1, §11.2)
 
@@ -1712,6 +1716,38 @@ Pyodide 를 CDN 에서 받는 한 그 출처를 열어 두어야 한다. **자�
 **`exec` 살포.** 개인 도구면 브라우저 샌드박스로 충분하다. 그러나 "정의를
 링크로 공유"까지 가면 공유받은 링크가 임의 코드 실행이 된다. **URL 에 코드를
 싣기 전에** 정해야 할 문제다.
+
+### 19.7 저작 계층은 미리 넣어 둔다
+
+정의마다 이 두 줄로 시작하면 정보가 0인 줄이 반복된다.
+
+```python
+from cutpattern import solids as S
+from cutpattern.dsl import at_angle, puzzle, split, turned
+```
+
+`dsl.__all__` 과 `solids.__all__` 을 통째로 이름 공간에 넣는다. GlowScript 가
+vpython 에 하는 것과 같다. `math` 와 `S` 도 함께 넣는다.
+
+```python
+faces = cube("faces", turns=(45, -45, 90, -90, 180))
+
+with puzzle("OctoCube Master", faces) as p:
+    split(faces)
+    for x in faces:
+        with turned(x, 45):
+            split(*at_angle(x, 90, faces))
+```
+
+**두 `__all__` 은 겹치는 이름이 없다.** 겹치면 어느 쪽이 이겼는지가 보이지
+않으므로, 겹치는 순간 `RuntimeError` 로 알린다.
+
+**명시적 import 도 그대로 동작한다.** 미리 넣는 것은 이름 공간을 채우는 것일
+뿐 `import` 를 막지 않는다. 예전에 만든 공유 링크와 예제 파일이 살아 있어야
+한다.
+
+**대가는 발견 가능성이다.** 이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알
+길이 없다. 편집창이 목록을 보여 준다.
 
 ### 19.6 편집창
 

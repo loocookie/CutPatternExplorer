@@ -41,6 +41,11 @@
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
         margin-right: 6px; vertical-align: -1px; }
   .note { color: #7b8194; font-size: 12px; line-height: 1.7; margin: 0; }
+  details { font-size: 12px; color: #7b8194; }
+  details summary { cursor: pointer; padding: 2px 0; }
+  details .grp { margin: 6px 0 2px; color: #4a5163; }
+  details code { font: 11px/1.7 ui-monospace, Menlo, monospace; color: #5b6172;
+                 word-break: break-all; }
   .note b { font-weight: 600; color: #4a5163; }
   #err { color: #b3261e; font: 12px/1.5 ui-monospace, monospace;
          white-space: pre-wrap; display: none; }
@@ -75,6 +80,10 @@
     <label class="tog"><input type="checkbox" id="mk" checked> 축 마커</label>
     <label class="tog"><input type="checkbox" id="lb" checked> 축 라벨</label>
   </fieldset>
+  <details id="vocab">
+    <summary>바로 쓸 수 있는 이름</summary>
+    <div id="vocabList"></div>
+  </details>
   <p class="note">
     편집창에서 <b>Tab</b> 은 4칸 들여쓰기, <b>Shift+Tab</b> 은 내어쓰기다.
     콜론으로 끝난 줄에서 Enter 를 치면 한 단 더 들어간다.
@@ -90,10 +99,7 @@
 <script>
 "use strict";
 
-const DEFAULT_SOURCE = `from cutpattern import solids as S
-from cutpattern.dsl import at_angle, puzzle, split, turned
-
-faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
+const DEFAULT_SOURCE = `faces = cube("faces", turns=(45, -45, 90, -90, 180))
 
 with puzzle("OctoCube Master", faces) as p:
     split(faces)
@@ -263,6 +269,22 @@ new ResizeObserver(() => view.draw()).observe(document.getElementById("stage"));
 
 // 링크로 받은 정의는 **실행하지 않는다.** 편집창에 채워만 넣고 사람이 읽고
 // 누른다. 링크를 여는 것이 곧 임의 코드 실행이 되면 안 된다 (§19.4)
+// 이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알 길이 없다. 암묵 import 의
+// 값이자 대가다 (§19.7)
+async function showVocabulary() {
+  const groups = await engine.names();
+  const box = document.getElementById("vocabList");
+  box.replaceChildren();
+  for (const [group, items] of Object.entries(groups)) {
+    const head = document.createElement("div");
+    head.className = "grp";
+    head.textContent = group;
+    const body = document.createElement("code");
+    body.textContent = items.join(", ");
+    box.append(head, body);
+  }
+}
+
 async function start() {
   let shared = null;
   try {
@@ -272,6 +294,7 @@ async function start() {
   }
 
   await engine.boot();
+  await showVocabulary();
 
   if (shared === null) {
     els.src.value = DEFAULT_SOURCE;

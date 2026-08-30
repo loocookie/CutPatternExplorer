@@ -61,6 +61,11 @@ class Engine {
     return this.pending.size > 0;
   }
 
+  /** 미리 넣어 둔 이름들 (§19.7). */
+  async names() {
+    return (await this._send({ type: "names" })).result;
+  }
+
   async prepare(source) {
     return (await this._send({ type: "prepare", source })).result;
   }

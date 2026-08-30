@@ -270,3 +270,69 @@ def test_edits_are_minimal_so_undo_still_works():
     editor = (ROOT / "web" / "editor.js").read_text(encoding="utf-8")
     assert "setRangeText(edit.insert, edit.from, edit.to" in editor
     assert "textarea.value =" not in editor, "전체 대입은 되돌리기 기록을 지운다"
+
+
+# ---- 암묵 import (§19.7) ------------------------------------------------
+
+
+def test_authoring_names_are_preloaded(browser_globals):
+    """정의마다 같은 import 두 줄을 쓰게 하면 정보가 0인 줄이 반복된다.
+
+    GlowScript 가 vpython 에 하는 것과 같다.
+    """
+    import cutpattern.dsl as dsl
+    from cutpattern import solids
+
+    ns = browser_globals["_namespace"]()
+    for name in list(dsl.__all__) + list(solids.__all__):
+        assert name in ns, name
+    assert ns["S"] is solids
+    assert "math" in ns
+
+
+def test_dsl_and_solids_do_not_share_names(browser_globals):
+    """겹치면 어느 쪽이 이겼는지가 안 보인다. 겹치는 순간 알아야 한다."""
+    import cutpattern.dsl as dsl
+    from cutpattern import solids
+
+    assert not (set(dsl.__all__) & set(solids.__all__))
+    # 겹치게 만들면 거부하는가
+    original = solids.__all__
+    try:
+        solids.__all__ = tuple(original) + ("puzzle",)
+        with pytest.raises(RuntimeError, match="겹친다"):
+            browser_globals["_namespace"]()
+    finally:
+        solids.__all__ = original
+
+
+def test_default_definition_needs_no_imports(browser_globals):
+    """기본 정의가 그 편의를 보여 준다."""
+    assert "import" not in DEFAULT_SOURCE
+    info = browser_globals["prepare"](DEFAULT_SOURCE)
+    assert info["name"] == "OctoCube Master"
+
+
+def test_explicit_imports_still_work(browser_globals):
+    """예전에 만든 공유 링크와 예제가 살아 있어야 한다."""
+    source = """from cutpattern import solids as S
+from cutpattern.dsl import puzzle, split
+
+faces = S.cube("faces")
+with puzzle("명시적 import", faces) as p:
+    split(faces)
+"""
+    info = browser_globals["prepare"](source)
+    assert info["name"] == "명시적 import"
+
+
+def test_the_preloaded_names_are_listed_for_the_reader(browser_globals):
+    """이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알 길이 없다."""
+    groups = browser_globals["names"]()
+    listed = {n for items in groups.values() for n in items}
+    import cutpattern.dsl as dsl
+
+    for name in dsl.__all__:
+        assert name in listed, name
+    assert 'id="vocab"' in PAGE
+    assert "engine.names()" in PAGE

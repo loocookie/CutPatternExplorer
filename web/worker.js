@@ -16,8 +16,44 @@ const BOOT = `
 import array, sys, json
 sys.path.insert(0, "/engine")
 
+import math
+
+import cutpattern.dsl as _dsl
+from cutpattern import solids as _solids
 from cutpattern.dsl import Puzzle
 from cutpattern.render.scene import build_scene
+
+
+def _namespace():
+    """정의가 시작하는 이름 공간 (§19.7).
+
+    저작 계층을 통째로 미리 넣어 둔다. 정의마다 같은 import 두 줄을 쓰게 하면
+    정보가 0인 줄이 반복된다. GlowScript 가 vpython 에 하는 것과 같다.
+
+    `dsl` 과 `solids` 의 `__all__` 은 겹치는 이름이 없다. 겹치면 어느 쪽이
+    이겼는지가 보이지 않으므로, 겹치는 순간 알도록 확인한다.
+    """
+    ns = {"__name__": "__cutpattern__", "math": math, "S": _solids, "solids": _solids}
+    clash = set(_dsl.__all__) & set(_solids.__all__)
+    if clash:
+        raise RuntimeError("저작 계층 이름이 겹친다: %s" % sorted(clash))
+    for module in (_dsl, _solids):
+        for name in module.__all__:
+            ns[name] = getattr(module, name)
+    return ns
+
+
+def names():
+    """미리 넣어 둔 이름들. 편집창이 보여 준다.
+
+    이름이 마법처럼 존재하면 무엇을 쓸 수 있는지 알 길이 없다. 암묵 import 의
+    값이자 대가다.
+    """
+    return {
+        "정의와 질의": list(_dsl.__all__),
+        "축 집합": list(_solids.__all__),
+        "그 밖": ["math", "S (= solids)"],
+    }
 
 
 def load(source):
@@ -25,8 +61,12 @@ def load(source):
 
     조각 모델이 없으므로 정의는 with puzzle(...) 블록 하나로 끝난다. 이름을
     강제하지 않고 namespace 에서 Puzzle 인스턴스를 찾는다.
+
+    명시적인 import 도 그대로 동작한다. 미리 넣는 것은 이름 공간을 채우는
+    것일 뿐 import 를 막지 않는다 — 예전에 만든 공유 링크와 예제가 살아 있어야
+    한다.
     """
-    ns = {"__name__": "__cutpattern__"}
+    ns = _namespace()
     exec(compile(source, "<정의>", "exec"), ns)
     found = [v for v in ns.values() if isinstance(v, Puzzle)]
     if not found:
@@ -142,6 +182,7 @@ function sceneBytes() {
 }
 
 const HANDLERS = {
+  names: () => ({ result: call("names", []) }),
   prepare: (msg) => ({ result: call("prepare", [msg.source]) }),
   evaluate: (msg) => {
     const result = call("evaluate", [JSON.stringify(msg.angles), msg.maxStep]);
