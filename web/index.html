@@ -113,7 +113,13 @@
   <h1>Cut Pattern Explorer</h1>
   <!-- 편집 모드에서는 편집밖에 못 한다 (§19.15). class="editonly" 가 붙은
        것만 그때 보인다. 오류와 축 집합 목록은 두 모드에 다 있다 -->
-  <div class="bar"><button id="mode">Edit definition</button></div>
+  <div class="bar">
+    <button id="mode">Edit definition</button>
+    <!-- 공유는 **보내는 쪽** 일이라 두 모드에 다 있다. §19.4 의 성질은 받는
+         사람이 코드를 읽는 것이지, 보내는 사람이 편집창을 거치는 게 아니다 -->
+    <button id="share">Copy share link</button>
+    <span class="msg" id="msg"></span>
+  </div>
   <div id="shared" class="editonly"></div>
   <div class="bar">
     <select id="addPick"></select>
@@ -125,8 +131,6 @@
   <div class="bar editonly">
     <button id="run">Run</button>
     <button id="stop" disabled>Stop</button>
-    <button id="share">Copy share link</button>
-    <span class="msg" id="msg"></span>
   </div>
   <div id="err"></div>
   <fieldset id="sliders"><legend>Cut angle</legend></fieldset>
@@ -141,11 +145,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=f21406c8"></script>
-<script src="render.js?v=f21406c8"></script>
-<script src="editor.js?v=f21406c8"></script>
-<script src="share.js?v=f21406c8"></script>
-<script src="app.js?v=f21406c8"></script>
+<script src="vocab.js?v=2e418296"></script>
+<script src="render.js?v=2e418296"></script>
+<script src="editor.js?v=2e418296"></script>
+<script src="share.js?v=2e418296"></script>
+<script src="app.js?v=2e418296"></script>
 <script>
 "use strict";
 
@@ -209,7 +213,10 @@ let info = null;
 //
 // **오류는 두 모드에 다 보인다.** 손으로 쓴 정의를 실행 모드에서 슬라이더로
 // 밀다 죽을 수 있고, 갈 곳 없는 오류는 없는 오류보다 나쁘다.
-let mode = "edit";
+//
+// 기본은 실행 모드다. 다만 **링크로 받은 정의는 편집 모드로 연다** — 아래
+// start() 를 보라 (§19.4).
+let mode = "run";
 
 function setMode(next) {
   mode = next;
@@ -577,6 +584,10 @@ async function start() {
     els.src.value = DEFAULT_SOURCE;
   } else {
     els.src.value = shared;
+    // **링크는 편집 모드로 연다.** §19.4 의 안전 근거는 "사람이 읽고 누른다"
+    // 하나다. 실행 모드에서 열면 읽어야 할 코드가 접혀 있어, 경고만 뜨고
+    // 정작 읽을 것이 안 보인다 — 지금보다 나빠진다
+    setMode("edit");
     els.shared.style.display = "block";
     els.shared.textContent =
       "Loaded a definition from the link. This is Python written by someone " +

@@ -399,8 +399,11 @@ def test_the_two_modes_split_the_sidebar():
         assert marked(tag_id), tag_id + " 가 편집 모드 것이어야 한다"
 
     # 오류와 축 집합 목록은 두 모드에 다 있다. 실행 모드에서 슬라이더를 밀다
-    # 죽을 수 있고, 갈 곳 없는 오류는 없는 오류보다 나쁘다
-    for tag_id in ('id="err"', 'id="sliders"', 'id="sets"'):
+    # 죽을 수 있고, 갈 곳 없는 오류는 없는 오류보다 나쁘다.
+    #
+    # 공유도 그렇다. 그것은 **보내는 쪽** 일이고, §19.4 의 성질은 받는 사람이
+    # 코드를 읽는 것이지 보내는 사람이 편집창을 거치는 게 아니다
+    for tag_id in ('id="err"', 'id="sliders"', 'id="sets"', 'id="share"'):
         assert not marked(tag_id), tag_id + " 는 두 모드에 다 있어야 한다"
 
 
@@ -445,6 +448,27 @@ def test_a_menu_edit_can_be_undone_once():
     # 손으로 고치면 그 칸은 버린다. 두 되돌리기가 겹치면 어느 쪽이 이겼는지
     # 안 보인다
     assert "els.src.oninput = forgetUndo" in PAGE
+
+
+def test_a_shared_link_opens_the_editor():
+    """**§19.4 의 안전 근거는 "사람이 읽고 누른다" 하나다.**
+
+    링크로 받은 정의를 실행 모드에서 열면 읽어야 할 코드가 접혀 있다. 경고만
+    뜨고 정작 읽을 것이 안 보이므로, 자동 실행을 막아 둔 것과 짝이 안 맞는다 —
+    모드를 나누기 전보다 나빠진다.
+
+    이 검사가 `test_shared_code_is_never_run_automatically` 옆에 있는 이유는
+    둘이 같은 성질의 두 반쪽이기 때문이다. UI 를 만지다 한쪽만 깨지면 남은
+    한쪽이 성질을 지키는 것처럼 보인다.
+    """
+    assert 'let mode = "run"' in PAGE, "기본은 실행 모드다"
+
+    body = _function_body(PAGE, "async function start()")
+    # 링크가 있는 가지 안에서 편집 모드로 바꿔야 한다
+    branch = body[body.index("els.src.value = shared;"):]
+    assert 'setMode("edit")' in branch
+    # 그리고 그 가지는 여전히 자동 실행하지 않는다
+    assert "run()" not in branch[:branch.index("await engine.boot()")]
 
 
 def test_engine_can_be_killed():
