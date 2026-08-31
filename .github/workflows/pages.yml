@@ -53,6 +53,12 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
+      # 브라우저가 받아 가지 않는 것은 올리지 않는다. 파이썬은 전부 engine.js
+      # 안에 실려 있어 (§19.2) 파일로는 쓰이지 않는다 — boot.py 도 그렇다.
+      # 지울 것을 세는 편이 올릴 것을 세는 것보다 안전하다: 새 런타임 파일이
+      # 생겼을 때 목록에 넣는 것을 잊어도 사이트가 깨지지 않는다
+      - name: leave only what the browser fetches
+        run: rm -rf web/*.test.js web/*.py web/__pycache__ web/scenes.js
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

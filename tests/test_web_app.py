@@ -1118,3 +1118,53 @@ def test_a_wrapped_set_can_still_be_deleted(ready):
     gone = ready["remove_axis_set"](out, "Cube 1")
     assert "cube(" not in gone and "mirror(" not in gone
     ready["prepare"](gone)
+
+
+# ---- 배포 (§19.13) --------------------------------------------------------
+
+WORKFLOW = (ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+
+
+def _shipped():
+    """워크플로가 걷어낸 뒤 사이트에 남는 파일들."""
+    import fnmatch
+
+    strip = re.search(r"run: rm -rf (.+)", WORKFLOW).group(1).split()
+    out = []
+    for path in sorted((ROOT / "web").iterdir()):
+        rel = "web/" + path.name
+        if not any(fnmatch.fnmatch(rel, pat) for pat in strip):
+            out.append(path.name)
+    return out
+
+
+def test_the_site_is_only_web():
+    """`tests/` 와 `examples/` 는 우리 것이다. 사이트에 갈 이유가 없다."""
+    assert re.search(r"upload-pages-artifact.*\n\s*with:\n\s*path: web\s*$",
+                     WORKFLOW, re.M)
+
+
+def test_stripping_does_not_break_the_page():
+    """지울 것을 세는 방식이라 새 런타임 파일을 잊어도 안 깨진다. 그래도
+    지금 참조하는 것이 다 남는지는 봐야 한다 — 여기서만 확인할 수 있다."""
+    shipped = set(_shipped())
+    for text in (PAGE, APP, WORKER):
+        for ref in re.findall(r'["\'](?:\./)?([\w.-]+\.(?:js|css|html))(?:\?v=[0-9a-f]+)?["\']',
+                              text):
+            assert ref in shipped, ref + " 를 걷어냈는데 아직 참조한다"
+
+
+def test_dev_files_do_not_ship():
+    """파이썬은 전부 engine.js 안에 실려 있다 (§19.2). 파일로는 안 쓰인다."""
+    shipped = _shipped()
+    assert "index.html" in shipped and "engine.js" in shipped
+    for name in shipped:
+        assert not name.endswith((".py", ".test.js")), name
+
+
+def test_the_workflow_checks_the_bundle_before_deploying():
+    """커밋된 생성물의 위험은 낡는 것이다. 그때 배포만 조용히 어긋난다."""
+    assert "python web/bundle_engine.py" in WORKFLOW
+    assert "git diff --exit-code -- web/" in WORKFLOW
+    for js in ("syntax", "editor", "render", "share"):
+        assert "node web/%s.test.js" % js in WORKFLOW
