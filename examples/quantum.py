@@ -18,9 +18,9 @@ def build(slice_angle: float = SLICE_ANGLE):
     faces = merge("crd", S.cube(), S.rhombic_dodecahedron())
     pair = lambda a: [a, at_angle(a, 180, faces)[0]]
     axis_pairs = {
-        "X": pair(faces["c2"]),
-        "Y": pair(faces["c3"]),
-        "Z": pair(faces["c0"]),
+        "X": pair(faces["c-2"]),
+        "Y": pair(faces["c-3"]),
+        "Z": pair(faces["c-0"]),
     }
     with puzzle("Super Mixup Quantum Cube Air V2", faces) as p:
         split([axis_pairs["X"], axis_pairs["Y"], axis_pairs["Z"]])

@@ -72,14 +72,14 @@ def test_icosahedron_first_ring_alone_gives_only_face_symmetry():
 def test_prism_side_and_cap_differ(theta):
     """n각기둥은 옆면과 밑면의 회전각이 다르다. 정적 필드로는 표현이 안 된다."""
     p5 = S.prism(5)
-    assert turns(p5, theta, "p0") == pytest.approx([180.0])
-    assert turns(p5, theta, "p5") == pytest.approx([72.0, 144.0, 216.0, 288.0])
+    assert turns(p5, theta, "p5-0") == pytest.approx([180.0])
+    assert turns(p5, theta, "p5-5") == pytest.approx([72.0, 144.0, 216.0, 288.0])
 
 
 def test_bipyramid_axes_are_uniform():
     """면추이적이면 모든 축이 같은 목록을 준다."""
     bp = S.bipyramid(5)
-    first = turns(bp, 70.0, "b0")
+    first = turns(bp, 70.0, "b5-0")
     assert first
     for axis in bp:
         assert turns(bp, 70.0, axis.id) == pytest.approx(first)
@@ -129,10 +129,10 @@ def test_axis_on_the_rotation_axis_adds_no_constraint():
 
 def test_second_axis_set_contributes_its_own_rings():
     cube = S.cube("cube")
-    octa = S.octahedron("octa")
+    octa = S.octahedron("octahedron")
     fam = family_of(cube, octa)
     axis = list(cube)[0]
-    angles = {"cube": 60.0, "octa": 60.0}
+    angles = {"cube": 60.0, "octahedron": 60.0}
     rings = rings_around(fam, axis, angles)
     assert {theta2 for _polar, theta2 in rings} == {60.0}
     alone = derived_turns(family_of(cube), axis, {"cube": 60.0})

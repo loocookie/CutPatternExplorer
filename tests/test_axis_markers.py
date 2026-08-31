@@ -25,12 +25,12 @@ THETA = math.degrees(math.acos(0.45))
 
 
 def _family():
-    faces = S.cube("faces", turns=(45, -45))
+    faces = S.cube(turns=(45, -45))
     edges = S.rhombic_dodecahedron("edges")
     with puzzle("marked", faces, edges) as p:
         split(faces)
-        with turned(faces["c3"], 45):
-            split(faces["c2"])
+        with turned(faces["c-3"], 45):
+            split(faces["c-2"])
     return p.family
 
 
@@ -76,7 +76,7 @@ def test_markers_never_touch_the_registry():
     from cutpattern.engine.operations import evaluate
 
     family = _family()
-    reg, _log = evaluate(family, {"faces": THETA, "edges": 70.0})
+    reg, _log = evaluate(family, {"cube": THETA, "edges": 70.0})
     before = (len(reg), reg.total_arc_length())
     build_axis_markers(family)
     assert (len(reg), reg.total_arc_length()) == before
@@ -139,7 +139,7 @@ def view(monkeypatch):
     made = _stub_vpython(monkeypatch)
     from cutpattern.render.vpython_view import SphereView
 
-    v = SphereView(_family(), {"faces": THETA, "edges": 70.0})
+    v = SphereView(_family(), {"cube": THETA, "edges": 70.0})
     v._made = made
     return v
 
@@ -148,7 +148,7 @@ def test_viewer_draws_a_marker_and_label_per_axis(view):
     assert len(view._marker_curves) == 18
     assert len(view._marker_labels) == 18
     texts = {lb.text for lb in view._made["label"]}
-    assert "c2" in texts and "rd0" in texts
+    assert "c-2" in texts and "e-0" in texts
 
 
 def test_hiding_a_set_hides_its_arcs_and_markers(view):
@@ -157,18 +157,18 @@ def test_hiding_a_set_hides_its_arcs_and_markers(view):
     before = lit()
     assert before > 0
 
-    view._hidden_sets.add("faces")
+    view._hidden_sets.add("cube")
     view._draw_markers()
     view.rebuild(0.15)
 
     hidden_markers = [
-        view._marker_curves[m.id] for m in view.markers if m.axis_set_id == "faces"
+        view._marker_curves[m.id] for m in view.markers if m.axis_set_id == "cube"
     ]
     assert not any(c.visible for c in hidden_markers)
     assert lit() < before
-    assert "숨긴 축 집합: faces" in view.status.text
+    assert "숨긴 축 집합: cube" in view.status.text
 
-    view._hidden_sets.discard("faces")
+    view._hidden_sets.discard("cube")
     view._draw_markers()
     view.rebuild(0.15)
     assert lit() == before

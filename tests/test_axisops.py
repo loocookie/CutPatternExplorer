@@ -38,8 +38,8 @@ def signature(aset) -> Counter:
 def test_merge_keeps_both_sources():
     m = merge("both", S.cube(), S.octahedron())
     assert len(m) == 14
-    assert [a.id for a in m][:2] == ["c0", "c1"]
-    assert [a.id for a in m][-2:] == ["o6", "o7"]
+    assert [a.id for a in m][:2] == ["c-0", "c-1"]
+    assert [a.id for a in m][-2:] == ["o-6", "o-7"]
 
 
 def test_merge_dedupes_identical_directions():
@@ -60,8 +60,10 @@ def test_merge_with_a_rotated_copy():
 
 
 def test_merge_disambiguates_colliding_ids():
+    """축 id 는 집합 id 에서 나오므로 (§2.5) 보통은 안 겹친다. 같은 id 를 쓴
+    두 집합을 합칠 때만 겹치고, 그때 merge 가 갈라 준다."""
     a = S.cube("a")
-    b = rotate(S.cube("b"), axis=(0, 0, 1), angle=45)
+    b = rotate(S.cube("a"), axis=(0, 0, 1), angle=45)
     m = merge("m", a, b)
     ids = [x.id for x in m]
     assert len(ids) == len(set(ids))
@@ -78,7 +80,7 @@ def test_merge_requires_at_least_one_set():
 
 def test_rotate_by_axis_and_angle():
     r = rotate(S.cube(), axis=(0, 0, 1), angle=90)
-    assert np.allclose(r["c2"].normal, (0, 1, 0), atol=1e-9)
+    assert np.allclose(r["c-2"].normal, (0, 1, 0), atol=1e-9)
 
 
 def test_rotate_preserves_ids_and_shape():
@@ -109,7 +111,7 @@ def test_zero_quaternion_is_rejected():
 
 def test_rotate_from_two_pairs():
     c = S.cube()
-    a, b = c["c0"].normal, c["c2"].normal
+    a, b = c["c-0"].normal, c["c-2"].normal
     target_a = rotation_matrix((0, 0, 1), math.radians(90)) @ a
     target_b = rotation_matrix((0, 0, 1), math.radians(90)) @ b
     m = rotation_from_pairs([(a, target_a), (b, target_b)])
@@ -122,7 +124,7 @@ def test_pairs_reject_a_changed_included_angle():
     c = S.cube()
     with pytest.raises(ValueError, match="사잇각"):
         rotation_from_pairs(
-            [(c["c0"].normal, c["c1"].normal), (c["c1"].normal, c["c1"].normal)]
+            [(c["c-0"].normal, c["c-1"].normal), (c["c-1"].normal, c["c-1"].normal)]
         )
 
 
@@ -130,7 +132,7 @@ def test_pairs_reject_parallel_inputs():
     c = S.cube()
     with pytest.raises(ValueError, match="평행"):
         rotation_from_pairs(
-            [(c["c0"].normal, c["c1"].normal), (c["c0"].normal, c["c1"].normal)]
+            [(c["c-0"].normal, c["c-1"].normal), (c["c-0"].normal, c["c-1"].normal)]
         )
 
 
@@ -149,13 +151,13 @@ def test_rotate_requires_exactly_one_form():
 
 def test_remove_and_keep_are_complementary():
     c = S.cube()
-    assert [a.id for a in remove(c, "c0", "c1")] == ["c2", "c3", "c4", "c5"]
-    assert [a.id for a in keep(c, "c0", "c1")] == ["c0", "c1"]
+    assert [a.id for a in remove(c, "c-0", "c-1")] == ["c-2", "c-3", "c-4", "c-5"]
+    assert [a.id for a in keep(c, "c-0", "c-1")] == ["c-0", "c-1"]
 
 
 def test_remove_accepts_axis_objects():
     c = S.cube()
-    assert len(remove(c, c["c0"])) == 5
+    assert len(remove(c, c["c-0"])) == 5
 
 
 def test_remove_reports_unknown_axes():
@@ -164,16 +166,16 @@ def test_remove_reports_unknown_axes():
 
 
 def test_rename_changes_only_the_given_ids():
-    r = rename(S.cube(), {"c0": "U", "c5": "D"})
-    assert [a.id for a in r] == ["U", "c1", "c2", "c3", "c4", "D"]
+    r = rename(S.cube(), {"c-0": "U", "c-5": "D"})
+    assert [a.id for a in r] == ["U", "c-1", "c-2", "c-3", "c-4", "D"]
 
 
 def test_operations_do_not_mutate_the_source():
     c = S.cube()
     before = [a.id for a in c]
-    remove(c, "c0")
+    remove(c, "c-0")
     rotate(c, axis=(0, 0, 1), angle=90)
-    rename(c, {"c0": "X"})
+    rename(c, {"c-0": "X"})
     assert [a.id for a in c] == before
 
 
@@ -181,16 +183,16 @@ def test_operations_do_not_mutate_the_source():
 
 
 def _carry_family(declare: bool, angle_deg: float = 90.0):
-    outer = S.cube("outer")
-    inner = rename(
-        S.cube("inner"), {a.id: a.id.replace("c", "k") for a in S.cube()}, id="inner"
-    )
+    # 두 집합의 축 id 가 겹치면 안 된다 (§5). 약자는 집합 id 에서 나오므로
+    # 서로 다른 id 를 주면 자동으로 갈린다
+    outer = S.cube("outer")     # o-0 .. o-5
+    inner = S.cube("inner")     # i-0 .. i-5
     with puzzle("carry", outer, inner) as p:
         if declare:
-            carry(outer["c0"], inner["k2"])  # c0 = (0,0,1),  k2 = (1,0,0)
-        split(outer["c0"])
-        turn(outer["c0"], angle_deg)
-        split(inner["k2"])
+            carry(outer["o-0"], inner["i-2"])  # o-0 = (0,0,1),  i-2 = (1,0,0)
+        split(outer["o-0"])
+        turn(outer["o-0"], angle_deg)
+        split(inner["i-2"])
     return p
 
 
@@ -221,42 +223,40 @@ def test_carried_axis_rotates_by_the_turn_angle(deg):
 
 def test_carry_is_recorded_on_the_family():
     p = _carry_family(True)
-    assert p.family.carries == (("c0", ("k2",)),)
-    assert p.family.carried_by("c0") == ("k2",)
-    assert p.family.carried_by("c1") == ()
+    assert p.family.carries == (("o-0", ("i-2",)),)
+    assert p.family.carried_by("o-0") == ("i-2",)
+    assert p.family.carried_by("c-1") == ()
 
 
 def test_carry_accepts_a_whole_axis_set():
     outer = S.cube("outer")
-    inner = rename(
-        S.cube("inner"), {a.id: a.id.replace("c", "k") for a in S.cube()}, id="inner"
-    )
+    inner = S.cube("inner")
     with puzzle("t", outer, inner) as p:
-        carry(outer["c0"], inner)
+        carry(outer["o-0"], inner)
         split(outer)
-    assert p.family.carries == (("c0", tuple(a.id for a in inner)),)
+    assert p.family.carries == (("o-0", tuple(a.id for a in inner)),)
 
 
 def test_carry_rejects_self_reference():
     c = S.cube()
     with puzzle("t", c):
         with pytest.raises(ValueError, match="자기 자신"):
-            carry(c["c0"], c["c0"])
+            carry(c["c-0"], c["c-0"])
 
 
 def test_carry_rejects_wrong_types():
     c = S.cube()
     with puzzle("t", c):
         with pytest.raises(TypeError):
-            carry("c0", c["c1"])
+            carry("c-0", c["c-1"])
         with pytest.raises(TypeError):
-            carry(c["c0"], "c1")
+            carry(c["c-0"], "c-1")
 
 
 def test_carry_outside_a_puzzle_block_is_rejected():
     c = S.cube()
     with pytest.raises(RuntimeError, match="with puzzle"):
-        carry(c["c0"], c["c1"])
+        carry(c["c-0"], c["c-1"])
 
 
 # ---- mirror / invert ----------------------------------------------------
@@ -348,7 +348,7 @@ def test_invert_preserves_pairwise_angles():
 
 def test_same_directions_ignores_order_and_names():
     a = S.cube()
-    b = rename(remove(S.cube(), "c0"), {"c1": "z"})
+    b = rename(remove(S.cube(), "c-0"), {"c-1": "z"})
     assert same_directions(a, a)
     assert not same_directions(a, b)
 

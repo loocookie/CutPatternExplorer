@@ -56,13 +56,13 @@ from cutpattern.engine.operations import Truncated, UncutBoundaryError
 THETA = math.degrees(math.acos(0.45))
 
 # 1. split + turn + 렌더
-faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
+faces = S.cube(turns=(45, -45, 90, -90, 180))
 with puzzle("probe", faces) as p:
     split(faces)
     for x in faces:
         with turned(x, 45):
             split(*at_angle(x, 90, faces))
-reg, log = p.evaluate({"faces": THETA}, on_illegal="truncate")
+reg, log = p.evaluate({"cube": THETA}, on_illegal="truncate")
 arcs = build_arcs(reg, max_step=0.05)
 assert len(reg) == 18, len(reg)
 assert len(arcs) == 30, len(arcs)
@@ -76,13 +76,13 @@ assert not [r for r in log2 if isinstance(r, Truncated)], "예상 못한 절단"
 assert len(reg2) == 18, len(reg2)
 
 # 3. 경계 미절단을 실제로 잡는가. 판정 경로까지 numpy 없이 돈다
-f2 = S.cube("f2", turns=(45, -45, 90, -90, 180))
+f2 = S.cube("second", turns=(45, -45, 90, -90, 180))
 with puzzle("uncut", f2) as q:
-    split(f2["c0"], f2["c5"])
-    with region(outside(f2["c2"]), outside(f2["c4"])):
-        split(f2["c3"], f2["c1"])
+    split(f2["s-0"], f2["s-5"])
+    with region(outside(f2["s-2"]), outside(f2["s-4"])):
+        split(f2["s-3"], f2["s-1"])
 try:
-    q.evaluate({"f2": THETA}, on_illegal="raise")
+    q.evaluate({"second": THETA}, on_illegal="raise")
     raise AssertionError("UncutBoundaryError 가 나왔어야 한다")
 except UncutBoundaryError:
     pass

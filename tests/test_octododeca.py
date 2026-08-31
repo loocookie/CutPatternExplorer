@@ -20,7 +20,7 @@ from tests.test_region import _final_dangling, _on_some_cut
 @pytest.fixture(scope="module")
 def dodeca():
     p = build()
-    reg, _log = p.evaluate({"dodeca": THETA_DEG})
+    reg, _log = p.evaluate({"dodecahedron": THETA_DEG})
     return p, reg
 
 
@@ -93,14 +93,14 @@ def test_shallow_cuts_produce_nothing(theta):
     경계는 인접 사잇각의 절반이다. 정육면체의 45도(=90/2)에 대응한다.
     """
     assert theta < MIN_THETA_DEG
-    reg, _log = build().evaluate({"dodeca": theta})
+    reg, _log = build().evaluate({"dodecahedron": theta})
     assert len(reg.non_empty()) == 12
 
 
 @pytest.mark.parametrize("theta", [32.0, 40.0, THETA_DEG, 55.0, 63.0])
 def test_slider_range_stays_clean(theta):
     assert MIN_THETA_DEG < theta < MAX_THETA_DEG
-    reg, _log = build().evaluate({"dodeca": theta})
+    reg, _log = build().evaluate({"dodecahedron": theta})
     assert len(reg.non_empty()) == 72
     assert not _final_dangling(reg)
     total = sum(b.spans.total_length() for b in reg.circles)

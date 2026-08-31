@@ -81,7 +81,7 @@ THETA_DEG = math.degrees(math.acos(CUT_OFFSET))
 
 
 def build(turn_angle: float = TURN_ANGLE):
-    faces = S.cube("faces", turns=(45, -45, 90, -90, 180))
+    faces = S.cube(turns=(45, -45, 90, -90, 180))
 
     with puzzle("OctoCube Master", faces) as p:
         split(faces)
@@ -97,4 +97,4 @@ def build_family(turn_angle: float = TURN_ANGLE):
 
 
 if __name__ == "__main__":
-    build().run({"faces": THETA_DEG})
+    build().run({"cube": THETA_DEG})

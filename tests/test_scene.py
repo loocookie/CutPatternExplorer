@@ -23,19 +23,19 @@ THETA = math.degrees(math.acos(0.45))
 
 
 def _puzzle():
-    faces = S.cube("faces", turns=(45, -45))
+    faces = S.cube(turns=(45, -45))
     edges = S.rhombic_dodecahedron("edges")
     with puzzle("scene", faces, edges) as p:
         split(faces)
-        with turned(faces["c3"], 45):
-            split(*at_angle(faces["c3"], 90, faces))
+        with turned(faces["c-3"], 45):
+            split(*at_angle(faces["c-3"], 90, faces))
     return p
 
 
 @pytest.fixture
 def built():
     p = _puzzle()
-    reg, _log = p.evaluate({"faces": THETA, "edges": 70.0}, on_illegal="truncate")
+    reg, _log = p.evaluate({"cube": THETA, "edges": 70.0}, on_illegal="truncate")
     return p, reg
 
 
@@ -83,7 +83,7 @@ def test_groups_point_at_real_axis_sets(built):
     """색과 토글이 이 인덱스를 쓴다. 범위를 벗어나면 조용히 틀린 색이 나온다."""
     p, reg = built
     scene = build_scene(reg, p.family)
-    assert scene.axis_sets == ["faces", "edges"]
+    assert scene.axis_sets == ["cube", "edges"]
     assert all(0 <= g < len(scene.axis_sets) for g in scene.groups)
     assert set(scene.kinds) == {ARC, MARKER}
 

@@ -79,7 +79,7 @@ def report() -> None:
 
     sys.stdout.reconfigure(encoding="utf-8")
     p = build()
-    reg, _log = p.evaluate({"dodeca": THETA_DEG})
+    reg, _log = p.evaluate({"dodecahedron": THETA_DEG})
     faces = list(p.family.axis_sets[0].axes)
     offset = math.cos(math.radians(THETA_DEG))
 
@@ -105,4 +105,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "report":
         report()
     else:
-        build().run({"dodeca": THETA_DEG})
+        build().run({"dodecahedron": THETA_DEG})

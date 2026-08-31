@@ -117,13 +117,13 @@
 <script>
 "use strict";
 
-const DEFAULT_SOURCE = `faces = cube("faces", turns=(45, -45, 90, -90, 180))
+const DEFAULT_SOURCE = `cube1 = cube("cube1", turns=(45, -45, 90, -90, 180))
 
-with puzzle("OctoCube Master", faces) as p:
-    split(faces)
-    for x in faces:
+with puzzle("OctoCube Master", cube1) as p:
+    split(cube1)
+    for x in cube1:
         with turned(x, 45):
-            split(*at_angle(x, 90, faces))
+            split(*at_angle(x, 90, cube1))
 `;
 
 // 조작 중 / 멎은 뒤 tessellation (§12.3). 조작 중에는 거칠게 그린다

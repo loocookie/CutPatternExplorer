@@ -50,7 +50,7 @@ def test_platonic_catalog_matches_the_factories():
 def test_platonic_face_count(factory, count, prefix):
     aset = factory()
     assert len(aset) == count
-    assert [a.id for a in aset] == [f"{prefix}{i}" for i in range(count)]
+    assert [a.id for a in aset] == [f"{prefix}-{i}" for i in range(count)]
 
 
 @pytest.mark.parametrize("factory,count,prefix", PLATONIC_COUNTS)
@@ -111,7 +111,9 @@ def test_prism_family_face_count(factory, count, prefix, n):
     aset = factory(n)
     assert len(aset) == count(n)
     assert all(float(np.linalg.norm(a.normal)) == pytest.approx(1.0) for a in aset)
-    assert [a.id for a in aset] == [f"{prefix}{i}" for i in range(count(n))]
+    # 접두사는 집합 id 에서 나온다 (§2.5). n 이 id 에 들어가므로 p4, a3 처럼 된다
+    head = S.abbrev(aset.id)
+    assert [a.id for a in aset] == [f"{head}-{i}" for i in range(count(n))]
 
 
 @pytest.mark.parametrize("factory,count,prefix", PRISM_COUNTS)
@@ -186,9 +188,27 @@ def test_antiprism_side_faces_are_equilateral(n):
 # ---- 직접 만들기 --------------------------------------------------------
 
 
+def test_abbreviation_comes_from_the_set_id():
+    """손으로 정한 접두사 표를 두지 않는다. 표는 프리셋을 늘릴 때마다 어긋나고,
+    사용자가 만든 집합에는 아예 없다 (§2.5)."""
+    assert S.abbrev("cube") == "c"
+    assert S.abbrev("cube1") == "c1"
+    assert S.abbrev("rhombic_dodecahedron") == "rd"
+    assert S.abbrev("propello tetrahedron1") == "pt1"
+
+
+def test_every_preset_abbreviation_is_distinct():
+    """다른 입체가 같은 약자를 쓰면 축 id 가 겹칠 수 있다 (§5)."""
+    seen = {}
+    for key in list(S.PLATONIC) + list(S.CATALAN):
+        seen.setdefault(S.abbrev(key), []).append(key)
+    clashes = {a: ks for a, ks in seen.items() if len(ks) > 1}
+    assert not clashes, clashes
+
+
 def test_from_normals_numbers_axes_with_a_prefix():
     aset = S.from_normals("custom", [(1, 0, 0), (0, 1, 0)], "x")
-    assert [a.id for a in aset] == ["x0", "x1"]
+    assert [a.id for a in aset] == ["x-0", "x-1"]
     assert aset.cut == "custom"
 
 
@@ -208,15 +228,15 @@ def test_extra_turns_can_be_supplied_per_solid():
 # 맞는지로 씨앗이 자동 검증된다.
 
 CATALAN_COUNTS = [
-    ("triakis_tetrahedron", 12, "kt", "Td"),
+    ("triakis_tetrahedron", 12, "tt", "Td"),
     ("rhombic_dodecahedron", 12, "rd", "Oh"),
-    ("triakis_octahedron", 24, "ko", "Oh"),
+    ("triakis_octahedron", 24, "to", "Oh"),
     ("tetrakis_hexahedron", 24, "th", "Oh"),
     ("deltoidal_icositetrahedron", 24, "di", "Oh"),
     ("disdyakis_dodecahedron", 48, "dd", "Oh"),
     ("pentagonal_icositetrahedron", 24, "pi", "O"),
     ("rhombic_triacontahedron", 30, "rt", "Ih"),
-    ("triakis_icosahedron", 60, "ki", "Ih"),
+    ("triakis_icosahedron", 60, "ti", "Ih"),
     ("pentakis_dodecahedron", 60, "pd", "Ih"),
     ("deltoidal_hexecontahedron", 60, "dh", "Ih"),
     ("disdyakis_triacontahedron", 120, "dt", "Ih"),
@@ -233,7 +253,7 @@ def test_all_thirteen_catalan_solids_are_present():
 def test_catalan_face_count_and_names(key, count, prefix, group):
     aset = S.CATALAN[key]()
     assert len(aset) == count
-    assert [a.id for a in aset] == [f"{prefix}{i}" for i in range(count)]
+    assert [a.id for a in aset] == [f"{prefix}-{i}" for i in range(count)]
     assert all(float(np.linalg.norm(a.normal)) == pytest.approx(1.0) for a in aset)
 
 
@@ -330,7 +350,7 @@ def test_from_orbit_works_without_knowing_the_count():
     """
     pyrito = S.from_orbit("pyrito", (1, 0.6, 0), "Th")
     assert len(pyrito) == 12
-    assert all(a.id.startswith("a") for a in pyrito)
+    assert [a.id for a in pyrito][:2] == ["p-0", "p-1"]
 
 
 def test_from_orbit_still_verifies_when_told_to():

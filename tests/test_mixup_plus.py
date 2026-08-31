@@ -11,7 +11,7 @@ from cutpattern.engine.turn import is_turn_legal
 from examples.mixup_plus import THETA_333, THETA_MIXUP, build
 
 # 면축 id 는 solids 가 정한다. c3 = +y, c1 = -y
-SLICE_45 = (Turn("c3", 45.0, True), Turn("c1", 45.0, False))
+SLICE_45 = (Turn("c-3", 45.0, True), Turn("c-1", 45.0, False))
 
 
 @pytest.fixture(scope="module")
@@ -34,14 +34,14 @@ def _complete(reg, faces, theta):
 
 def test_construction_restores_every_face_circle(plus):
     """블록마다 슬라이스를 되돌리므로 여섯 면 원이 전부 완전해야 한다."""
-    reg, _ = plus.evaluate({"faces": THETA_MIXUP})
+    reg, _ = plus.evaluate({"cube": THETA_MIXUP})
     faces = plus.axis_sets[0]
     assert _complete(reg, faces, THETA_MIXUP) == {a.id for a in faces}
 
 
 def test_new_boundaries_are_twelve_edge_direction_planes(plus):
     """45도 자리의 절단은 면 법선을 수직축으로 45도 돌린 방향, 곧 모서리 방향이다."""
-    reg, _ = plus.evaluate({"faces": THETA_MIXUP})
+    reg, _ = plus.evaluate({"cube": THETA_MIXUP})
     faces = plus.axis_sets[0]
     face_normals = [a.normal for a in faces]
     new = [
@@ -66,8 +66,8 @@ def test_45_slice_is_closed_after_the_plus_cuts(theta, plus):
     그래서 45도 상태에서도 면 회전이 계속 합법이다.
     """
     faces = plus.axis_sets[0]
-    before, _ = evaluate(_without_rollback(plus), {"faces": theta})
-    after, _ = evaluate(_without_rollback(plus, SLICE_45), {"faces": theta})
+    before, _ = evaluate(_without_rollback(plus), {"cube": theta})
+    after, _ = evaluate(_without_rollback(plus, SLICE_45), {"cube": theta})
 
     # carrier 개수는 재지 않는다. 접합(§7.10) 전에는 before 가 빈 껍데기까지
     # 세어 34 였고 after 와 우연히 같았을 뿐이다. 실제로는 접합 켜든 끄든
@@ -85,25 +85,25 @@ def test_plain_cube_blocks_face_turns_after_a_45_slice():
     from cutpattern import solids as S
     from cutpattern.engine.operations import SplitByAxis
 
-    faces = S.cube("faces")
+    faces = S.cube()
     fam = PuzzleFamily(
         axis_sets=(faces.to_engine(),),
         operations=tuple([SplitByAxis(a.id) for a in faces]) + SLICE_45,
     )
-    reg, _ = evaluate(fam, {"faces": THETA_333})
-    assert is_turn_legal(reg, faces["c3"], THETA_333)
-    assert not is_turn_legal(reg, faces["c2"], THETA_333)
+    reg, _ = evaluate(fam, {"cube": THETA_333})
+    assert is_turn_legal(reg, faces["c-3"], THETA_333)
+    assert not is_turn_legal(reg, faces["c-2"], THETA_333)
 
 
 def test_slice_composition_conserves_arc_length(plus):
-    before, _ = evaluate(_without_rollback(plus), {"faces": THETA_MIXUP})
-    after, _ = evaluate(_without_rollback(plus, SLICE_45 * 2), {"faces": THETA_MIXUP})
+    before, _ = evaluate(_without_rollback(plus), {"cube": THETA_MIXUP})
+    after, _ = evaluate(_without_rollback(plus, SLICE_45 * 2), {"cube": THETA_MIXUP})
     assert after.total_arc_length() == pytest.approx(before.total_arc_length())
 
 
 @pytest.mark.parametrize("theta", [50.0, 54.7356, 60.0, THETA_MIXUP, 80.0])
 def test_slider_sweep_stays_legal_and_finite(theta, plus):
-    reg, _ = plus.evaluate({"faces": theta})
+    reg, _ = plus.evaluate({"cube": theta})
     for bc in reg.non_empty():
         assert math.isfinite(bc.circle.h) and math.isfinite(bc.circle.r)
         assert all(math.isfinite(x) for s in bc.spans for x in s.as_tuple())
@@ -116,5 +116,5 @@ def test_equal_sectors_is_aesthetic_not_a_requirement(plus):
     """
     faces = plus.axis_sets[0]
     for theta in (THETA_333, THETA_MIXUP):
-        after, _ = evaluate(_without_rollback(plus, SLICE_45), {"faces": theta})
+        after, _ = evaluate(_without_rollback(plus, SLICE_45), {"cube": theta})
         assert _complete(after, faces, theta) == {a.id for a in faces}

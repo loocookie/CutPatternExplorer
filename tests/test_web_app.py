@@ -58,8 +58,8 @@ def test_default_definition_runs_and_reports_its_inputs(browser_globals):
     """페이지가 처음 띄우는 정의가 실제로 도는가."""
     info = browser_globals["prepare"](DEFAULT_SOURCE)
     assert info["name"] == "OctoCube Master"
-    assert info["inputs"] == ["faces"]
-    assert info["axisSets"] == ["faces"]
+    assert info["inputs"] == ["cube1"]
+    assert info["axisSets"] == ["cube1"]
     assert info["ops"] > 0
 
 
@@ -70,7 +70,7 @@ def test_evaluate_returns_a_scene_the_renderer_can_draw(browser_globals):
     쓰므로 `scene_bytes` 로 따로 간다 (§11.1).
     """
     browser_globals["prepare"](DEFAULT_SOURCE)
-    out = browser_globals["evaluate"](json.dumps({"faces": 63.25}), 0.03)
+    out = browser_globals["evaluate"](json.dumps({"cube1": 63.25}), 0.03)
 
     assert set(out) == {
         "starts", "counts", "groups", "kinds", "labels", "axisSets",
@@ -92,7 +92,7 @@ def test_coordinates_come_over_as_float64_bytes(browser_globals):
     import array
 
     browser_globals["prepare"](DEFAULT_SOURCE)
-    out = browser_globals["evaluate"](json.dumps({"faces": 63.25}), 0.03)
+    out = browser_globals["evaluate"](json.dumps({"cube1": 63.25}), 0.03)
     raw = browser_globals["scene_bytes"]()
 
     assert isinstance(raw, bytes)
@@ -111,7 +111,7 @@ def test_illegal_turn_is_reported_not_raised(browser_globals):
     browser_globals["prepare"](DEFAULT_SOURCE)
     notes = []
     for theta in (5.0, 20.0, 44.0, 63.25, 80.0, 120.0, 170.0):
-        out = browser_globals["evaluate"](json.dumps({"faces": theta}), 0.12)
+        out = browser_globals["evaluate"](json.dumps({"cube1": theta}), 0.12)
         notes.append(out["note"])
     assert any(n == "" for n in notes), "전 각도가 잘리면 정의가 잘못된 것이다"
 
@@ -322,7 +322,7 @@ def test_explicit_imports_still_work(browser_globals):
     source = """from cutpattern import solids as S
 from cutpattern.dsl import puzzle, split
 
-faces = S.cube("faces")
+faces = S.cube()
 with puzzle("명시적 import", faces) as p:
     split(faces)
 """
@@ -402,7 +402,7 @@ def test_top_level_return_is_explained(browser_globals):
     쉽다. 파이썬 기본 메시지("'return' outside function")는 우리 규약을 설명해
     주지 않는다.
     """
-    source = """axes = dodecahedron("dodeca")
+    source = """axes = dodecahedron("dodecahedron")
 
 with puzzle("test", axes) as p:
     split(axes)
@@ -418,7 +418,7 @@ return p
     # 그 줄만 빼면 통과한다
     info = browser_globals["prepare"](source.replace("\nreturn p\n", "\n"))
     assert info["name"] == "test"
-    assert info["inputs"] == ["dodeca"]
+    assert info["inputs"] == ["dodecahedron"]
 
 
 def test_a_definition_trapped_in_a_function_is_explained(browser_globals):
@@ -440,16 +440,16 @@ def test_syntax_errors_name_the_line(browser_globals):
 
 def test_two_axis_sets_give_two_sliders(browser_globals):
     """축 집합마다 절단 각도 입력이 따로 붙는다 (§2.2)."""
-    source = """axes1 = dodecahedron("dodeca")
-axes2 = icosahedron("icosa")
+    source = """axes1 = dodecahedron("dodecahedron")
+axes2 = icosahedron("icosahedron")
 
 with puzzle("test", axes1, axes2) as p:
     split(axes1)
     split(axes2)
 """
     info = browser_globals["prepare"](source)
-    assert info["inputs"] == ["dodeca", "icosa"]
-    assert info["axisSets"] == ["dodeca", "icosa"]
+    assert info["inputs"] == ["dodecahedron", "icosahedron"]
+    assert info["axisSets"] == ["dodecahedron", "icosahedron"]
 
 
 def test_the_script_contract_is_stated_up_front():
@@ -518,13 +518,13 @@ def test_degenerate_angles_do_not_break(browser_globals):
     """
     browser_globals["prepare"](DEFAULT_SOURCE)
     for theta in (0.0, 180.0):
-        out = browser_globals["evaluate"](json.dumps({"faces": theta}), 0.03)
+        out = browser_globals["evaluate"](json.dumps({"cube1": theta}), 0.03)
         assert out["carriers"] == 0
         assert out["length"] == pytest.approx(0.0)
         assert out["note"] == "", "불법 회전으로 잘리면 안 된다"
 
     # 바로 옆은 정상이다
-    out = browser_globals["evaluate"](json.dumps({"faces": 0.05}), 0.03)
+    out = browser_globals["evaluate"](json.dumps({"cube1": 0.05}), 0.03)
     assert out["carriers"] > 0 and out["length"] > 0
 
 
@@ -581,7 +581,7 @@ def test_the_displayed_angle_shows_enough_digits():
 # ---- 축 집합 추가 메뉴 (§19.9) -----------------------------------------
 
 
-DEF3 = """faces = cube("faces", turns=(45, -45))
+DEF3 = """faces = cube("cube", turns=(45, -45))
 
 with puzzle("OctoCube", faces) as p:
     split(faces)
@@ -607,7 +607,7 @@ def test_insertion_goes_to_all_three_places(browser_globals):
     assert lines[-1] == "    split(" + var + ")", "(3) 블록 직속 본문 끝이 아니다"
 
     info = browser_globals["prepare"](out)
-    assert info["inputs"] == ["faces", var]
+    assert info["inputs"] == ["cube", var]
 
 
 def test_split_does_not_land_inside_a_turned_block(browser_globals):
@@ -625,10 +625,10 @@ def test_generated_names_carry_the_instance_number(browser_globals):
     축 id 도 같은 번호를 쓰므로 집합과 축의 대응이 눈으로 보인다.
     """
     out = browser_globals["add_axis_set"]("", "cube")
-    assert out.startswith('cube1 = cube("cube1", prefix="c1-")'), out
+    assert out.startswith('cube1 = cube("cube1")'), out
 
     out = browser_globals["add_axis_set"](out, "icosahedron")
-    assert 'icosa1 = icosahedron("icosa1", prefix="i1-")' in out
+    assert 'icosahedron1 = icosahedron("icosahedron1")' in out
 
 
 def test_axis_ids_are_qualified_by_their_set(browser_globals):
@@ -652,8 +652,8 @@ def test_presets_keep_their_short_ids():
     """구분자를 접두사 문자열에 담으므로 프리셋 기본값은 안 바뀐다."""
     from cutpattern import solids
 
-    assert [a.id for a in solids.cube()][:2] == ["c0", "c1"]
-    assert [a.id for a in solids.rhombic_dodecahedron()][:2] == ["rd0", "rd1"]
+    assert [a.id for a in solids.cube()][:2] == ["c-0", "c-1"]
+    assert [a.id for a in solids.rhombic_dodecahedron()][:2] == ["rd-0", "rd-1"]
 
 
 def test_names_are_found_by_parsing_not_by_searching(browser_globals):
@@ -666,7 +666,7 @@ def test_names_are_found_by_parsing_not_by_searching(browser_globals):
 def test_an_empty_editor_gets_a_whole_skeleton(browser_globals):
     out = browser_globals["add_axis_set"]("", "icosahedron")
     info = browser_globals["prepare"](out)
-    assert info["axisSets"] == ["icosa1"]
+    assert info["axisSets"] == ["icosahedron1"]
     assert info["ops"] > 0
 
 

@@ -159,6 +159,35 @@ orbit(seed, group, expected=n)
 
 `Td` 와 `Th` 는 크기가 같지만 다른 군이다. `Td` 는 `T` 에 반사면을 더한 것으로 반전을 포함하지 않고, `Th = T × {I, −I}` 다. 황철석 십이면체(pyritohedron)의 대칭이 `Th` 이고, 씨앗 `(1, h, 0)` 의 궤도가 12개가 된다 — 정육면체의 면을 잘랐지만 정사면체 대칭만 남은 모양이다. 같은 씨앗을 `O` 로 돌리면 24개가 되어 전혀 다른 입체다.
 
+#### 축 id 는 집합에서 나온다
+
+```text
+축 id = <집합 약자>-<축 이름>
+```
+
+약자는 **집합 id** 에서 딴다 — 낱말 첫 글자를 잇고 끝의 숫자를 붙인다.
+
+```text
+cube                    -> c    ->  c-0 .. c-5
+cube1                   -> c1   ->  c1-0 .. c1-5
+rhombic_dodecahedron    -> rd   ->  rd-0 .. rd-11
+propello_tetrahedron1   -> pt1  ->  pt1-0 ..
+prism5                  -> p5   ->  p5-0 .. p5-6
+```
+
+손으로 정한 접두사 표를 두지 않는다. 표는 프리셋을 늘릴 때마다 어긋나고,
+사용자가 만든 집합에는 아예 없다.
+
+**이것이 축 id 유일성(§5)을 구조로 보장한다.** 접두사가 입체마다 고정이면 같은
+입체가 두 벌 있을 때 `c0` 이 두 집합에 생긴다. 집합 id 에서 나오면 집합 id 가
+다른 한 안 겹친다.
+
+축 이름은 기본이 번호이고, `names` 를 주면 그것을 쓴다.
+
+```python
+from_normals("faces", ns, names="UDRLFB")     # f-U, f-D, f-R …
+```
+
 **저작 계층에 그대로 연다.** `orbit`, `rotation_group`, `GROUP_ORDERS`, `from_orbit` 이 편집창에서 바로 보인다 (§19.7). 회전 대칭이야 `for` 문으로 되지만 정다면체 대칭은 손으로 쓰기 어렵다.
 
 ```python
@@ -1848,24 +1877,16 @@ with puzzle("t", faces, rd) as p:                   # (2) 인자 = 슬라이더 
 #### 이름에 인스턴스 번호를 붙인다
 
 ```python
-cube1 = cube("cube1", prefix="c1-")
-cube2 = cube("cube2", prefix="c2-")
-icosa1 = icosahedron("icosa1", prefix="i1-")
+cube1 = cube("cube1")                                    # c1-0 .. c1-5
+cube2 = cube("cube2")                                    # c2-0 .. c2-5
+rhombic_dodecahedron1 = rhombic_dodecahedron("rhombic_dodecahedron1")
 ```
 
 변수와 집합 id 가 같은 이름이고, **번호는 항상 붙는다.** 첫 번째만 `cube` 이고
 두 번째부터 `cube2` 이면 하나를 지웠을 때 이름이 들쭉날쭉해진다.
 
-**축 id 를 집합으로 한정한다** — `c1-0`, `c2-0`. 축 id 는 전 집합에서 유일해야
-하는데 (§5) 접두사가 입체마다 고정이면 `c0` 이 두 집합에 생긴다. 도형 이름과
-축 번호가 눈으로 갈라지는 것은 덤이다.
-
-구분자를 **접두사 문자열에 담으므로** 프리셋의 기본값은 그대로다.
-
-```python
-cube()                       # c0..c5        예전과 같다
-cube("cube1", prefix="c1-")  # c1-0..c1-5    메뉴가 쓰는 꼴
-```
+축 id 접두사는 **집합 id 에서 유도되므로** (§2.5) 따로 줄 것이 없다. 같은 입체를
+두 번 넣어도 `c1-` 과 `c2-` 로 갈리므로 특수처리가 없다.
 
 이름은 **파싱해서** 고른다. 문자열로 찾으면 주석 안의 단어까지 세어 멀쩡한
 이름을 피해 간다.

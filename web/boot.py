@@ -203,32 +203,10 @@ with puzzle("%(id)s", %(var)s) as p:
 '''
 
 
-def _naming(factory):
-    """프리셋이 정해 둔 짧은 이름과 축 id 접두사를 꺼낸다.
-
-    축 id 는 이미 **약자 + 숫자**다 (`c0..c5`, `rd0..rd11`). 메뉴가 만드는
-    변수도 같은 규약을 따르는 것이 자연스럽다 — `faces2` 보다 `c` 가 짧고,
-    한두 글자 접두사는 저작 계층 이름과 겹칠 일이 없다.
-    """
-    params = inspect.signature(_namespace()[factory]).parameters
-    default_id = params["id"].default
-    prefix = params["prefix"].default if "prefix" in params else "a"
-    if not isinstance(default_id, str):
-        default_id = factory
-    return default_id, prefix
-
-
-def _call(factory, set_id, prefix):
-    """축 집합을 만드는 한 줄.
-
-    축 id 를 집합으로 한정한다 — `c1-0`, `c2-0`. 그러지 않으면 같은 입체를 두 번
-    넣을 때 `c0` 이 두 집합에 생기는데, 축 id 는 전 집합에서 유일해야 한다 (§5).
-    도형 이름과 축 번호가 눈으로 갈라지는 것은 덤이다.
-
-    구분자를 접두사 문자열에 담으므로 프리셋의 기본값(`cube()` -> `c0..c5`)은
-    그대로다.
-    """
-    return '%s = %s("%s", prefix="%s")' % (set_id, factory, set_id, prefix)
+def _default_id(factory):
+    """프리셋이 정해 둔 집합 id."""
+    default = inspect.signature(_namespace()[factory]).parameters["id"].default
+    return default if isinstance(default, str) else factory
 
 
 def add_axis_set(source, factory):
@@ -254,14 +232,14 @@ def add_axis_set(source, factory):
     if factory not in ns:
         raise ValueError("모르는 축 집합: %r" % factory)
 
-    default_id, canonical = _naming(factory)
+    default_id = _default_id(factory)
 
     stripped = source.strip()
     if not stripped:
         n = _free_instance(default_id, set(ns))
         set_id = "%s%d" % (default_id, n)
         return SKELETON % {
-            "call": _call(factory, set_id, "%s%d-" % (canonical, n)),
+            "call": '%s = %s("%s")' % (set_id, factory, set_id),
             "var": set_id, "id": set_id,
         }
 
@@ -279,16 +257,16 @@ def add_axis_set(source, factory):
         and isinstance(node.items[0].context_expr, ast.Call)
         and getattr(node.items[0].context_expr.func, "id", None) == "puzzle"
     ]
-    # 변수와 집합 id 를 같은 이름으로 쓴다. 둘 다 비어 있는 번호를 고른다
+    # 변수와 집합 id 를 같은 이름으로 쓴다. 둘 다 비어 있는 번호를 고른다.
+    # 축 id 접두사는 집합 id 에서 유도되므로 (§2.5) 따로 줄 것이 없다
     taken = _taken_names(tree, ns) | _existing_ids(tree, ns)
     n = _free_instance(default_id, taken)
     set_id = var = "%s%d" % (default_id, n)
-    prefix = "%s%d-" % (canonical, n)
 
     if not blocks:
         # puzzle 블록이 없다. 골격째 만든다
         return source.rstrip("\n") + "\n\n" + SKELETON % {
-            "call": _call(factory, set_id, prefix),
+            "call": '%s = %s("%s")' % (set_id, factory, set_id),
             "var": var, "id": set_id,
         }
 
@@ -309,7 +287,7 @@ def add_axis_set(source, factory):
         # (2) 인자 목록 = 슬라이더 목록
         (at(call.args[-1].end_lineno, call.args[-1].end_col_offset), ", %s" % var),
         # (1) with 블록 앞
-        (at(block.lineno, 0), _call(factory, set_id, prefix) + '\n\n'),
+        (at(block.lineno, 0), '%s = %s("%s")' % (set_id, factory, set_id) + '\n\n'),
     ]
     out = source
     for pos, text in edits:

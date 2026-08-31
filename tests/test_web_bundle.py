@@ -60,7 +60,7 @@ def test_bundle_leaves_out_the_vpython_viewer():
         "__future__", "math", "json", "itertools", "dataclasses",
         "functools", "collections", "contextlib", "typing",
         # boot.py 가 좌표를 바이트열로 넘길 때 쓴다 (§11.1)
-        "array", "ast", "inspect", "sys", "cutpattern",
+        "array", "ast", "inspect", "re", "sys", "cutpattern",
     }
     for path, source in bundled.items():
         for node in ast.walk(ast.parse(source, filename=path)):

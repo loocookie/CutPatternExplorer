@@ -82,7 +82,7 @@ def _on_some_cut_one(bc, point) -> bool:
 
 def test_region_tags_outside_spans_hidden_and_exit_clears():
     faces = _faces()
-    x, xm = _pair(faces["c2"], faces)
+    x, xm = _pair(faces["c-2"], faces)
     with puzzle("tag", faces) as p:
         split(faces)
         with region(outside(x), outside(xm)):
@@ -99,8 +99,8 @@ def test_hidden_spans_do_not_move_with_a_turn():
     재료 위로 옮기면 위치만으로는 둘을 구분할 수 없다.
     """
     faces = _faces()
-    x, xm = _pair(faces["c2"], faces)
-    z = faces["c0"]
+    x, xm = _pair(faces["c-2"], faces)
+    z = faces["c-0"]
     with puzzle("hidden-stays", faces) as p:
         split(faces)
         with region(outside(x), outside(xm)):
@@ -114,8 +114,8 @@ def test_hidden_spans_do_not_move_with_a_turn():
 
 def test_turn_in_region_round_trip_is_exact():
     faces = _faces()
-    x, xm = _pair(faces["c2"], faces)
-    z, zm = _pair(faces["c0"], faces)
+    x, xm = _pair(faces["c-2"], faces)
+    z, zm = _pair(faces["c-0"], faces)
     with puzzle("round-trip", faces) as p:
         split(faces)
         with region(outside(x), outside(xm)):
@@ -137,8 +137,8 @@ def test_split_in_region_ignores_hidden_coverage():
     보이는 재료 한가운데서 끝나 매달린 모서리가 된다 (§6.3).
     """
     faces = _faces()
-    x, xm = _pair(faces["c2"], faces)
-    z, zm = _pair(faces["c0"], faces)
+    x, xm = _pair(faces["c-2"], faces)
+    z, zm = _pair(faces["c-0"], faces)
     with puzzle("visible-only", faces) as p:
         split(faces)
         with region(outside(x), outside(xm)):
@@ -159,8 +159,8 @@ def test_region_split_stays_inside_the_region():
 
     def build(use_region: bool):
         faces = _faces()
-        x, xm = _pair(faces["c2"], faces)
-        z, zm = _pair(faces["c0"], faces)
+        x, xm = _pair(faces["c-2"], faces)
+        z, zm = _pair(faces["c-0"], faces)
         with puzzle("cmp", faces) as p:
             split(faces)
             if use_region:
@@ -237,7 +237,7 @@ def test_octocube_hide_cuts_less_than_the_unrestricted_version(octo_hide):
 
     from cutpattern.engine.operations import evaluate
 
-    plain, _ = evaluate(build_family(), {"faces": THETA_DEG})
+    plain, _ = evaluate(build_family(), {"cube": THETA_DEG})
     assert octo_hide.total_arc_length() < plain.total_arc_length()
 
 
@@ -246,8 +246,8 @@ def test_octocube_hide_cuts_less_than_the_unrestricted_version(octo_hide):
 
 def test_unbalanced_turn_in_region_is_rejected():
     faces = _faces()
-    x, xm = _pair(faces["c2"], faces)
-    z = faces["c0"]
+    x, xm = _pair(faces["c-2"], faces)
+    z = faces["c-0"]
     from cutpattern.dsl import turn as turn_op
 
     with puzzle("unbalanced", faces) as p:
@@ -291,12 +291,12 @@ def test_moved_arc_is_not_swallowed_by_hidden_coverage():
 
     with puzzle("swallow", faces) as p:
         split(faces)
-        for hide, spin in (("d0", "d2"), ("d1", "d2")):
+        for hide, spin in (("d-0", "d-2"), ("d-1", "d-2")):
             with region(outside(by_id[hide]), outside(opp[hide])):
                 with turned(by_id[spin], 36.0):
                     with turned(opp[spin], -36.0):
                         split(faces)
-    reg, _log = p.evaluate({"dodeca": theta})
+    reg, _log = p.evaluate({"dodecahedron": theta})
     for axis in faces:
         bc, _orient = reg.find(axis.normal, offset)
         assert bc.is_complete, f"{axis.id} 면 원이 뚫렸다"
@@ -316,21 +316,21 @@ def test_region_with_an_uncut_boundary_is_rejected():
     from cutpattern.engine.operations import UncutBoundaryError
 
     faces = _faces()
-    x, xm = _pair(faces["c2"], faces)
-    z = faces["c0"]
+    x, xm = _pair(faces["c-2"], faces)
+    z = faces["c-0"]
     with puzzle("uncut", faces) as p:
         split(z)  # 경계로 쓸 x 를 자르지 않았다
         with region(outside(x), outside(xm)):
             split(at_angle(z, 90, faces))
-    with pytest.raises(UncutBoundaryError, match="c2"):
+    with pytest.raises(UncutBoundaryError, match="c-2"):
         _evaluate(p)
 
 
 def test_splitting_the_boundary_first_makes_it_legal():
     """경계를 먼저 split 하면 통과하고 매달림도 남지 않는다."""
     faces = _faces()
-    x, xm = _pair(faces["c2"], faces)
-    z = faces["c0"]
+    x, xm = _pair(faces["c-2"], faces)
+    z = faces["c-0"]
     with puzzle("cut-first", faces) as p:
         split(z, x, xm)
         with region(outside(x), outside(xm)):
@@ -366,37 +366,37 @@ def test_uncut_boundary_follows_the_on_illegal_policy():
     from cutpattern.engine.operations import Truncated, UncutBoundaryError
 
     def build():
-        f = S.cube("faces", turns=(45, -45, 90, -90, 180))
+        f = S.cube(turns=(45, -45, 90, -90, 180))
         with puzzle("uncut-policy", f) as p:
             split(f)
-            turn(f["c3"], 45)  # +y
-            with region(outside(f["c2"]), outside(f["c4"])):  # +-x
-                split(f["c0"], f["c5"])
+            turn(f["c-3"], 45)  # +y
+            with region(outside(f["c-2"]), outside(f["c-4"])):  # +-x
+                split(f["c-0"], f["c-5"])
         return p
 
     p = build()
 
     # 얕은 절단에서는 양쪽 정책 모두 통과한다
     for policy in ("raise", "truncate"):
-        _reg, log = p.evaluate({"faces": 40.0}, on_illegal=policy)
+        _reg, log = p.evaluate({"cube": 40.0}, on_illegal=policy)
         assert not [r for r in log if isinstance(r, Truncated)]
 
     # 깊어지면 raise 는 올리고
-    with pytest.raises(UncutBoundaryError, match="c2"):
-        p.evaluate({"faces": 63.0}, on_illegal="raise")
+    with pytest.raises(UncutBoundaryError, match="c-2"):
+        p.evaluate({"cube": 63.0}, on_illegal="raise")
 
     # truncate 는 직전 상태에서 멈추고 기록만 남긴다
-    _reg, log = p.evaluate({"faces": 63.0}, on_illegal="truncate")
+    _reg, log = p.evaluate({"cube": 63.0}, on_illegal="truncate")
     trunc = [r for r in log if isinstance(r, Truncated)]
     assert len(trunc) == 1
-    assert trunc[0].axis_id == "c2"
+    assert trunc[0].axis_id == "c-2"
     assert trunc[0].remaining > 0
 
     # 슬라이더를 되돌리면 복원된다 (§13.2). 평가가 상태를 들고 있지 않으므로
     # 같은 각도는 항상 같은 결과여야 한다
-    reg_back, log_back = p.evaluate({"faces": 40.0}, on_illegal="truncate")
+    reg_back, log_back = p.evaluate({"cube": 40.0}, on_illegal="truncate")
     assert not [r for r in log_back if isinstance(r, Truncated)]
-    reg_first, _ = build().evaluate({"faces": 40.0}, on_illegal="truncate")
+    reg_first, _ = build().evaluate({"cube": 40.0}, on_illegal="truncate")
     assert reg_back.total_arc_length() == pytest.approx(
         reg_first.total_arc_length(), abs=1e-12
     )

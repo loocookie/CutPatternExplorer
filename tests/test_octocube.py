@@ -39,7 +39,7 @@ def _is_face_plane(bc, face_normals) -> bool:
 @pytest.fixture(scope="module")
 def octo():
     family = build_family()
-    reg, log = evaluate(family, {"faces": THETA_DEG})  # on_illegal="raise"
+    reg, log = evaluate(family, {"cube": THETA_DEG})  # on_illegal="raise"
     return family, reg, log
 
 
@@ -107,8 +107,8 @@ def test_all_arcs_lie_on_the_unit_sphere(octo):
 
 def test_result_is_deterministic():
     family = build_family()
-    a, _ = evaluate(family, {"faces": THETA_DEG})
-    b, _ = evaluate(family, {"faces": THETA_DEG})
+    a, _ = evaluate(family, {"cube": THETA_DEG})
+    b, _ = evaluate(family, {"cube": THETA_DEG})
     key = lambda reg: sorted(
         (tuple(np.round(bc.circle.n, 9)), round(bc.circle.h, 9), round(bc.spans.total_length(), 9))
         for bc in reg.non_empty()
@@ -119,7 +119,7 @@ def test_result_is_deterministic():
 @pytest.mark.parametrize("deg", [30.0, 50.0, THETA_DEG, 75.0, 89.0])
 def test_slider_sweep_stays_legal_and_finite(deg):
     """절단 각도를 바꿔도 회전이 계속 합법이고 NaN 이 없어야 한다."""
-    reg, _ = evaluate(build_family(), {"faces": deg})
+    reg, _ = evaluate(build_family(), {"cube": deg})
     for bc in reg.non_empty():
         assert math.isfinite(bc.circle.h) and math.isfinite(bc.circle.r)
         assert all(math.isfinite(x) for s in bc.spans for x in s.as_tuple())
@@ -133,7 +133,7 @@ class _MutatingAngles(dict):
     평가 도중 각도를 바꾸는 상황을 재현한다."""
 
     def __init__(self, start: float, delta: float) -> None:
-        super().__init__({"faces": start})
+        super().__init__({"cube": start})
         self.delta = delta
         self.reads = 0
 
@@ -158,5 +158,5 @@ def test_evaluate_snapshots_cut_angles(delta):
     assert not any(isinstance(r, Truncated) for r in log)
     assert angles.reads == 0  # 진입 시 한 번 복사하고 다시 읽지 않는다
 
-    baseline, _ = evaluate(build_family(), {"faces": THETA_DEG})
+    baseline, _ = evaluate(build_family(), {"cube": THETA_DEG})
     assert reg.total_arc_length() == pytest.approx(baseline.total_arc_length())

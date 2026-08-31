@@ -50,9 +50,9 @@ def build(slice_angle: float = SLICE_ANGLE):
     faces = S.cube()
     pair = lambda a: (a, at_angle(a, 180, faces)[0])
     axis_pairs = {
-        "X": pair(faces["c2"]),
-        "Y": pair(faces["c3"]),
-        "Z": pair(faces["c0"]),
+        "X": pair(faces["c-2"]),
+        "Y": pair(faces["c-3"]),
+        "Z": pair(faces["c-0"]),
     }
 
     with puzzle("OctoCube Master (Hide)", faces) as p:
