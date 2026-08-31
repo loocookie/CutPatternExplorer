@@ -1498,28 +1498,29 @@ Canvas 2D 든 그대로 받는다. 외부 의존이 있는 파일은 `render/vpy
 15. **공개 배포** — <https://loocookie.github.io/CutPatternExplorer/>.
     GitHub Actions 가 `web/` 을 사이트 뿌리로 올린다. 배포 전에 테스트와
     번들 신선도를 검사한다 (§19.13)
+16. **`fetch` 구멍 막기** — 능력 제거와 CSP 를 같이 건다. 서로의 구멍을
+    메우는 관계지 이중 보험이 아니다: 동적 `import()` 는 문법이라 전역에서
+    지울 수 없고, CSP 는 상속이 안 먹는 브라우저에서 통째로 걸린다. 짝으로
+    런타임을 자체 호스팅하고(해시로 검증) worker 를 blob 으로 띄운다 — 그래야
+    문서 정책이 정의가 도는 곳까지 간다 (§19.14). 부팅 워치독이 먼저 들어갔다:
+    잘못 걸면 페이지가 **조용히** 안 뜨는데 그 구별이 안 되면 하나씩 걸어 볼
+    수가 없다 (§19.5)
 
 ### 남은 것
 
 §19 가 닫히면서 순서 의존이 없어졌다. 무엇을 먼저 해도 된다.
 
-1. **`fetch` 구멍 막기** — 배포됐으므로 이제 실제 페이지의 성질이다. CSP
-   `connect-src` 로 잠근다. Pyodide 를 CDN 에서 받는 한 그 출처를 열어 두어야
-   하므로 자체 호스팅이 전제다 (§19.5, §19.13). CSP 를 잘못 걸면 페이지가
-   **조용히** 안 뜨고 그 확인은 브라우저에서만 되므로, 한 번에 하나씩 건다.
-   지금은 페이지가 들고 있는 것이 없어 훔칠 것이 없다 — **그것이 지켜야 할
-   성질이다.** 무언가를 저장하게 되면 그때 이 구멍이 실제 위험이 된다
-2. **축 집합 편집 패널** — 축 마커가 갈 자리다 (아래 3번과 같은 일). 편집
+1. **축 집합 편집 패널** — 축 마커가 갈 자리다 (아래 2번과 같은 일). 편집
    메뉴(§19.12)도 여기로 옮겨야 제값을 한다. `mirror`/`invert`/`rotate` 는
    **결과를 봐야** 뜻이 있는 연산인데 텍스트 메뉴에서는 축이 어디로 갔는지
    보이지 않는다
-3. **축 마커를 편집기 쪽으로** — 지금은 메인 뷰에 얹혀 있다. 원래 자리는 축
+2. **축 마커를 편집기 쪽으로** — 지금은 메인 뷰에 얹혀 있다. 원래 자리는 축
    집합을 만들고 고칠 때 보는 별도 패널이다. `render/markers` 가 렌더러
    비의존이라 (§15) 옮길 것은 배선뿐이다 (§11.4)
-4. **실시간 최적화의 남은 항목** — 구성 끝 snapshot, carrier `m`/`s` 캐시,
+3. **실시간 최적화의 남은 항목** — 구성 끝 snapshot, carrier `m`/`s` 캐시,
    trace + guard (§12.3). 급하지 않다. 몸통 정의가 밀리초대이고 평가가
    worker 에서 돌아 UI 를 멈추지 않는다
-5. **사용자 조작 UI** — move history, 유도된 회전각 메뉴 (§7.7, §13). 보류.
+4. **사용자 조작 UI** — move history, 유도된 회전각 메뉴 (§7.7, §13). 보류.
    엔진은 `available_turns` 까지 준비되어 있고, 조작 방식 자체가 미정이다
 
 ### 안 하기로 한 것
@@ -2351,3 +2352,66 @@ web/fetch_pyodide.py 받아서 해시를 맞춘다. CI 와 로컬이 같은 것�
 들고 있을 수 있다. Pages 가 `max-age=600` 을 주므로 10분이면 스스로 풀린다.
 경로에 버전을 넣으면 그 10분이 없어지지만 버전이 두 곳이 된다 — 드물게 10분을
 잃는 쪽이, 늘 어긋날 수 있는 쪽보다 싸다.
+
+#### 정책
+
+```text
+default-src 'none'
+script-src  'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'
+worker-src  blob: 'self'
+child-src   blob: 'self'
+connect-src 'self'
+style-src   'self' 'unsafe-inline'
+img-src     'self'
+base-uri    'none'
+form-action 'none'
+```
+
+목표는 `connect-src 'self'` 한 줄이다. 나머지는 그 한 줄이 서게 하는 것들과,
+`default-src 'none'` 이 막아 버린 것 중 실제로 쓰는 것들이다.
+
+**`'unsafe-eval'` 은 Pyodide 가 필요로 한다.** Emscripten 의 EM_JS 상수가
+초기화 때 `eval(func)` 로 만들어진다 (`pyodide.asm.js` 안에 여섯 군데). 이것이
+우리가 사는 성질을 깎지 않는다 — 필요한 것은 **출처 목록**이고, `eval` 은 같은
+전역 안에서 문자열을 코드로 만드는 것뿐이라 그것만으로는 밖으로 못 나간다.
+파이썬 인터프리터가 이미 하는 일이기도 하다. `'unsafe-inline'` 도 같다.
+`index.html` 의 인라인 script/style 을 위한 것이고 출처 목록은 그대로 산다.
+
+**`worker-src` 에 `'self'` 가 있어야 한다.** blob 만 열면 shim 은 뜨는데
+본문이 막힌다 — Chrome 은 모듈 worker 의 **모듈 그래프 전체**를 "worker 만들기"
+로 보고, blob 이 `import` 하는 `worker.js` 도 `script-src` 가 아니라
+`worker-src` 로 잰다. 이건 문서에서 읽어 알 수 있는 것이 아니었고 브라우저가
+말해 줬다:
+
+```text
+Creating a worker from 'http://…/worker.js?v=…' violates the following
+Content Security Policy directive: "worker-src blob:"
+```
+
+그 위반이 `(index)` 로 보고된다는 것도 같이 알려 준다 — 이 검사는 **문서
+정책**으로 돌므로 `'self'` 가 문서 출처로 정상적으로 풀린다.
+
+**`script-src` 에 `blob:` 을 넣지 않는다.** 넣으면 정의가 제 blob 을 만들어
+`import()` 할 수 있다. worker 를 띄우는 것은 `worker-src` 소관이라 거기만 연다.
+`worker-src` 를 모르는 브라우저는 `child-src` 로, 그것도 모르면 `default-src`
+로 떨어지므로 둘 다 적는다. `default-src` 까지 떨어지는 브라우저에서는
+worker 가 아예 안 뜬다 — 조용히 약해지는 것보다 낫고, 부팅 워치독이 그것을
+말해 준다 (§19.5).
+
+`frame-ancestors` 는 meta 로 걸 수 없다. 헤더 전용이다.
+
+#### 이 절이 사는 것과 사지 않는 것
+
+| | 막히는가 | 무엇이 막는가 |
+|---|---|---|
+| `js.fetch(url)` | 예 | 능력 제거 + `connect-src` |
+| `js.WebSocket(...)`, `EventSource` | 예 | 능력 제거 + `connect-src` |
+| 중첩 worker 로 전역 되찾기 | 예 | 능력 제거 (`Worker`) + `worker-src` |
+| `js.eval("import('https://…')")` | 예 | `script-src 'self'` |
+| `js.document…` | 예 | worker 에 `document` 가 없다 (§19.5) |
+| `while True: pass` | 아니오 | 죽일 수는 있다 (`terminate`) |
+| 화면에 거짓말 그리기 | 아니오 | 정의가 그리는 것이 곧 결과다 |
+
+마지막 둘은 이 절의 목표가 아니다. 정의를 실행하기로 한 이상 그 정의가
+그리는 그림이 틀렸다는 것은 사람이 코드를 읽어 판단할 일이고 (§19.4), 멈추는
+것은 중지 버튼이 다룬다.

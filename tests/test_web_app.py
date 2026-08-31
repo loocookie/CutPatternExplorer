@@ -332,6 +332,41 @@ def test_the_runtime_manifest_is_the_only_place_the_version_lives():
     assert version not in WORKER, f"worker.js 에 버전 {version} 이 박혀 있다"
 
 
+def test_the_page_carries_a_policy():
+    """CSP 는 능력 제거가 못 막는 것을 막는다 (§19.14).
+
+    동적 `import()` 는 함수가 아니라 문법이라 전역에서 지울 수 없고,
+    `connect-src` 가 아니라 `script-src` 소관이다. 반대로 CSP 만으로는 상속이
+    안 먹는 브라우저에서 전부가 걸린다. 서로의 구멍을 메우는 관계다.
+    """
+    head = PAGE[:PAGE.index("<style>")]
+    assert 'http-equiv="Content-Security-Policy"' in head, "meta 는 head 에 있어야 한다"
+
+    start = head.index('http-equiv="Content-Security-Policy"')
+    policy = head[head.index('content="', start) + len('content="'):]
+    policy = policy[:policy.index('"')]
+    rules = {}
+    for part in policy.split(";"):
+        part = part.split()
+        if part:
+            rules[part[0]] = part[1:]
+
+    assert rules["default-src"] == ["'none'"]
+    # 내보내는 길. 이것 하나가 이 절의 목표다
+    assert rules["connect-src"] == ["'self'"]
+    # 지울 수 없는 동적 import() 가 여기 걸린다
+    assert "'self'" in rules["script-src"]
+    assert not any(s.startswith("http") for s in rules["script-src"]),         "출처를 열면 정의가 그리로 보낼 수 있다"
+    # blob worker 라야 정책이 정의가 도는 곳까지 간다. 'self' 가 함께 있는 것은
+    # blob 이 import 하는 worker.js 때문이다 — Chrome 은 모듈 worker 의 모듈
+    # 그래프 전체를 "worker 만들기" 로 봐서 script-src 가 아니라 worker-src 로
+    # 잰다. blob: 만 열면 shim 은 뜨는데 본문이 막힌다
+    assert set(rules["worker-src"]) == {"blob:", "'self'"}
+    assert not any(s.startswith("http") for s in rules["worker-src"])
+    # script-src 에 blob: 이 있으면 정의가 제 blob 을 만들어 import 한다
+    assert "blob:" not in rules["script-src"]
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 
@@ -867,10 +902,29 @@ def test_nothing_the_user_sees_is_in_korean():
                 return line[:i]
         return line
 
-    def visible(path):
-        """줄 끝 주석과 /* */ 주석을 뺀 나머지에서 한글을 찾는다."""
+    def strip_html_comments(text):
+        """<!-- --> 를 지운다. 줄 수는 그대로 둬야 줄 번호가 안 어긋난다."""
         out = []
-        text = path.read_text(encoding="utf-8")
+        rest = text
+        while True:
+            i = rest.find("<!--")
+            if i == -1:
+                out.append(rest)
+                break
+            j = rest.find("-->", i)
+            if j == -1:
+                out.append(rest[:i])
+                break
+            out.append(rest[:i])
+            # 지운 자리의 줄바꿈만 남긴다
+            out.append(chr(10) * rest.count(chr(10), i, j))
+            rest = rest[j + 3:]
+        return "".join(out)
+
+    def visible(path):
+        """줄 끝 주석과 /* */, <!-- --> 주석을 뺀 나머지에서 한글을 찾는다."""
+        out = []
+        text = strip_html_comments(path.read_text(encoding="utf-8"))
         inside = False
         for i, line in enumerate(text.splitlines(), 1):
             body = code_only(line)

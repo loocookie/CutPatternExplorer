@@ -1,5 +1,29 @@
 <!doctype html>
 <meta charset="utf-8">
+<!-- 정의가 밖으로 나가는 길을 막는다 (§19.14).
+
+     GitHub Pages 는 응답 헤더를 줄 수 없으므로 meta 로 건다. worker 는 문서의
+     CSP 를 물려받지 않지만, blob 으로 띄운 worker 는 물려받는다 — 그래서
+     connect-src 가 정의가 실제로 도는 곳까지 간다 (web/app.js).
+
+     'unsafe-eval' 은 Pyodide 가 필요로 한다. Emscripten 의 EM_JS 상수가
+     초기화 때 eval() 로 만들어진다. 이것이 우리가 사는 성질을 깎지는 않는다 —
+     필요한 것은 출처 목록이고, eval 은 같은 전역 안에서 문자열을 코드로 만드는
+     것뿐이라 밖으로 나가지 못한다. 지울 수 없는 동적 import() 는 script-src
+     'self' 에 걸린다.
+
+     'unsafe-inline' 도 마찬가지다. index.html 의 인라인 script/style 을 위한
+     것이고, 출처 목록은 그대로 산다.
+
+     worker-src 에 'self' 가 필요한 것은 blob 이 import 하는 worker.js 때문이다.
+     Chrome 은 모듈 worker 의 **모듈 그래프 전체**를 "worker 만들기" 로 봐서
+     script-src 가 아니라 worker-src 로 잰다. blob: 만 열면 shim 은 뜨는데
+     본문이 막힌다.
+
+     worker-src 를 모르는 브라우저는 child-src 로, 그것도 모르면 default-src
+     로 떨어진다. script-src 에 blob: 을 넣지 않는 것은 일부러다 — 넣으면
+     정의가 제 blob 을 만들어 import 할 수 있다. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src blob: 'self'; child-src blob: 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Cut Pattern Explorer</title>
 <style>
   :root { color-scheme: light; }
@@ -106,11 +130,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=14f21f68"></script>
-<script src="render.js?v=14f21f68"></script>
-<script src="editor.js?v=14f21f68"></script>
-<script src="share.js?v=14f21f68"></script>
-<script src="app.js?v=14f21f68"></script>
+<script src="vocab.js?v=7cfb5ff9"></script>
+<script src="render.js?v=7cfb5ff9"></script>
+<script src="editor.js?v=7cfb5ff9"></script>
+<script src="share.js?v=7cfb5ff9"></script>
+<script src="app.js?v=7cfb5ff9"></script>
 <script>
 "use strict";
 
