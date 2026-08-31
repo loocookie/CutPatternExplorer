@@ -122,7 +122,7 @@ def test_rotate_from_two_pairs():
 def test_pairs_reject_a_changed_included_angle():
     """사잇각이 보존되지 않으면 그런 회전은 없다. 조용히 근사하지 않는다."""
     c = S.cube("cube")
-    with pytest.raises(ValueError, match="사잇각"):
+    with pytest.raises(ValueError, match="angle between"):
         rotation_from_pairs(
             [(c["c-0"].normal, c["c-1"].normal), (c["c-1"].normal, c["c-1"].normal)]
         )
@@ -130,7 +130,7 @@ def test_pairs_reject_a_changed_included_angle():
 
 def test_pairs_reject_parallel_inputs():
     c = S.cube("cube")
-    with pytest.raises(ValueError, match="평행"):
+    with pytest.raises(ValueError, match="parallel"):
         rotation_from_pairs(
             [(c["c-0"].normal, c["c-1"].normal), (c["c-0"].normal, c["c-1"].normal)]
         )
@@ -161,7 +161,7 @@ def test_remove_accepts_axis_objects():
 
 
 def test_remove_reports_unknown_axes():
-    with pytest.raises(KeyError, match="없는 축"):
+    with pytest.raises(KeyError, match="no such axes"):
         remove(S.cube("cube"), "nope")
 
 
@@ -240,7 +240,7 @@ def test_carry_accepts_a_whole_axis_set():
 def test_carry_rejects_self_reference():
     c = S.cube("cube")
     with puzzle("t", c):
-        with pytest.raises(ValueError, match="자기 자신"):
+        with pytest.raises(ValueError, match="carry itself"):
             carry(c["c-0"], c["c-0"])
 
 

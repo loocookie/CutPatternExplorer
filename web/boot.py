@@ -32,7 +32,7 @@ def _namespace():
     ns = {"__name__": "__cutpattern__", "math": math, "S": _solids, "solids": _solids}
     clash = set(_dsl.__all__) & set(_solids.__all__)
     if clash:
-        raise RuntimeError("저작 계층 이름이 겹친다: %s" % sorted(clash))
+        raise RuntimeError("authoring names collide: %s" % sorted(clash))
     for module in (_dsl, _solids):
         for name in module.__all__:
             ns[name] = getattr(module, name)
@@ -49,13 +49,13 @@ def _compile(source):
     try:
         return compile(source, "<정의>", "exec")
     except SyntaxError as exc:
-        where = " (%d번째 줄)" % exc.lineno if exc.lineno else ""
+        where = " (line %d)" % exc.lineno if exc.lineno else ""
         if exc.msg and "return" in exc.msg and "outside function" in exc.msg:
             raise SyntaxError(
-                "정의는 함수가 아니라 그냥 실행되는 코드다%s. `return p` 를 지운다 — "
-                "`with puzzle(...) as p:` 블록만 있으면 찾아서 쓴다." % where
+                "a definition is a script, not a function%s. drop `return p` — "
+                "a `with puzzle(...) as p:` block is all it takes." % where
             ) from None
-        raise SyntaxError("문법 오류%s: %s" % (where, exc.msg)) from None
+        raise SyntaxError("syntax error%s: %s" % (where, exc.msg)) from None
 
 
 def load(source):
@@ -77,10 +77,10 @@ def load(source):
                      if callable(v) and getattr(v, "__module__", None) == "__cutpattern__"]
         if callables:
             raise ValueError(
-                "정의가 함수 %s 안에 있고 아무도 부르지 않았다. 함수를 벗기거나 "
-                "맨 아래에서 호출한다." % ", ".join(sorted(callables))
+                "the definition is inside %s and nothing calls it. unwrap the function "
+                "or call it at the bottom." % ", ".join(sorted(callables))
             )
-        raise ValueError("정의에 puzzle 블록이 없다. with puzzle(...) as p: 로 감싼다")
+        raise ValueError("no puzzle block in the definition. wrap it in `with puzzle(...) as p:`")
     return found[-1]
 
 
@@ -116,8 +116,8 @@ def evaluate(angles_json, max_step):
     note = ""
     if trunc:
         t = trunc[0]
-        note = "각도 변경으로 연산 #%d(%s) 이후 %d개가 불가능해짐: %s" % (
-            t.op_index, t.axis_id, t.remaining, t.reason
+        note = "changing the angle made %d operations after #%d(%s) impossible: %s" % (
+            t.remaining, t.op_index, t.axis_id, t.reason
         )
     # 좌표를 뺀 나머지는 작다. 폴리라인 개수에 비례하고 점 개수와 무관하다
     return {
@@ -243,7 +243,7 @@ def add_axis_set(source, factory):
     """
     ns = _namespace()
     if factory not in ns:
-        raise ValueError("모르는 축 집합: %r" % factory)
+        raise ValueError("unknown axis set: %r" % factory)
 
     default_id = _default_id(factory)
 
@@ -260,7 +260,7 @@ def add_axis_set(source, factory):
         tree = ast.parse(source)
     except SyntaxError as exc:
         raise ValueError(
-            "코드에 문법 오류가 있어 넣을 수 없다 (%d번째 줄). 먼저 고친다."
+            "cannot insert: the code has a syntax error (line %d). fix it first."
             % (exc.lineno or 0)
         ) from None
 
@@ -290,7 +290,7 @@ def add_axis_set(source, factory):
     block = blocks[-1]              # 마지막 블록을 쓴다. load() 와 같은 규약
     call = block.items[0].context_expr
     if not call.args:
-        raise ValueError("puzzle() 에 이름이 없다. puzzle(\"이름\", 축집합) 꼴이어야 한다")
+        raise ValueError("puzzle() has no name. it should look like puzzle(\"name\", axes)")
 
     at = _offsets(source)
     body = block.body

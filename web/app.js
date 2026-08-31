@@ -34,7 +34,7 @@ class Engine {
       const where = [ev && ev.filename, ev && ev.lineno].filter(Boolean).join(":");
       this._die(new Error(
         (ev && ev.message) ||
-        ("worker 를 불러오지 못했다" + (where ? " (" + where + ")" : ""))
+        ("Could not load the worker" + (where ? " (" + where + ")" : ""))
       ));
     };
   }
@@ -50,7 +50,7 @@ class Engine {
   _send(payload, transfer) {
     // 죽은 worker 에 보내면 답이 영영 안 온다. 기다리지 않고 바로 알린다
     if (!this.worker) {
-      return Promise.reject(this.failure || new Error("엔진이 멈춰 있다"));
+      return Promise.reject(this.failure || new Error("The engine is not running"));
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
@@ -77,7 +77,7 @@ class Engine {
   /** 무한 루프에 빠진 정의를 죽인다. 메인 스레드에서는 할 수 없는 일이다. */
   stop() {
     if (!this.worker) return;
-    this._die(new Error("중지했다"));
+    this._die(new Error("Stopped"));
   }
 
   get running() {

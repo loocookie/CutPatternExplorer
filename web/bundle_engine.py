@@ -68,11 +68,11 @@ def vocabulary() -> dict[str, list[str]]:
 
     clash = set(dsl.__all__) & set(solids.__all__)
     if clash:
-        raise RuntimeError(f"저작 계층 이름이 겹친다: {sorted(clash)}")
+        raise RuntimeError(f"Authoring names collide: {sorted(clash)}")
     return {
-        "정의와 질의": list(dsl.__all__),
-        "축 집합": list(solids.__all__),
-        "그 밖": ["math", "S (= solids)"],
+        "Definition and queries": list(dsl.__all__),
+        "Axis sets": list(solids.__all__),
+        "Also": ["math", "S (= solids)"],
     }
 
 
@@ -95,7 +95,7 @@ def menu() -> dict[str, list[list[str]]]:
             out.append([key, "%s (%d)" % (key.replace("_", " "), len(aset))])
         return out
 
-    return {"정다면체": entries(solids.PLATONIC), "카탈란": entries(solids.CATALAN)}
+    return {"Platonic": entries(solids.PLATONIC), "Catalan": entries(solids.CATALAN)}
 
 
 def main() -> None:

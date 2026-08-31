@@ -213,7 +213,7 @@ def test_from_normals_numbers_axes_with_a_prefix():
 
 
 def test_from_orbit_validates_the_seed():
-    with pytest.raises(ValueError, match="궤도 크기"):
+    with pytest.raises(ValueError, match="orbit size"):
         S.from_orbit("bad", (1, 1, 1), "O", 6, "q")
 
 
@@ -327,7 +327,7 @@ def test_archimedean_direction_sets_come_from_merge():
 
 
 def test_catalan_seed_errors_are_caught_by_the_orbit_size():
-    with pytest.raises(ValueError, match="궤도 크기"):
+    with pytest.raises(ValueError, match="orbit size"):
         S.from_orbit("bad", (1, 1, 3), "Oh", 12, "q")
 
 
@@ -356,7 +356,7 @@ def test_from_orbit_works_without_knowing_the_count():
 def test_from_orbit_still_verifies_when_told_to():
     """씨앗이 틀렸는데 그럴듯한 개수가 나오는 것이 제일 나쁘다."""
     assert len(S.from_orbit("x", (1, 1, 1), "O", 8)) == 8
-    with pytest.raises(ValueError, match="궤도 크기"):
+    with pytest.raises(ValueError, match="orbit size"):
         S.from_orbit("x", (1, 1, 1), "O", 6)
 
 

@@ -254,7 +254,7 @@ def test_unbalanced_turn_in_region_is_rejected():
         split(faces)
         with region(outside(x), outside(xm)):
             turn_op(z, 45)
-    with pytest.raises(ValueError, match="되돌려지지"):
+    with pytest.raises(ValueError, match="not undone"):
         _evaluate(p)
 
 

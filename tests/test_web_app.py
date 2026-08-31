@@ -117,7 +117,7 @@ def test_illegal_turn_is_reported_not_raised(browser_globals):
 
 
 def test_a_definition_without_a_puzzle_block_is_rejected_clearly(browser_globals):
-    with pytest.raises(ValueError, match="puzzle 블록이 없다"):
+    with pytest.raises(ValueError, match="no puzzle block"):
         browser_globals["load"]("x = 1\n")
 
 
@@ -181,7 +181,7 @@ def test_shared_code_shows_a_warning():
     """읽어 보라고 말해야 한다. 조용히 채워 넣으면 자기 코드로 착각한다."""
     body = _function_body(PAGE, "async function start()")
     assert "els.shared.style.display" in body
-    for word in ("남이 쓴", "브라우저에서", "실행을 누른다"):
+    for word in ("someone", "browser", "press Run"):
         assert word in body, word
 
 
@@ -266,7 +266,8 @@ def test_there_is_a_way_out_of_the_editor_by_keyboard():
     assert '"Escape"' in editor
     assert "escaped" in editor
     # 페이지가 그 규약을 알려야 한다. 모르면 갇힌 것과 같다
-    assert "Esc" in PAGE and "포커스" in PAGE
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Esc" in readme
 
 
 def test_edits_are_minimal_so_undo_still_works():
@@ -304,7 +305,7 @@ def test_dsl_and_solids_do_not_share_names(browser_globals):
     original = solids.__all__
     try:
         solids.__all__ = tuple(original) + ("puzzle",)
-        with pytest.raises(RuntimeError, match="겹친다"):
+        with pytest.raises(RuntimeError, match="collide"):
             browser_globals["_namespace"]()
     finally:
         solids.__all__ = original
@@ -382,7 +383,7 @@ def test_worker_results_are_plain_objects():
 
 def test_empty_vocabulary_says_so():
     """비면 조용히 넘어가지 말아야 한다. 빈 패널은 원인을 안 알려 준다."""
-    assert "vocab.js 가 없다" in PAGE
+    assert "vocab.js is missing" in PAGE
 
 
 def test_vocabulary_does_not_wait_for_pyodide():
@@ -412,8 +413,8 @@ return p
     with pytest.raises(SyntaxError) as got:
         browser_globals["load"](source)
     text = str(got.value)
-    assert "return p" in text and "지운다" in text
-    assert "6번째 줄" in text, text
+    assert "return p" in text and "drop" in text
+    assert "line 6" in text, text
 
     # 그 줄만 빼면 통과한다
     info = browser_globals["prepare"](source.replace("\nreturn p\n", "\n"))
@@ -429,12 +430,12 @@ def test_a_definition_trapped_in_a_function_is_explained(browser_globals):
         split(faces)
     return p
 """
-    with pytest.raises(ValueError, match="함수 build 안에 있고"):
+    with pytest.raises(ValueError, match="inside build"):
         browser_globals["load"](source)
 
 
 def test_syntax_errors_name_the_line(browser_globals):
-    with pytest.raises(SyntaxError, match="1번째 줄"):
+    with pytest.raises(SyntaxError, match="line 1"):
         browser_globals["load"]("with puzzle(" + chr(34) + "t" + chr(10))
 
 
@@ -458,9 +459,9 @@ def test_the_script_contract_is_documented():
     오류 메시지가 그 자리에서 가르치므로 (§19.7) 화면에 상주할 이유가 없다.
     """
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "정의는 스크립트다" in readme
+    assert "A definition is a script" in readme
     assert "with puzzle(...)" in readme
-    assert "축 집합마다 절단 각도 슬라이더가 하나씩" in readme
+    assert "Each axis set gets its own cut-angle slider" in readme
     # 편집창 조작법도 여기 있다
     for key in ("Tab", "Shift+Tab", "Esc", "Ctrl+Enter"):
         assert key in readme, key
@@ -513,7 +514,7 @@ def test_a_dead_worker_fails_fast():
 
 def test_a_failed_reboot_is_reported():
     """재부팅이 실패하면 '중지했다' 가 그대로 남아 원인을 가린다."""
-    assert "엔진을 다시 올리지 못했다" in PAGE
+    assert "Could not restart the engine" in PAGE
 
 
 def test_the_editor_is_filled_before_booting():
@@ -550,7 +551,7 @@ def test_sliders_span_the_whole_range():
 
 def test_an_empty_cut_says_so():
     """carrier 0 인데 폴리라인이 남으면(축 마커) 고장난 것처럼 읽힌다."""
-    assert "절단 없음" in PAGE
+    assert "no cuts" in PAGE
     assert "out.carriers === 0" in PAGE
 
 
@@ -693,7 +694,7 @@ def test_code_without_a_puzzle_block_gets_one(browser_globals):
 
 def test_broken_code_is_refused_not_mangled(browser_globals):
     """타이핑 중에는 늘 문법이 깨져 있다. 억지로 끼우면 남의 코드를 망친다."""
-    with pytest.raises(ValueError, match="문법 오류"):
+    with pytest.raises(ValueError, match="syntax error"):
         browser_globals["add_axis_set"]("with puzzle(\n", "cube")
 
 
@@ -717,8 +718,8 @@ def test_the_menu_lists_only_zero_argument_presets():
     from cutpattern import solids
 
     menu = bundle_engine.menu()
-    assert {k for k, _ in menu["정다면체"]} == set(solids.PLATONIC)
-    assert {k for k, _ in menu["카탈란"]} == set(solids.CATALAN)
+    assert {k for k, _ in menu["Platonic"]} == set(solids.PLATONIC)
+    assert {k for k, _ in menu["Catalan"]} == set(solids.CATALAN)
     assert "prism" not in {k for items in menu.values() for k, _ in items}
 
 
@@ -727,3 +728,88 @@ def test_the_menu_writes_code():
     assert "engine.addAxisSet(els.src.value" in PAGE
     assert "els.src.value = await engine.addAxisSet" in PAGE
     assert 'id="addPick"' in PAGE and "globalThis.MENU" in PAGE
+
+
+# ---- 언어 (§19.10) ------------------------------------------------------
+
+
+def test_nothing_the_user_sees_is_in_korean():
+    """타겟이 한국어권이 아니다. 주석과 설계 문서는 한국어로 둔다 (§19.10).
+
+    엔진 예외 메시지까지 포함한다. 정의를 쓰다 틀리면 그것이 화면에 뜨므로,
+    거기까지 안 옮기면 반만 영어가 되어 둘 다보다 나쁘다.
+    """
+    import re
+
+    korean = re.compile(r"[가-힣]")
+
+    QUOTES = (chr(34), chr(39), "`")
+
+    def code_only(line):
+        """줄 끝 주석을 떼어 낸다. 따옴표 안의 // 는 건드리지 않는다."""
+        quote = None
+        for i, ch in enumerate(line):
+            if quote:
+                if ch == quote and line[i - 1] != "\\":
+                    quote = None
+            elif ch in QUOTES:
+                quote = ch
+            elif ch == "/" and line[i : i + 2] == "//":
+                return line[:i]
+        return line
+
+    def visible(path):
+        """줄 끝 주석과 /* */ 주석을 뺀 나머지에서 한글을 찾는다."""
+        out = []
+        text = path.read_text(encoding="utf-8")
+        inside = False
+        for i, line in enumerate(text.splitlines(), 1):
+            body = code_only(line)
+            if inside:
+                if "*/" in body:
+                    body = body.split("*/", 1)[1]
+                    inside = False
+                else:
+                    continue
+            while "/*" in body:
+                head, rest = body.split("/*", 1)
+                if "*/" in rest:
+                    body = head + rest.split("*/", 1)[1]
+                else:
+                    body, inside = head, True
+                    break
+            stripped = body.strip()
+            if stripped.startswith(("//", "#", "*")):
+                continue
+            if not korean.search(stripped):
+                continue
+            out.append(f"{path.name}:{i}: {stripped[:60]}")
+        return out
+
+    offenders = []
+    for name in ("index.html", "app.js", "worker.js", "share.js", "editor.js",
+                 "render.js", "vocab.js"):
+        offenders += visible(ROOT / "web" / name)
+    assert not offenders, offenders
+
+
+def test_engine_error_messages_are_in_english():
+    """정의를 쓰다 틀리면 엔진 예외가 그대로 화면에 뜬다."""
+    import re
+
+    korean = re.compile(r"[가-힣]")
+    offenders = []
+    for path in (ROOT / "cutpattern").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"raise \w+\(\s*\n?\s*(f?[\"'][^\n]*)", source):
+            if korean.search(match.group(1)):
+                offenders.append(f"{path.name}: {match.group(1)[:50]}")
+    assert not offenders, offenders
+
+
+def test_readme_is_in_english():
+    """사용자가 제일 먼저 보는 글이다."""
+    import re
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert not re.search(r"[가-힣]", readme.replace("(Korean)", ""))

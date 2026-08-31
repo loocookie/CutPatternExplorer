@@ -55,7 +55,7 @@ class AxisSet:
         for a in self.axes:
             if a.id == axis_id:
                 return a
-        raise KeyError(f"축 없음: {axis_id!r} (집합 {self.id!r})")
+        raise KeyError(f"no such axis: {axis_id!r} in set {self.id!r}")
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ class PuzzleFamily:
             for a in s.axes:
                 if a.id == axis_id:
                     return s, a
-        raise KeyError(f"축 없음: {axis_id!r}")
+        raise KeyError(f"no such axis: {axis_id!r}")
 
     def cut_angle_inputs(self) -> tuple[str, ...]:
         seen: list[str] = []

@@ -64,7 +64,7 @@ async function decodeSource(payload) {
     return new TextDecoder().decode(raw);
   }
   if (kind === RAW) return new TextDecoder().decode(bytes);
-  throw new Error("모르는 링크 형식이다");
+  throw new Error("Unknown link format");
 }
 
 /** 현재 주소를 바탕으로 공유 링크를 만든다. */

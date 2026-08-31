@@ -111,8 +111,8 @@ class UncutBoundaryError(Exception):
 
     def __init__(self, axis_id: str, gap: float) -> None:
         super().__init__(
-            f"영역 경계가 아직 절단이 아니다: 축 {axis_id!r} "
-            f"(빈 길이 {gap:.4f}). 그 축을 먼저 split 해야 한다"
+            f"the region boundary is not a cut yet: axis {axis_id!r} "
+            f"(gap {gap:.4f}). split that axis first"
         )
         self.axis_id = axis_id
         self.gap = gap
@@ -380,7 +380,7 @@ def evaluate(
     각도의 함수라, 합법이던 정의가 슬라이더를 미는 것만으로 불법이 된다.
     """
     if on_illegal not in ("raise", "truncate"):
-        raise ValueError(f"on_illegal 은 'raise' 또는 'truncate' (받은 값: {on_illegal!r})")
+        raise ValueError(f"on_illegal must be 'raise' or 'truncate', got {on_illegal!r}")
 
     # 각도를 진입 시점에 고정한다. operation 마다 다시 조회하므로, 실행 도중
     # 호출자가 값을 바꾸면 앞 연산은 theta1 로 split 하고 뒤 Turn 은 theta2 의
@@ -484,8 +484,8 @@ def evaluate(
                     reg, normals[axis.id], theta, frames, active_region()
                 )
                 if not ok:
-                    where = " (영역 안)" if active_region() else ""
-                    reason = f"회전 경계원이 완전한 cut 이 아니다{where} (빈 길이 {gap:.4f})"
+                    where = " (within the region)" if active_region() else ""
+                    reason = f"the turn boundary circle is not a complete cut{where} (gap {gap:.4f})"
                     if on_illegal == "raise":
                         raise IllegalTurnError(axis.id, reason)
                     log.append(
@@ -622,7 +622,7 @@ def evaluate(
                 bc.spans.replace_all(rebuilt)
         elif isinstance(op, ExitRegion):
             if not region_stack:
-                raise ValueError(f"연산 #{i}: 짝 없는 ExitRegion")
+                raise ValueError(f"operation #{i}: unmatched ExitRegion")
             depth = len(region_stack) - 1
             region_stack.pop()
             mark = region_marks.pop()
@@ -632,8 +632,8 @@ def evaluate(
                         span.hidden_at = None
             if len(pending_turns) != mark:
                 raise ValueError(
-                    f"연산 #{i}: 영역 블록 안의 회전이 되돌려지지 않았다. "
-                    "영역 회전은 블록 안에서 짝을 맞춰야 한다 (turned 를 쓴다)"
+                    f"operation #{i}: a turn inside the region block was not undone. "
+                    "turns inside a region must be paired (use turned)"
                 )
         elif isinstance(op, RollbackTurns):
             # 접합된 회전은 실행된 적이 없으므로 되돌릴 것도 없다. 프레임만
@@ -664,7 +664,7 @@ def evaluate(
                         Truncated(
                             op_index=i,
                             axis_id=axis.id,
-                            reason=f"되돌리기 실패: {exc.reason}",
+                            reason=f"rollback failed: {exc.reason}",
                             remaining=len(family.operations) - i,
                         )
                     )
@@ -674,5 +674,5 @@ def evaluate(
             if failed:
                 return reg, log
         else:
-            raise TypeError(f"알 수 없는 연산: {op!r}")
+            raise TypeError(f"unknown operation: {op!r}")
     return reg, log

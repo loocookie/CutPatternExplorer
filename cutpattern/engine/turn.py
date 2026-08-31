@@ -35,7 +35,7 @@ class IllegalTurnError(Exception):
     """회전 경계원이 완전한 cut 이 아니라서 돌릴 수 없다 (§7.1)."""
 
     def __init__(self, axis_id: str, reason: str) -> None:
-        super().__init__(f"불법 회전: 축 {axis_id!r} - {reason}")
+        super().__init__(f"illegal turn on axis {axis_id!r}: {reason}")
         self.axis_id = axis_id
         self.reason = reason
 
@@ -124,7 +124,7 @@ def turn(
     # ---- §7.1 합법성. 상태를 건드리기 전에 먼저 --------------------------
     hit = registry.find(a, d)
     if hit is None:
-        raise IllegalTurnError(axis.id, "회전 경계원이 경계 집합에 없다")
+        raise IllegalTurnError(axis.id, "the turn boundary circle is not in the boundary set")
     boundary_bc = hit[0]
     complete, missing = _covers(boundary_bc, constraints)
     if not complete:
@@ -132,7 +132,7 @@ def turn(
         where = " (영역 안)" if constraints else ""
         raise IllegalTurnError(
             axis.id,
-            f"회전 경계원이 완전한 cut 이 아니다{where} (빈 길이 {gap:.4f})",
+            f"the turn boundary circle is not a complete cut{where} (gap {gap:.4f})",
         )
 
     result = TurnResult(

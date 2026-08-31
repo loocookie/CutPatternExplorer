@@ -58,11 +58,11 @@ def axes_of(*targets) -> list[Axis]:
         if isinstance(target, Axis):
             out.append(target)
         elif isinstance(target, (str, bytes)):
-            raise TypeError(f"축 집합 또는 축이 아니다: {target!r}")
+            raise TypeError(f"not an axis set or an axis: {target!r}")
         elif hasattr(target, "__iter__"):
             out.extend(axes_of(*target))
         else:
-            raise TypeError(f"축 집합 또는 축이 아니다: {target!r}")
+            raise TypeError(f"not an axis set or an axis: {target!r}")
     return out
 
 
@@ -78,7 +78,7 @@ def at_angle(reference, degrees: float, *targets, tol_deg: float = ANGLE_TOL_DEG
         at_angle(faces.c0, 90, faces, edges)       여러 집합에 걸쳐
     """
     if not targets:
-        raise TypeError("찾을 축 집합을 줘야 한다: at_angle(기준, 각, 집합)")
+        raise TypeError("give the axis set to search: at_angle(reference, angle, axes)")
     ref = _normal(reference)
     return [
         a
@@ -95,7 +95,7 @@ def angles_from(reference, *targets, tol_deg: float = ANGLE_TOL_DEG):
     값을 여기서 찾는다.
     """
     if not targets:
-        raise TypeError("찾을 축 집합을 줘야 한다: angles_from(기준, 집합)")
+        raise TypeError("give the axis set to search: angles_from(reference, axes)")
     ref = _normal(reference)
     buckets: dict[float, list[Axis]] = defaultdict(list)
     for a in axes_of(*targets):
@@ -113,7 +113,7 @@ def nearest(reference, *targets) -> Axis:
     """기준에 가장 가까운 축 하나."""
     axes = axes_of(*targets)
     if not axes:
-        raise ValueError("대상 축이 없다")
+        raise ValueError("no target axes")
     ref = _normal(reference)
     return max(axes, key=lambda a: float(a.normal @ ref))
 
@@ -128,7 +128,7 @@ def group_by_nearest(source, reference) -> dict[str, list[Axis]]:
     """
     ref_axes = axes_of(reference)
     if not ref_axes:
-        raise ValueError("기준 축 집합이 비어 있다")
+        raise ValueError("the reference axis set is empty")
     groups: dict[str, list[Axis]] = {a.id: [] for a in ref_axes}
     for a in axes_of(source):
         best = max(ref_axes, key=lambda r: float(r.normal @ a.normal))

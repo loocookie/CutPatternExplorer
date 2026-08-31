@@ -73,7 +73,7 @@ def merge(id: str, *sets, name: str = "", tol: float = MERGE_TOL):
     붙인다.
     """
     if not sets:
-        raise ValueError("합칠 축 집합이 없다")
+        raise ValueError("merge() needs at least one axis set")
     out = _new_like(id, name or f"merged({', '.join(s.id for s in sets)})", sets[0])
     seen: list[Vec3] = []
     used: set[str] = set()
@@ -100,7 +100,7 @@ def quaternion_matrix(q) -> Mat3:
     w, x, y, z = (float(v) for v in q)
     norm = math.sqrt(w * w + x * x + y * y + z * z)
     if norm < 1e-12:
-        raise ValueError("영 쿼터니언은 회전이 아니다")
+        raise ValueError("a zero quaternion is not a rotation")
     w, x, y, z = w / norm, x / norm, y / norm, z / norm
     return Mat3(
         (
@@ -117,7 +117,7 @@ def _frame(a, b) -> Mat3:
     rest = Vec3(b) - (e1 @ b) * e1
     length = norm(rest)
     if length < 1e-9:
-        raise ValueError("두 방향이 평행해 회전이 하나로 정해지지 않는다")
+        raise ValueError("the two directions are parallel, so the rotation is not determined")
     e2 = rest / length
     e3 = cross(e1, e2)
     # 열이 기저이므로 행 표현에서는 성분을 가로로 늘어놓는다
@@ -131,14 +131,14 @@ def rotation_from_pairs(pairs) -> Mat3:
     거부한다.
     """
     if len(pairs) != 2:
-        raise ValueError(f"쌍이 정확히 두 개여야 한다 (받은 개수: {len(pairs)})")
+        raise ValueError(f"exactly two pairs are needed, got {len(pairs)}")
     (a, a2), (b, b2) = ((normalize(x), normalize(y)) for x, y in pairs)
     before = math.degrees(math.acos(clamp(a @ b)))
     after = math.degrees(math.acos(clamp(a2 @ b2)))
     if abs(before - after) > 1e-6:
         raise ValueError(
-            f"사잇각이 보존되지 않는다: {before:.6f}도 -> {after:.6f}도. "
-            "그런 회전은 존재하지 않는다"
+            f"the angle between is not preserved: {before:.6f}deg -> {after:.6f}deg. "
+            "no such rotation exists"
         )
     return _frame(a2, b2) @ _frame(a, b).T
 
@@ -163,11 +163,11 @@ def rotate(
     """
     given = [axis is not None, pairs is not None, quaternion is not None]
     if sum(given) != 1:
-        raise ValueError("axis+angle, pairs, quaternion 중 정확히 하나를 준다")
+        raise ValueError("give exactly one of axis+angle, pairs, or quaternion")
 
     if axis is not None:
         if angle is None:
-            raise ValueError("axis 를 주면 angle 도 줘야 한다")
+            raise ValueError("axis was given without angle")
         matrix = rotation_matrix(as_vec(axis), math.radians(float(angle)))
     elif pairs is not None:
         matrix = rotation_from_pairs(pairs)
@@ -254,7 +254,7 @@ def remove(aset, *axes, id: str | None = None, name: str = ""):
     drop = _ids(axes)
     unknown = drop - {a.id for a in aset}
     if unknown:
-        raise KeyError(f"없는 축: {sorted(unknown)} (집합 {aset.id!r})")
+        raise KeyError(f"no such axes: {sorted(unknown)} in set {aset.id!r}")
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
         if a.id not in drop:
@@ -267,7 +267,7 @@ def keep(aset, *axes, id: str | None = None, name: str = ""):
     wanted = _ids(axes)
     unknown = wanted - {a.id for a in aset}
     if unknown:
-        raise KeyError(f"없는 축: {sorted(unknown)} (집합 {aset.id!r})")
+        raise KeyError(f"no such axes: {sorted(unknown)} in set {aset.id!r}")
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
         if a.id in wanted:
@@ -279,7 +279,7 @@ def rename(aset, mapping: dict[str, str], id: str | None = None):
     """축 id 를 바꾼다. 자동 번호가 마음에 들지 않을 때 쓴다."""
     unknown = set(mapping) - {a.id for a in aset}
     if unknown:
-        raise KeyError(f"없는 축: {sorted(unknown)} (집합 {aset.id!r})")
+        raise KeyError(f"no such axes: {sorted(unknown)} in set {aset.id!r}")
     out = _new_like(id or aset.id, aset.name, aset)
     for a in aset:
         out.add(mapping.get(a.id, a.id), a.normal, extra_turns=a.extra_turn_angles)

@@ -1,30 +1,32 @@
 # Cut Pattern Explorer
 
-구면 cut pattern 엔진. 조각 모델 없이 **단위구 위의 절단 경계만** 다룬다.
+A spherical cut-pattern engine. It models **only the cut boundaries on the unit
+sphere** — there are no piece models.
 
-퍼즐 정의를 파이썬으로 쓰면 절단 패턴이 나온다. 절단 각도는 슬라이더로 바꾼다.
+You write a puzzle definition in Python and get the cut pattern. Cut angles are
+sliders, so a whole family of puzzles is one definition.
 
-- 설계와 그 근거: [`docs/design.md`](docs/design.md)
-- 브라우저 판: `web/` (Pyodide + Canvas 2D)
+- Design and the reasoning behind it: [`docs/design.md`](docs/design.md) (Korean)
+- Browser build: `web/` (Pyodide + Canvas 2D)
 
-## 돌려 보기
+## Running it
 
 ```
 python -m http.server 8000
 ```
 
-`http://localhost:8000/web/` 를 연다. Pyodide 는 `file://` 에서 뜨지 않는다.
+Open `http://localhost:8000/web/`. Pyodide does not start from `file://`.
 
-개발용 뷰어(vpython)로 예제를 보려면:
+To view an example in the development viewer (vpython):
 
 ```
 python examples/octocube_master.py
 ```
 
-## 정의 쓰는 법
+## Writing a definition
 
-**정의는 스크립트다.** 함수로 감싸거나 `return` 할 것 없이 `with puzzle(...)`
-블록만 있으면 찾아서 쓴다.
+**A definition is a script.** No function to wrap it in, nothing to `return` —
+a `with puzzle(...)` block is all it takes.
 
 ```python
 c1 = cube("Cube 1")
@@ -36,47 +38,58 @@ with puzzle("OctoCube Master", c1) as p:
             split(*at_angle(x, 90, c1))
 ```
 
-- `import` 를 쓰지 않아도 된다. 저작 계층 이름이 미리 들어가 있다.
-  전체 목록은 편집창의 **바로 쓸 수 있는 이름** 에 있다
-- **축 집합마다 절단 각도 슬라이더가 하나씩** 붙는다. `puzzle(...)` 의 인자
-  목록이 곧 슬라이더 목록이다
-- 축 집합은 **축 집합 추가** 메뉴로 넣을 수도 있다. 메뉴는 코드를 쓴다
+- No `import` needed. The authoring layer is already in scope; the full list is
+  under **Names in scope** in the editor
+- **Each axis set gets its own cut-angle slider.** The argument list of
+  `puzzle(...)` is the slider list
+- Axis sets can also be inserted from the **Add axis set** menu. The menu writes
+  code — nothing is hidden
 
-`examples/` 의 정의들은 import 가능한 모듈이라 `def build(): ... return p` 로
-감싸여 있다. 편집창에는 그 제약이 없다.
+The definitions under `examples/` are importable modules, so they are wrapped in
+`def build(): ... return p`. The editor has no such constraint.
 
-### 이름 규칙
+### Naming
 
 ```
-집합 id    Cube 1, Rhombic Dodecahedron 1     슬라이더에 나오는 표시용 텍스트
-축 id      c1-0, rd1-3                        <집합 약자>-<축 이름>
+set id      Cube 1, Rhombic Dodecahedron 1     display text, shown on the slider
+axis id     c1-0, rd1-3                        <set abbreviation>-<axis name>
 ```
 
-약자는 집합 id 의 낱말 첫 글자와 끝 숫자에서 나온다. 그래서 같은 입체가 여러
-벌 있어도 축 id 가 겹치지 않는다.
+The abbreviation comes from the set id: the first letter of each word plus any
+trailing number. That is what keeps axis ids unique when the same solid appears
+more than once.
 
-## 편집창
+## Editor
 
 | | |
 |---|---|
-| `Tab` / `Shift+Tab` | 4칸 들여쓰기 / 내어쓰기 |
-| `Enter` | 콜론으로 끝난 줄이면 한 단 더 들어간다 |
-| `Esc` 다음 `Tab` | 원래대로 포커스 이동 |
-| `Ctrl+Enter` | 실행 |
+| `Tab` / `Shift+Tab` | indent / outdent by 4 spaces |
+| `Enter` | one level deeper after a line ending in `:` |
+| `Esc` then `Tab` | move focus instead of indenting |
+| `Ctrl+Enter` | run |
 
-슬라이더의 숫자를 누르면 정확한 각도를 직접 넣을 수 있다.
+Click the number above a slider to type an exact angle — the slider steps in
+0.05°, which never lands on values like 54.7356°.
 
-**공유 링크 복사** 는 정의를 URL 에 실어 준다. 링크를 열면 편집창에 채워지지만
-**자동으로 실행되지는 않는다** — 남이 쓴 코드이므로 읽고 누른다.
+**Copy share link** puts the definition in the URL. Opening such a link fills
+the editor but **does not run anything** — it is someone else's code, so you
+read it and press Run.
 
-## 테스트
+## Tests
 
 ```
-python -m pytest -q          # 엔진과 브라우저 쪽 파이썬
-node web/syntax.test.js      # 브라우저 JS 가 파싱되는가
-node web/render.test.js      # 실루엣 자르기와 그리기
-node web/editor.test.js      # 들여쓰기
-node web/share.test.js       # 링크 왕복
+python -m pytest -q          # engine, and the Python that runs in the browser
+node web/syntax.test.js      # the browser JS actually parses
+node web/render.test.js      # silhouette splitting and drawing
+node web/editor.test.js      # indentation
+node web/share.test.js       # link round-trip
 ```
 
-생성물은 `python web/bundle_engine.py` 로 다시 만든다. 낡으면 테스트가 잡는다.
+Generated files are rebuilt with `python web/bundle_engine.py`. Tests catch them
+when they go stale.
+
+## Note on language
+
+Code comments and `docs/design.md` are in Korean; everything a user sees is in
+English. The comments carry the reasoning behind each decision and are worth
+more to a maintainer than a translation would be.

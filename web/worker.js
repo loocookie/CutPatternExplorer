@@ -25,16 +25,16 @@ self.onerror = (ev) => {
   self.postMessage({
     type: "fatal",
     error: [ev && ev.message, ev && ev.filename, ev && ev.lineno]
-      .filter(Boolean).join(" ") || "worker 안에서 알 수 없는 오류",
+      .filter(Boolean).join(" ") || "Unknown error inside the worker",
   });
 };
 
 async function boot() {
-  status("Pyodide 를 받는 중…");
+  status("Downloading Pyodide…");
   const { loadPyodide } = await import(PYODIDE);
   py = await loadPyodide();
 
-  status("엔진을 올리는 중…");
+  status("Loading the engine…");
   await import("./engine.js");   // globalThis.ENGINE_SOURCES 를 채운다
 
   const FS = py.FS;
@@ -121,7 +121,7 @@ self.onmessage = async (ev) => {
     return;
   }
   try {
-    if (!py) throw new Error("엔진이 아직 안 올라왔다");
+    if (!py) throw new Error("The engine is not ready yet");
     const { result, buffer } = HANDLERS[msg.type](msg);
     self.postMessage({ id: msg.id, ok: true, result, buffer }, buffer ? [buffer] : []);
   } catch (e) {

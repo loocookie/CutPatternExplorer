@@ -90,7 +90,7 @@ def test_orbit_directions_are_distinct(label, seed, group, count):
 
 def test_orbit_size_check_catches_a_wrong_seed():
     """정육면체 면축을 (1,1,1) 로 만들려 하면 8개가 나와 바로 잡힌다."""
-    with pytest.raises(ValueError, match="궤도 크기"):
+    with pytest.raises(ValueError, match="orbit size"):
         orbit((1, 1, 1), "O", expected=6)
 
 
@@ -202,7 +202,7 @@ def test_closing_a_rotation_group_rejects_a_reflected_generator():
     from cutpattern.geometry.vector import Mat3
 
     mirror = Mat3(((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)))
-    with pytest.raises(RuntimeError, match="반사"):
+    with pytest.raises(RuntimeError, match="reflections"):
         _close_group([_axis_rotation((0, 0, 1), math.pi / 2), mirror])
 
     # allow_improper 를 주면 통과한다. Td / Oh / Ih 가 그 경로다

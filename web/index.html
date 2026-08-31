@@ -65,7 +65,7 @@
 <div id="stage">
   <canvas id="c"></canvas>
   <div id="stat"></div>
-  <div id="boot">시작하는 중…</div>
+  <div id="boot">Starting…</div>
 </div>
 
 <aside>
@@ -73,24 +73,24 @@
   <div id="shared"></div>
   <div class="bar">
     <select id="addPick"></select>
-    <button id="add">축 집합 추가</button>
+    <button id="add">Add axis set</button>
   </div>
   <textarea id="src" spellcheck="false"></textarea>
   <div class="bar">
-    <button id="run">실행</button>
-    <button id="stop" disabled>중지</button>
-    <button id="share">공유 링크 복사</button>
+    <button id="run">Run</button>
+    <button id="stop" disabled>Stop</button>
+    <button id="share">Copy share link</button>
     <span class="msg" id="msg"></span>
   </div>
   <div id="err"></div>
-  <fieldset id="sliders"><legend>절단 각도</legend></fieldset>
-  <fieldset id="sets"><legend>축 집합</legend></fieldset>
+  <fieldset id="sliders"><legend>Cut angle</legend></fieldset>
+  <fieldset id="sets"><legend>Axis sets</legend></fieldset>
   <fieldset>
-    <label class="tog"><input type="checkbox" id="mk" checked> 축 마커</label>
-    <label class="tog"><input type="checkbox" id="lb" checked> 축 라벨</label>
+    <label class="tog"><input type="checkbox" id="mk" checked> Axis markers</label>
+    <label class="tog"><input type="checkbox" id="lb" checked> Axis labels</label>
   </fieldset>
   <details id="vocab">
-    <summary>바로 쓸 수 있는 이름</summary>
+    <summary>Names in scope</summary>
     <div id="vocabList"></div>
   </details>
 </aside>
@@ -168,13 +168,13 @@ async function refresh(maxStep) {
     view.setScene(out.scene);
     const hidden = [...view.hidden].map((i) => out.scene.axisSets[i]);
     els.stat.textContent =
-      `carrier ${out.carriers}  폴리라인 ${out.scene.starts.length}  ` +
-      `총 호 길이 ${out.length.toFixed(3)}  평가 ${ms.toFixed(0)}ms` +
+      `carriers ${out.carriers}  polylines ${out.scene.starts.length}  ` +
+      `arc length ${out.length.toFixed(3)}  eval ${ms.toFixed(0)}ms` +
       // 0 과 180 은 퇴화원이라 자를 것이 없다. 남는 폴리라인은 축 마커뿐인데
       // 그것만 보이면 고장난 것처럼 읽힌다 (§14)
-      (out.carriers === 0 ? "  |  절단 없음 (0° 와 180° 는 반지름 0)" : "") +
+      (out.carriers === 0 ? "  |  no cuts (0° and 180° have zero radius)" : "") +
       (out.note ? `  |  ${out.note}` : "") +
-      (hidden.length ? `  |  숨긴 축 집합: ${hidden.join(", ")} (재료는 그대로 있다)` : "");
+      (hidden.length ? `  |  hidden: ${hidden.join(", ")} (the material is still there)` : "");
     clearError();
   } catch (e) {
     fail(e);
@@ -191,7 +191,7 @@ function scheduleFinal() {
 }
 
 function buildSliders() {
-  els.sliders.replaceChildren(Object.assign(document.createElement("legend"), { textContent: "절단 각도" }));
+  els.sliders.replaceChildren(Object.assign(document.createElement("legend"), { textContent: "Cut angle" }));
   for (const id of info.inputs) {
     if (angles[id] === undefined) angles[id] = 60;
     const row = document.createElement("div");
@@ -200,7 +200,7 @@ function buildSliders() {
     const label = document.createTextNode(id + "   ");
     const val = document.createElement("span");
     val.className = "val";
-    val.title = "눌러서 정확한 값을 넣는다";
+    val.title = "Click to type an exact value";
     name.append(label, val);
 
     const range = document.createElement("input");
@@ -254,7 +254,7 @@ function buildSliders() {
 }
 
 function buildToggles() {
-  els.sets.replaceChildren(Object.assign(document.createElement("legend"), { textContent: "축 집합" }));
+  els.sets.replaceChildren(Object.assign(document.createElement("legend"), { textContent: "Axis sets" }));
   view.hidden.clear();
   info.axisSets.forEach((id, i) => {
     const label = document.createElement("label");
@@ -275,7 +275,7 @@ function buildToggles() {
 
 async function run() {
   if (!engine.ready) {
-    fail("엔진이 올라와 있지 않다. 새로고침한다.");
+    fail("The engine is not running. Reload the page.");
     return;
   }
   try {
@@ -295,16 +295,16 @@ els.stop.onclick = async () => {
   engine.stop();
   els.stop.disabled = true;
   queued = null; inFlight = false;
-  fail("정의를 중지했다. 엔진을 다시 올린다.");
+  fail("Stopped. Restarting the engine…");
   try {
     await engine.boot();
   } catch (e) {
     // 재부팅이 실패하면 "중지했다" 가 그대로 남아 원인을 가린다
-    fail("엔진을 다시 올리지 못했다: " + e.message);
+    fail("Could not restart the engine: " + e.message);
     return;
   }
   clearError();
-  els.msg.textContent = "엔진을 다시 올렸다";
+  els.msg.textContent = "Engine restarted";
   setTimeout(() => { els.msg.textContent = ""; }, 4000);
 };
 
@@ -314,20 +314,20 @@ els.share.onclick = async () => {
   const link = await Share.shareLink(els.src.value, location.href);
   try {
     await navigator.clipboard.writeText(link);
-    els.msg.textContent = `복사했다 (${link.length}자)`;
+    els.msg.textContent = `Copied (${link.length} chars)`;
   } catch (_) {
     // 클립보드가 막힌 환경이면 주소창에라도 남긴다
     location.hash = link.split("#")[1];
-    els.msg.textContent = "주소창에 넣었다. 복사해서 쓴다";
+    els.msg.textContent = "Put it in the address bar — copy from there";
   }
   if (link.length > Share.SAFE_URL_LENGTH) {
-    els.msg.textContent += " — 너무 길어 잘릴 수 있다";
+    els.msg.textContent += " — long enough that it may get truncated";
   }
   setTimeout(() => { els.msg.textContent = ""; }, 4000);
 };
 
 els.add.onclick = async () => {
-  if (!engine.ready) { fail("엔진이 올라와 있지 않다. 새로고침한다."); return; }
+  if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
   try {
     els.src.value = await engine.addAxisSet(els.src.value, els.addPick.value);
     clearError();
@@ -358,7 +358,7 @@ function showVocabulary() {
   box.replaceChildren();
   const groups = globalThis.VOCAB;
   if (!groups) {
-    box.textContent = "vocab.js 가 없다. python web/bundle_engine.py 를 돌린다.";
+    box.textContent = "vocab.js is missing. Run: python web/bundle_engine.py";
     return;
   }
   for (const [group, items] of Object.entries(groups)) {
@@ -377,7 +377,7 @@ async function start() {
   try {
     shared = await Share.sourceFromHash(location.hash);
   } catch (e) {
-    fail("링크의 정의를 읽지 못했다: " + e.message);
+    fail("Could not read the definition from the link: " + e.message);
   }
 
   // 편집창부터 채운다. 부팅이 실패해도 코드는 보여야 하고, 링크로 받은 정의가
@@ -388,8 +388,8 @@ async function start() {
     els.src.value = shared;
     els.shared.style.display = "block";
     els.shared.textContent =
-      "링크에서 정의를 불러왔다. 남이 쓴 파이썬 코드이고, 실행하면 이 브라우저에서 " +
-      "돈다. 내용을 읽어 보고 실행을 누른다.";
+      "Loaded a definition from the link. This is Python written by someone " +
+      "else and it runs in your browser. Read it, then press Run.";
   }
 
   await engine.boot();

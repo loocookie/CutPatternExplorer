@@ -193,7 +193,7 @@ def normalize(v) -> Vec3:
     x, y, z = float(v[0]), float(v[1]), float(v[2])
     length = math.sqrt(x * x + y * y + z * z)
     if length < NORMAL_EPS:
-        raise ValueError("영벡터는 정규화할 수 없다")
+        raise ValueError("cannot normalize a zero vector")
     return tuple.__new__(Vec3, (x / length, y / length, z / length))
 
 
@@ -209,7 +209,7 @@ def orthonormal_basis(n) -> tuple[Vec3, Vec3]:
     x, y, z = float(n[0]), float(n[1]), float(n[2])
     length = math.sqrt(x * x + y * y + z * z)
     if length < NORMAL_EPS:
-        raise ValueError("영벡터는 정규화할 수 없다")
+        raise ValueError("cannot normalize a zero vector")
     x, y, z = x / length, y / length, z / length
 
     # n과 가장 덜 평행한 표준 기저축을 고른다. 동률은 낮은 인덱스.

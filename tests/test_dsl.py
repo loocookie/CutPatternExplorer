@@ -61,7 +61,7 @@ def test_angle_to_reports_degrees():
 def test_duplicate_axis_id_is_rejected():
     s = AxisSet("s")
     s.add("A", (1, 0, 0))
-    with pytest.raises(ValueError, match="중복"):
+    with pytest.raises(ValueError, match="duplicate|appears in both"):
         s.add("A", (0, 1, 0))
 
 
@@ -193,7 +193,7 @@ def test_axis_id_collision_across_sets_is_rejected():
     """연산이 축을 이름으로 참조하므로 전 집합에서 유일해야 한다."""
     a = AxisSet("a", axes={"X": (1, 0, 0)})
     b = AxisSet("b", axes={"X": (0, 1, 0)})
-    with pytest.raises(ValueError, match="중복"):
+    with pytest.raises(ValueError, match="duplicate|appears in both"):
         puzzle("t", a, b)
 
 
@@ -331,7 +331,7 @@ def test_queries_reject_a_missing_target_set():
     from cutpattern.dsl import angles_from, at_angle
 
     x = S.cube("cube")["c-2"]
-    with pytest.raises(TypeError, match="축 집합"):
+    with pytest.raises(TypeError, match="axis set"):
         at_angle(x, 90)
-    with pytest.raises(TypeError, match="축 집합"):
+    with pytest.raises(TypeError, match="axis set"):
         angles_from(x)

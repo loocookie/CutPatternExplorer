@@ -112,7 +112,7 @@ def from_normals(id: str, normals, prefix: str | None = None, turns=(),
     labels = list(names) if names is not None else range(len(normals))
     if len(labels) != len(normals):
         raise ValueError(
-            f"축 이름 {len(labels)}개, 법선 {len(normals)}개. 개수가 같아야 한다"
+            f"{len(labels)} axis names but {len(normals)} normals. counts must match"
         )
     for label, n in zip(labels, normals):
         s.add(f"{head}-{label}", normalize(n))
@@ -333,7 +333,7 @@ def prism(n: int, id: str | None = None, turns=()):
     옆면 법선은 이웃한 두 꼭짓점의 중간 방위각을 향한다.
     """
     if n < 3:
-        raise ValueError(f"각기둥은 n >= 3 이어야 한다 (받은 값: {n})")
+        raise ValueError(f"a prism needs n >= 3, got {n}")
     id = id or f"Prism {n}"
     head = abbrev(id)
     AxisSet = _axis_set_cls()
@@ -353,7 +353,7 @@ def antiprism(n: int, id: str | None = None, turns=()):
     옆면 법선은 삼각형 평면에서 직접 구한다. n=3 이면 정팔면체와 같아진다.
     """
     if n < 3:
-        raise ValueError(f"엇각기둥은 n >= 3 이어야 한다 (받은 값: {n})")
+        raise ValueError(f"an antiprism needs n >= 3, got {n}")
     id = id or f"Antiprism {n}"
     head = abbrev(id)
     AxisSet = _axis_set_cls()
@@ -378,7 +378,7 @@ def bipyramid(n: int, id: str | None = None, turns=()):
     면 법선은 기둥의 꼭짓점 방향이다. n=4 면 정팔면체와 같아진다.
     """
     if n < 3:
-        raise ValueError(f"쌍뿔은 n >= 3 이어야 한다 (받은 값: {n})")
+        raise ValueError(f"a bipyramid needs n >= 3, got {n}")
     id = id or f"Bipyramid {n}"
     top, bottom = _prism_vertices(n)
     return from_normals(id, list(top) + list(bottom), None, turns, f"{n}각쌍뿔 면축")
@@ -390,7 +390,7 @@ def trapezohedron(n: int, id: str | None = None, turns=()):
     면 법선은 엇각기둥의 꼭짓점 방향이다. n=3 이면 정육면체와 같아진다.
     """
     if n < 3:
-        raise ValueError(f"사다리꼴다면체는 n >= 3 이어야 한다 (받은 값: {n})")
+        raise ValueError(f"a trapezohedron needs n >= 3, got {n}")
     id = id or f"Trapezohedron {n}"
     top, bottom = _antiprism_vertices(n)
     return from_normals(

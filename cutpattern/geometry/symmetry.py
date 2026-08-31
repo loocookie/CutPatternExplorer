@@ -89,15 +89,15 @@ def _close_group(
                     nxt.append(m)
         frontier = nxt
         if len(elements) > 400:
-            raise RuntimeError("군이 닫히지 않는다. 생성원을 확인하라")
+            raise RuntimeError("the group does not close. check the generators")
     out = list(elements.values())
     if expected is not None and len(out) != expected:
-        raise RuntimeError(f"군 크기가 {len(out)}, 기대값은 {expected}")
+        raise RuntimeError(f"group order is {len(out)}, expected {expected}")
     if not allow_improper:
         improper = sum(1 for m in out if _det(m) < 0.0)
         if improper:
             raise RuntimeError(
-                f"회전군에 반사가 {improper}개 섞였다 (det = -1). 생성원을 확인하라"
+                f"{improper} reflections (det = -1) leaked into a rotation group. check the generators"
             )
     return out
 
@@ -119,7 +119,7 @@ def rotation_group(name: str) -> list[Mat3]:
         return _GROUP_CACHE[name]
     if name not in GROUP_ORDERS:
         raise KeyError(
-            f"모르는 대칭군: {name!r} ({', '.join(sorted(GROUP_ORDERS))} 중 하나)"
+            f"unknown symmetry group {name!r}. one of {', '.join(sorted(GROUP_ORDERS))}"
         )
 
     if name == "Td":
@@ -198,14 +198,14 @@ def orbit(seed, group, expected: int | None = None) -> list[Vec3]:
     seed = Vec3(seed)
     length = norm(seed)
     if length < NORMAL_EPS:
-        raise ValueError("씨앗이 영벡터다")
+        raise ValueError("the seed is a zero vector")
     seed = seed / length
 
     dirs = dedupe_directions(g @ seed for g in group)
     dirs.sort(key=lambda v: (round(-v[2], 9), round(math.atan2(v[1], v[0]), 9)))
     if expected is not None and len(dirs) != expected:
         raise ValueError(
-            f"궤도 크기가 {len(dirs)}, 기대값은 {expected}. "
-            f"씨앗 {tuple(round(x, 6) for x in seed)} 확인 필요"
+            f"orbit size is {len(dirs)}, expected {expected}. "
+            f"check the seed {tuple(round(x, 6) for x in seed)}"
         )
     return dirs

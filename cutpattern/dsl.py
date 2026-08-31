@@ -126,7 +126,7 @@ class AxisSet:
         생략하면 집합 기본값을 쓴다.
         """
         if any(a.id == axis_id for a in self._axes):
-            raise ValueError(f"축 id 중복: {axis_id!r} (집합 {self.id!r})")
+            raise ValueError(f"duplicate axis id {axis_id!r} in set {self.id!r}")
         axis = Axis.make(
             axis_id, normal, self.extra_turns if extra_turns is None else extra_turns
         )
@@ -145,7 +145,7 @@ class AxisSet:
         for a in self._axes:
             if a.id == axis_id:
                 return a
-        raise KeyError(f"축 없음: {axis_id!r} (집합 {self.id!r})")
+        raise KeyError(f"no such axis: {axis_id!r} in set {self.id!r}")
 
     def __getattr__(self, axis_id: str) -> Axis:
         # 점 표기: faces.U
@@ -184,7 +184,7 @@ _STACK: list[_Recorder] = []
 def _active() -> _Recorder:
     if not _STACK:
         raise RuntimeError(
-            "split / turn 은 with puzzle(...) 블록 안에서만 쓸 수 있다"
+            "split / turn only work inside a with puzzle(...) block"
         )
     return _STACK[-1]
 
@@ -192,14 +192,14 @@ def _active() -> _Recorder:
 def inside(axis: Axis) -> tuple[str, float]:
     """축의 절단원 안쪽(cap)."""
     if not isinstance(axis, Axis):
-        raise TypeError(f"inside 대상은 Axis 여야 한다 (받은 값: {axis!r})")
+        raise TypeError(f"inside() needs an Axis, got {axis!r}")
     return (axis.id, 1.0)
 
 
 def outside(axis: Axis) -> tuple[str, float]:
     """축의 절단원 바깥쪽."""
     if not isinstance(axis, Axis):
-        raise TypeError(f"outside 대상은 Axis 여야 한다 (받은 값: {axis!r})")
+        raise TypeError(f"outside() needs an Axis, got {axis!r}")
     return (axis.id, -1.0)
 
 
@@ -217,11 +217,11 @@ def region(*constraints):
     고정이므로, 회전 뒤에 영역을 더해도 같은 자리를 뜻한다.
     """
     if not constraints:
-        raise ValueError("영역 제약이 없다")
+        raise ValueError("region() needs at least one constraint")
     for c in constraints:
         if not (isinstance(c, tuple) and len(c) == 2 and isinstance(c[0], str)):
             raise TypeError(
-                f"영역 제약은 inside(axis) 또는 outside(axis) 여야 한다 (받은 값: {c!r})"
+                f"a region constraint must be inside(axis) or outside(axis), got {c!r}"
             )
     rec = _active()
     rec.ops.append(EnterRegion(tuple(constraints)))
@@ -247,10 +247,10 @@ def split(*targets):
     아무것도 자르지 않고 지나가면, 완성된 것처럼 보이는 no-op 정의가 남는다.
     """
     if not targets:
-        raise TypeError("split 대상이 없다")
+        raise TypeError("split() needs a target")
     axes = axes_of(*targets)
     if not axes:
-        raise TypeError(f"split 대상이 비어 있다 (받은 값: {targets!r})")
+        raise TypeError(f"split() target is empty: {targets!r}")
     rec = _active()
     ops = []
     for a in axes:
@@ -273,7 +273,7 @@ def turn(axis: Axis, angle: float, outer: bool = False):
                 ...              # M 슬라이스가 45도 돌아간 상태
     """
     if not isinstance(axis, Axis):
-        raise TypeError(f"turn 대상은 Axis 여야 한다 (받은 값: {axis!r})")
+        raise TypeError(f"turn() needs an Axis, got {axis!r}")
     rec = _active()
     op = Turn(axis.id, float(angle), bool(outer))
     rec.ops.append(op)
@@ -314,7 +314,7 @@ def carry(mover: Axis, *carried):
     기본값은 아무것도 실리지 않음이다.
     """
     if not isinstance(mover, Axis):
-        raise TypeError(f"carry 의 첫 인자는 Axis 여야 한다 (받은 값: {mover!r})")
+        raise TypeError(f"the first argument of carry() must be an Axis, got {mover!r}")
     ids: list[str] = []
     for target in carried:
         if isinstance(target, AxisSet):
@@ -323,10 +323,10 @@ def carry(mover: Axis, *carried):
             ids.append(target.id)
         else:
             raise TypeError(
-                f"carry 대상은 AxisSet 또는 Axis 여야 한다 (받은 값: {target!r})"
+                f"carry() needs an AxisSet or an Axis, got {target!r}"
             )
     if mover.id in ids:
-        raise ValueError(f"축 {mover.id!r} 이 자기 자신을 싣고 돌 수는 없다")
+        raise ValueError(f"axis {mover.id!r} cannot carry itself")
     if ids:
         _active().carries.append((mover.id, tuple(ids)))
 
@@ -346,8 +346,8 @@ class Puzzle:
             for a in s:
                 if a.id in seen:
                     raise ValueError(
-                        f"축 id {a.id!r} 가 집합 {seen[a.id]!r} 와 {s.id!r} 에 중복된다. "
-                        "연산이 축을 이름으로 참조하므로 전 집합에서 유일해야 한다"
+                        f"axis id {a.id!r} appears in both {seen[a.id]!r} and {s.id!r}. "
+                        "operations reference axes by name, so ids must be unique across sets"
                     )
                 seen[a.id] = s.id
 
@@ -388,20 +388,20 @@ class Puzzle:
         known_axes = {a.id for s in self.axis_sets for a in s}
         for i, op in enumerate(self.family.operations):
             if isinstance(op, SplitByAxis) and op.axis not in known_axes:
-                raise ValueError(f"연산 #{i}: 축 없음 {op.axis!r}")
+                raise ValueError(f"operation #{i}: no such axis {op.axis!r}")
             if isinstance(op, Turn) and op.axis not in known_axes:
-                raise ValueError(f"연산 #{i}: 축 없음 {op.axis!r}")
+                raise ValueError(f"operation #{i}: no such axis {op.axis!r}")
         for mover, carried in self.family.carries:
             for axis_id in (mover, *carried):
                 if axis_id not in known_axes:
-                    raise ValueError(f"carry 선언: 축 없음 {axis_id!r}")
+                    raise ValueError(f"carry declaration: no such axis {axis_id!r}")
 
     def evaluate(self, cut_angles: dict[str, float], **kwargs):
         if self.family is None:
-            raise RuntimeError("with puzzle(...) 블록을 먼저 닫아야 한다")
+            raise RuntimeError("close the with puzzle(...) block first")
         missing = set(self.cut_inputs) - set(cut_angles)
         if missing:
-            raise KeyError(f"cut angle 이 지정되지 않은 입력: {sorted(missing)}")
+            raise KeyError(f"no cut angle given for: {sorted(missing)}")
         return evaluate(self.family, cut_angles, **kwargs)
 
     def run(self, cut_angles: dict[str, float], **kwargs) -> None:
@@ -409,11 +409,11 @@ class Puzzle:
         from .render.vpython_view import run as _run
 
         if self.family is None:
-            raise RuntimeError("with puzzle(...) 블록을 먼저 닫아야 한다")
+            raise RuntimeError("close the with puzzle(...) block first")
         _run(self.family, cut_angles, **kwargs)
 
 
 def puzzle(name: str, *axis_sets: AxisSet) -> Puzzle:
     if not axis_sets:
-        raise ValueError("축 집합이 최소 하나 필요하다")
+        raise ValueError("a puzzle needs at least one axis set")
     return Puzzle(name=name, axis_sets=tuple(axis_sets))

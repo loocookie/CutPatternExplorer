@@ -75,7 +75,7 @@ def rings_around(
             theta1 = float(cut_angles[aset.cut_angle_input])
             break
     if theta1 is None:
-        raise KeyError(f"축 {axis.id!r} 이 어느 집합에도 없다")
+        raise KeyError(f"axis {axis.id!r} is not in any set")
 
     rings: dict[tuple[float, float], list[tuple[Axis, float]]] = defaultdict(list)
     for aset in family.axis_sets:
