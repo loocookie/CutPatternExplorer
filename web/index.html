@@ -96,6 +96,9 @@
             border-radius: 6px; padding: 10px 12px; font-size: 12px;
             line-height: 1.6; color: #5c4a12; }
   .bar { display: flex; gap: 8px; align-items: center; }
+  /* UA 의 [hidden]{display:none} 은 **작성자 규칙에 진다.** .bar 가 flex 라
+     hidden 을 걸어도 그대로 보인다. 모드 전환이 조용히 안 먹는 자리다 */
+  [hidden] { display: none !important; }
   .bar select { flex: 1; min-width: 0; padding: 5px; }
   .bar .msg { font-size: 12px; color: #7b8194; }
 </style>
@@ -108,14 +111,18 @@
 
 <aside>
   <h1>Cut Pattern Explorer</h1>
-  <div id="shared"></div>
+  <!-- 편집 모드에서는 편집밖에 못 한다 (§19.15). class="editonly" 가 붙은
+       것만 그때 보인다. 오류와 축 집합 목록은 두 모드에 다 있다 -->
+  <div class="bar"><button id="mode">Edit definition</button></div>
+  <div id="shared" class="editonly"></div>
   <div class="bar">
     <select id="addPick"></select>
     <button id="add">Add axis set</button>
+    <button id="undo" hidden>Undo</button>
   </div>
   <!-- wrap="off" 라야 긴 줄이 접히지 않고 가로로 스크롤된다 (§19.6) -->
-  <textarea id="src" spellcheck="false" wrap="off"></textarea>
-  <div class="bar">
+  <textarea id="src" class="editonly" spellcheck="false" wrap="off"></textarea>
+  <div class="bar editonly">
     <button id="run">Run</button>
     <button id="stop" disabled>Stop</button>
     <button id="share">Copy share link</button>
@@ -124,21 +131,21 @@
   <div id="err"></div>
   <fieldset id="sliders"><legend>Cut angle</legend></fieldset>
   <fieldset id="sets"><legend>Axis sets</legend></fieldset>
-  <fieldset>
+  <fieldset class="editonly">
     <label class="tog"><input type="checkbox" id="mk" checked> Axis markers</label>
     <label class="tog"><input type="checkbox" id="lb" checked> Axis labels</label>
   </fieldset>
-  <details id="vocab">
+  <details id="vocab" class="editonly">
     <summary>Names in scope</summary>
     <div id="vocabList"></div>
   </details>
 </aside>
 
-<script src="vocab.js?v=5eb14b48"></script>
-<script src="render.js?v=5eb14b48"></script>
-<script src="editor.js?v=5eb14b48"></script>
-<script src="share.js?v=5eb14b48"></script>
-<script src="app.js?v=5eb14b48"></script>
+<script src="vocab.js?v=f21406c8"></script>
+<script src="render.js?v=f21406c8"></script>
+<script src="editor.js?v=f21406c8"></script>
+<script src="share.js?v=f21406c8"></script>
+<script src="app.js?v=f21406c8"></script>
 <script>
 "use strict";
 
@@ -168,6 +175,8 @@ const els = {
   share: document.getElementById("share"), msg: document.getElementById("msg"),
   stop: document.getElementById("stop"),
   add: document.getElementById("add"), addPick: document.getElementById("addPick"),
+  mode: document.getElementById("mode"),
+  undo: document.getElementById("undo"),
 };
 
 // "축 집합 추가" 메뉴. 고르면 **코드를 쓴다** — 숨은 상태를 들고 있으면 메뉴로
@@ -191,6 +200,29 @@ const AXIS_OPS = [
 const engine = new Engine((msg) => { els.boot.textContent = msg; els.boot.style.display = msg ? "grid" : "none"; });
 let angles = {};
 let info = null;
+
+// 실행 모드와 편집 모드 (§19.15).
+//
+// 편집 모드에서는 편집밖에 못 한다 — 코드, 실행, 어휘 목록. 실행 모드는 축
+// 집합을 켜고 끄고 각도를 미는 자리다. "간단 모드" 가 아니다: 간단한 것은
+// 축을 더하는 일이지 실행 모드 자체가 아니다.
+//
+// **오류는 두 모드에 다 보인다.** 손으로 쓴 정의를 실행 모드에서 슬라이더로
+// 밀다 죽을 수 있고, 갈 곳 없는 오류는 없는 오류보다 나쁘다.
+let mode = "edit";
+
+function setMode(next) {
+  mode = next;
+  for (const el of document.querySelectorAll(".editonly")) el.hidden = next !== "edit";
+  els.mode.textContent = next === "edit" ? "Close editor" : "Edit definition";
+  // Edit… 와 × 는 편집 모드 것이다. 목록을 다시 그려야 반영된다
+  if (info) buildToggles();
+}
+
+els.mode.onclick = () => setMode(mode === "edit" ? "run" : "edit");
+
+// 버튼 글자를 마크업과 코드 두 곳에 두지 않는다. 시작할 때 한 번 돌린다
+setMode(mode);
 let settleTimer = null;
 
 function fail(e) {
@@ -200,11 +232,42 @@ function fail(e) {
 
 function clearError() { els.err.style.display = "none"; els.err.textContent = ""; }
 
+// 메뉴가 고친 것을 한 칸만 되돌린다 (§19.15).
+//
+// `×` 는 축 집합만이 아니라 **그것을 쓰는 문장을 전부** 데려간다 (§19.9).
+// 편집 모드에서는 편집창의 브라우저 되돌리기가 탈출구인데 (§19.6) 실행 모드
+// 에는 편집창이 없다. 코드를 안 보는 사람이 무엇이 사라졌는지 모른 채
+// 되돌릴 수도 없게 된다.
+//
+// 손으로 편집창을 고치면 이 칸을 비운다. 거기서부터는 브라우저 되돌리기가
+// 맡고, 두 되돌리기가 겹치면 어느 쪽이 이겼는지 안 보인다.
+let undoSource = null;
+
+function remember(source) {
+  undoSource = source;
+  els.undo.hidden = false;
+}
+
+function forgetUndo() {
+  undoSource = null;
+  els.undo.hidden = true;
+}
+
+els.undo.onclick = async () => {
+  if (undoSource === null) return;
+  rewrite(undoSource);
+  forgetUndo();
+  clearError();
+  await run();
+};
+
 // 메뉴가 고친 코드를 편집창에 되쓴다 (§19.9). `.value =` 로 통째 대입하면
 // 되돌리기 기록이 날아간다 — 잘못 지웠을 때 되돌릴 길이 없어진다.
 // setRangeText 는 기록에 남는다 (editor.js 가 쓰는 것과 같은 기계)
 function rewrite(text) {
-  els.src.focus();
+  // 실행 모드에서는 편집창이 숨어 있다. 숨은 것에 focus 를 주면 아무 일도
+  // 안 일어나지만, 굳이 부르지 않는다 (§19.15)
+  if (!els.src.hidden) els.src.focus();
   els.src.setRangeText(text, 0, els.src.value.length, "end");
 }
 
@@ -366,14 +429,17 @@ function buildToggles() {
       const other = at < 0 ? null : raw.slice(at + 1);
       if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
       try {
+        remember(els.src.value);
         rewrite(await engine.axisOp(els.src.value, set.id, op, other));
         clearError();
         await run();
       } catch (e) { fail(e); }
     };
-    row.append(pick);
+    // `rotate`/`mirror`/`invert` 는 **결과를 봐야** 뜻이 있는 연산이라
+    // 편집 모드 것이다 (§19.15). 지우기는 넣기와 대칭이므로 두 모드에 다 있다
+    if (mode === "edit") row.append(pick);
 
-    // 지우기는 딸린 코드까지 데려간다 (§19.9). 되돌리기가 살아 있다
+    // 지우기는 딸린 코드까지 데려간다 (§19.9). 되돌리기 한 칸이 받쳐 준다
     const del = document.createElement("button");
     del.className = "del";
     del.textContent = "×";
@@ -381,6 +447,7 @@ function buildToggles() {
     del.onclick = async () => {
       if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
       try {
+        remember(els.src.value);
         rewrite(await engine.removeAxisSet(els.src.value, set.id));
         clearError();
         await run();
@@ -448,6 +515,7 @@ els.share.onclick = async () => {
 els.add.onclick = async () => {
   if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
   try {
+    remember(els.src.value);
     rewrite(await engine.addAxisSet(els.src.value, els.addPick.value));
     clearError();
     await run();
@@ -455,6 +523,10 @@ els.add.onclick = async () => {
 };
 
 els.run.onclick = run;
+
+// 손으로 한 글자라도 고치면 메뉴 되돌리기는 버린다 (§19.15). 두 되돌리기가
+// 겹치면 어느 쪽이 이겼는지 안 보인다
+els.src.oninput = forgetUndo;
 els.src.onkeydown = (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
 };

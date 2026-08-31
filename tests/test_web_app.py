@@ -378,6 +378,75 @@ def test_the_editor_does_not_wrap_long_lines():
     assert 'wrap="off"' in tag[:tag.index(">")]
 
 
+# ---- 실행 모드와 편집 모드 (§19.15) ------------------------------------
+
+
+def test_the_two_modes_split_the_sidebar():
+    """편집 모드에서는 편집밖에 못 한다 (§19.15).
+
+    실행 모드는 축 집합을 켜고 끄고 각도를 미는 자리다. "간단 모드" 가 아니다 —
+    간단한 것은 축을 더하는 일이지 실행 모드 자체가 아니다.
+    """
+    assert 'id="mode"' in PAGE
+
+    def marked(tag_id):
+        i = PAGE.index(tag_id)
+        line = PAGE[PAGE.rindex("<", 0, i):PAGE.index(">", i) + 1]
+        return "editonly" in line
+
+    # 코드에 딸린 것은 편집 모드 것이다
+    for tag_id in ('id="src"', 'id="shared"', 'id="vocab"'):
+        assert marked(tag_id), tag_id + " 가 편집 모드 것이어야 한다"
+
+    # 오류와 축 집합 목록은 두 모드에 다 있다. 실행 모드에서 슬라이더를 밀다
+    # 죽을 수 있고, 갈 곳 없는 오류는 없는 오류보다 나쁘다
+    for tag_id in ('id="err"', 'id="sliders"', 'id="sets"'):
+        assert not marked(tag_id), tag_id + " 는 두 모드에 다 있어야 한다"
+
+
+def test_hiding_actually_hides():
+    """UA 의 `[hidden]{display:none}` 은 **작성자 규칙에 진다.**
+
+    `.bar` 가 `display: flex` 라 `hidden` 을 걸어도 그대로 보인다. 모드 전환이
+    조용히 안 먹는 자리라, 규칙 하나가 빠지면 두 모드가 겹쳐 나온다.
+    """
+    css = PAGE[PAGE.index("<style>"):PAGE.index("</style>")]
+    assert "[hidden]" in css and "display: none !important" in css
+
+
+def test_editing_an_axis_set_belongs_to_the_edit_mode():
+    """`rotate`/`mirror`/`invert` 는 **결과를 봐야** 뜻이 있다 (§19.15).
+
+    텍스트 메뉴에서는 축이 어디로 갔는지 안 보이므로 편집 모드 것이다.
+    지우기는 다르다 — 넣기와 대칭이라 (§19.9) 두 모드에 다 있어야 한다.
+    `Add axis set` 이 실행 모드에 있는데 지우기가 없으면 한쪽만 되는 짝이다.
+    """
+    body = _function_body(PAGE, "function buildToggles()")
+    assert 'if (mode === "edit") row.append(pick)' in body
+
+    # × 는 조건 없이 붙어야 한다
+    tail = body[body.index("const del = document.createElement"):]
+    assert "row.append(del);" in tail
+    assert "mode" not in tail, "× 가 모드에 걸려 있다"
+
+
+def test_a_menu_edit_can_be_undone_once():
+    """`×` 는 축 집합만이 아니라 **그것을 쓰는 문장을 전부** 데려간다 (§19.9).
+
+    편집 모드에서는 편집창의 브라우저 되돌리기가 탈출구인데 (§19.6) 실행
+    모드에는 편집창이 없다. 코드를 안 보는 사람이 무엇이 사라졌는지 모른 채
+    되돌릴 수도 없게 된다.
+    """
+    assert 'id="undo"' in PAGE
+    # 메뉴가 소스를 고치기 **전에** 직전 것을 기억해야 한다
+    for call in ("addAxisSet", "removeAxisSet", "axisOp"):
+        i = PAGE.index("rewrite(await engine." + call + "(")
+        assert "remember(els.src.value);" in PAGE[i - 120:i], call
+    # 손으로 고치면 그 칸은 버린다. 두 되돌리기가 겹치면 어느 쪽이 이겼는지
+    # 안 보인다
+    assert "els.src.oninput = forgetUndo" in PAGE
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 
