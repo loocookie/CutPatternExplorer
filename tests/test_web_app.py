@@ -240,6 +240,31 @@ def test_boot_has_a_watchdog():
     assert "terminate" not in body, "워치독이 오는 중인 부팅을 끊으면 안 된다"
 
 
+def test_network_paths_are_closed_before_definitions_run():
+    """정의가 밖으로 내보낼 통로를 끊는다 (§19.5).
+
+    worker 에 document 가 없다는 것은 페이지 바꿔치기와 리다이렉트만 막는다.
+    `fetch` 는 worker 에서도 되고, `mode: "no-cors"` 면 CORS 도 안 걸린다 —
+    읽지는 못해도 **보내는 것은 막지 못한다**.
+
+    순서가 성질이다. Pyodide 자신이 wasm 과 stdlib 을 fetch 로 받으므로
+    부팅보다 먼저 끊으면 부팅이 안 되고, 정의보다 늦게 끊으면 소용이 없다.
+
+    끊는 것만으로 다 막히지는 않는다. 동적 `import()` 는 함수가 아니라 문법이라
+    지울 수 없고, 그건 CSP `script-src` 쪽에서 잡는다 (§19.14).
+    """
+    body = _function_body(WORKER, "async function boot()")
+    assert "revokeNetwork()" in body
+    assert body.index("runPython") < body.index("revokeNetwork()"),         "Pyodide 가 다 뜨기 전에 끊으면 부팅이 안 된다"
+
+    # 중첩 worker 는 손대지 않은 전역을 새로 받는다. 남겨 두면 전부 되돌아온다
+    for name in ("fetch", "XMLHttpRequest", "WebSocket", "EventSource", "Worker"):
+        assert '"%s"' % name in WORKER, name
+
+    # 반쯤 끊긴 채로 도는 것이 제일 나쁘다 — 화면은 멀쩡하고 구멍만 남는다
+    assert "throw new Error" in _function_body(WORKER, "function revokeNetwork()")
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 

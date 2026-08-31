@@ -11,6 +11,58 @@
 
 const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.28.3/full/pyodide.mjs";
 
+// 정의가 밖으로 내보낼 수 있는 통로 (§19.5). Pyodide 는 `js` 모듈로 전역을
+// 그대로 열어 주므로, 여기 남는 것은 `import js` 한 줄이면 닿는다.
+//
+// `Worker` 가 목록에 있는 이유는 그것 자체가 통로여서가 아니라, 중첩 worker 가
+// **손대지 않은 전역**을 새로 받기 때문이다. 하나 띄우면 지운 것이 다 돌아온다.
+// `caches` 도 마찬가지로 `add(url)` 이 실제 요청을 낸다.
+//
+// 부팅이 **끝난 뒤에** 지운다. Pyodide 자신이 wasm 과 stdlib 을 fetch 로 받는다.
+const NETWORK_GLOBALS = [
+  "fetch", "XMLHttpRequest", "WebSocket", "EventSource", "WebTransport",
+  "Worker", "SharedWorker", "importScripts", "caches",
+];
+
+/** 전역 하나를 끊는다. 끊었는지는 **이름을 다시 읽어** 확인한다.
+ *
+ * `delete self.fetch` 는 아무것도 안 지운다. `fetch` 는 self 의 own property 가
+ * 아니라 `WorkerGlobalScope.prototype` 에 있어서, delete 는 `true` 를 돌려주고
+ * 이름은 그대로 살아 있다. 지운 줄 알고 넘어가기 딱 좋다.
+ *
+ * 그래서 둘을 다 한다 — 사슬을 훑어 지우고, **지워졌든 아니든** own property
+ * 로 못질한다. non-configurable 이라 지우지도 덮지도 못한다.
+ *
+ * 지워진 뒤에도 못질하는 것은, 이름이 비어 있으면 그 자리에 다시 대입할 수
+ * 있기 때문이다. 원본을 되찾는 길은 아니지만 — 정의는 여기가 끝난 뒤에 도니
+ * 참조를 잡을 시점이 없다 — 열어 둘 이유도 없다.
+ */
+function revoke(name) {
+  for (let obj = self; obj; obj = Object.getPrototypeOf(obj)) {
+    if (Object.prototype.hasOwnProperty.call(obj, name)) {
+      try { delete obj[name]; } catch (_) {}
+    }
+  }
+  try {
+    Object.defineProperty(self, name, {
+      value: undefined, writable: false, configurable: false,
+    });
+  } catch (_) {}
+}
+
+/** 부팅이 끝난 뒤 통로를 전부 끊는다. 하나라도 남으면 **부팅을 실패시킨다.**
+ *
+ * 반쯤 끊긴 채로 도는 것이 제일 나쁘다 — 화면은 멀쩡하고 구멍만 남는다.
+ * 여기서 죽으면 워치독이 아니라 오류 메시지가 뜨므로 원인이 그 자리에 보인다.
+ */
+function revokeNetwork() {
+  for (const name of NETWORK_GLOBALS) revoke(name);
+  const alive = NETWORK_GLOBALS.filter((n) => typeof self[n] !== "undefined");
+  if (alive.length) {
+    throw new Error("Could not close the network paths: " + alive.join(", "));
+  }
+}
+
 
 let py = null;
 
@@ -35,7 +87,7 @@ async function boot() {
   py = await loadPyodide();
 
   status("Loading the engine…");
-  await import("./engine.js?v=1ada6f0f");   // globalThis.ENGINE_SOURCES 를 채운다
+  await import("./engine.js?v=ce85b8ce");   // globalThis.ENGINE_SOURCES 를 채운다
 
   const FS = py.FS;
   const made = new Set();
@@ -56,6 +108,9 @@ async function boot() {
   // 정의 실행 층은 파일로 온다. JS 문자열에 박으면 파이썬 docstring 의
   // 백틱이 템플릿 리터럴을 끊는다 (web/boot.py 머리말)
   py.runPython(globalThis.ENGINE_SOURCES["boot.py"]);
+
+  // 여기부터는 정의가 돌 수 있다. 그 전에 통로를 끊는다 (§19.5)
+  revokeNetwork();
   status("");
 }
 

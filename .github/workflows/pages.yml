@@ -36,6 +36,7 @@ jobs:
       - run: node web/editor.test.js
       - run: node web/render.test.js
       - run: node web/share.test.js
+      - run: node web/revoke.test.js
       # 번들은 생성물이지만 커밋한다 (§19.2). 낡으면 배포만 조용히 깨진다
       - name: the bundle matches the sources
         run: |

