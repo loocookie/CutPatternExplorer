@@ -47,7 +47,7 @@ SLICE_ANGLE = 45.0
 
 
 def build(slice_angle: float = SLICE_ANGLE):
-    faces = S.cube()
+    faces = S.cube("cube")
     pair = lambda a: (a, at_angle(a, 180, faces)[0])
     axis_pairs = {
         "X": pair(faces["c-2"]),

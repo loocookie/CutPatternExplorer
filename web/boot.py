@@ -204,9 +204,22 @@ with puzzle("%(id)s", %(var)s) as p:
 
 
 def _default_id(factory):
-    """프리셋이 정해 둔 집합 id."""
+    """프리셋이 정해 둔 집합 id. 표시용 텍스트다 ("Rhombic Dodecahedron")."""
     default = inspect.signature(_namespace()[factory]).parameters["id"].default
     return default if isinstance(default, str) else factory
+
+
+def _names(default_id, n, taken):
+    """`n` 번째 인스턴스의 (집합 id, 변수 이름).
+
+    집합 id 는 슬라이더에 그대로 나오므로 띄어쓰기와 대문자를 쓴다. 변수는
+    파이썬 식별자여야 하므로 **약자**를 쓴다 — 축 id 접두사와 같아서 `c1` 과
+    `c1-0` 이 눈으로 묶인다 (§2.5).
+    """
+    from cutpattern.solids import abbrev
+
+    set_id = "%s %d" % (default_id, n)
+    return set_id, abbrev(set_id)
 
 
 def add_axis_set(source, factory):
@@ -237,10 +250,10 @@ def add_axis_set(source, factory):
     stripped = source.strip()
     if not stripped:
         n = _free_instance(default_id, set(ns))
-        set_id = "%s%d" % (default_id, n)
+        set_id, var = _names(default_id, n, set(ns))
         return SKELETON % {
-            "call": '%s = %s("%s")' % (set_id, factory, set_id),
-            "var": set_id, "id": set_id,
+            "call": '%s = %s("%s")' % (var, factory, set_id),
+            "var": var, "id": set_id,
         }
 
     try:
@@ -257,16 +270,20 @@ def add_axis_set(source, factory):
         and isinstance(node.items[0].context_expr, ast.Call)
         and getattr(node.items[0].context_expr.func, "id", None) == "puzzle"
     ]
-    # 변수와 집합 id 를 같은 이름으로 쓴다. 둘 다 비어 있는 번호를 고른다.
-    # 축 id 접두사는 집합 id 에서 유도되므로 (§2.5) 따로 줄 것이 없다
+    # 집합 id 와 변수가 둘 다 비어 있는 번호를 고른다. 축 id 접두사는 집합 id
+    # 에서 유도되므로 (§2.5) 따로 줄 것이 없다
     taken = _taken_names(tree, ns) | _existing_ids(tree, ns)
-    n = _free_instance(default_id, taken)
-    set_id = var = "%s%d" % (default_id, n)
+    n = 1
+    while True:
+        set_id, var = _names(default_id, n, taken)
+        if set_id not in taken and var not in taken:
+            break
+        n += 1
 
     if not blocks:
         # puzzle 블록이 없다. 골격째 만든다
         return source.rstrip("\n") + "\n\n" + SKELETON % {
-            "call": '%s = %s("%s")' % (set_id, factory, set_id),
+            "call": '%s = %s("%s")' % (var, factory, set_id),
             "var": var, "id": set_id,
         }
 
@@ -287,7 +304,7 @@ def add_axis_set(source, factory):
         # (2) 인자 목록 = 슬라이더 목록
         (at(call.args[-1].end_lineno, call.args[-1].end_col_offset), ", %s" % var),
         # (1) with 블록 앞
-        (at(block.lineno, 0), '%s = %s("%s")' % (set_id, factory, set_id) + '\n\n'),
+        (at(block.lineno, 0), '%s = %s("%s")' % (var, factory, set_id) + '\n\n'),
     ]
     out = source
     for pos, text in edits:

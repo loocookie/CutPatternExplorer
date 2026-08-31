@@ -15,7 +15,7 @@ SLICE_ANGLE = 45.0
 
 
 def build(slice_angle: float = SLICE_ANGLE):
-    faces = merge("crd", S.cube(), S.rhombic_dodecahedron())
+    faces = merge("crd", S.cube("cube"), S.rhombic_dodecahedron("rhombic_dodecahedron"))
     pair = lambda a: [a, at_angle(a, 180, faces)[0]]
     axis_pairs = {
         "X": pair(faces["c-2"]),

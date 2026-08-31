@@ -60,7 +60,7 @@ THETA_DEG = MIN_THETA_DEG + OCTOCUBE_FRACTION * (MAX_THETA_DEG - MIN_THETA_DEG)
 
 
 def build(turn_angle: float = TURN_ANGLE):
-    faces = S.dodecahedron()
+    faces = S.dodecahedron("dodecahedron")
 
     with puzzle("OctoDodeca", faces) as p:
         split(faces)

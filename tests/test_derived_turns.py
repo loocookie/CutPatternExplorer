@@ -44,7 +44,7 @@ def test_icosahedron_needs_more_than_face_symmetry():
     두 번째 고리는 축이 6개다. C3 궤도 두 개가 75.522 도 어긋나 겹쳐 있어서
     쌍차에 44.478 과 75.522 가 나온다. 이것이 jumbling 정렬각이다.
     """
-    got = turns(S.icosahedron(), 45.0)
+    got = turns(S.icosahedron("icosahedron"), 45.0)
     assert 120.0 in got and 240.0 in got
     assert got != pytest.approx([120.0, 240.0])
     assert min(got) == pytest.approx(44.4775, abs=1e-3)
@@ -56,7 +56,7 @@ def test_icosahedron_needs_more_than_face_symmetry():
 
 def test_icosahedron_first_ring_alone_gives_only_face_symmetry():
     """첫 고리만 침범하는 얕은 절단에서는 (120, 240) 이 맞다."""
-    icosa = S.icosahedron()
+    icosa = S.icosahedron("icosahedron")
     fam = family_of(icosa)
     axis = list(icosa)[0]
     shallow = 25.0  # 41.81 도 고리만 걸리는 깊이
@@ -90,7 +90,7 @@ def test_bipyramid_axes_are_uniform():
 
 def test_engagement_threshold_matches_the_inequality():
     """cube 는 |90 - theta| < theta, 곧 theta > 45 에서 고리가 침범한다."""
-    cube = S.cube()
+    cube = S.cube("cube")
     assert turns(cube, 30.0) == []
     assert turns(cube, 44.0) == []
     assert turns(cube, 46.0) == pytest.approx([90.0, 180.0, 270.0])
@@ -99,14 +99,14 @@ def test_engagement_threshold_matches_the_inequality():
 
 def test_shallow_cut_engages_nothing():
     """cap 안에 다른 절단원이 없으면 어떤 각도 유도되지 않는다."""
-    cube = S.cube()
+    cube = S.cube("cube")
     fam = family_of(cube)
     assert rings_around(fam, list(cube)[0], {cube.cut: 20.0}) == {}
 
 
 def test_rings_are_grouped_by_polar_angle_and_cut_depth():
     """회전은 극각을 보존하고, 원이 겹치려면 반지름도 같아야 한다."""
-    icosa = S.icosahedron()
+    icosa = S.icosahedron("icosahedron")
     fam = family_of(icosa)
     rings = rings_around(fam, list(icosa)[0], {icosa.cut: 80.0})
     sizes = sorted(len(m) for m in rings.values())
@@ -117,7 +117,7 @@ def test_rings_are_grouped_by_polar_angle_and_cut_depth():
 
 def test_axis_on_the_rotation_axis_adds_no_constraint():
     """극각 0 이나 180 은 방위각이 없다. 회전에 불변이므로 제약이 아니다."""
-    cube = S.cube()
+    cube = S.cube("cube")
     fam = family_of(cube)
     rings = rings_around(fam, list(cube)[0], {cube.cut: 80.0})
     for polar, _theta2 in rings:
@@ -142,7 +142,7 @@ def test_second_axis_set_contributes_its_own_rings():
 
 def test_carried_axes_are_excluded():
     """함께 실려 도는 축은 정렬을 따질 게 없으므로 제외한다 (§2.1)."""
-    cube = S.cube()
+    cube = S.cube("cube")
     fam = family_of(cube)
     axis = list(cube)[0]
     ring_axes = [
@@ -159,7 +159,7 @@ def test_carried_axes_are_excluded():
 
 def test_extra_turn_angles_are_unioned():
     """유도가 못 찾는 각은 축에 명시한다."""
-    cube = S.cube(turns=(45.0,))
+    cube = S.cube("cube", turns=(45.0,))
     fam = family_of(cube)
     axis = list(cube)[0]
     angles = {cube.cut: 60.0}
@@ -168,7 +168,7 @@ def test_extra_turn_angles_are_unioned():
 
 
 def test_extra_turn_angles_do_not_duplicate_derived_ones():
-    cube = S.cube(turns=(90.0, 450.0))
+    cube = S.cube("cube", turns=(90.0, 450.0))
     fam = family_of(cube)
     axis = list(cube)[0]
     assert available_turns(fam, axis, {cube.cut: 60.0}) == pytest.approx(
@@ -177,7 +177,7 @@ def test_extra_turn_angles_do_not_duplicate_derived_ones():
 
 
 def test_zero_is_never_a_turn():
-    cube = S.cube(turns=(0.0, 360.0))
+    cube = S.cube("cube", turns=(0.0, 360.0))
     fam = family_of(cube)
     axis = list(cube)[0]
     assert 0.0 not in available_turns(fam, axis, {cube.cut: 60.0})
@@ -187,7 +187,7 @@ def test_zero_is_never_a_turn():
 
 
 def test_unknown_axis_is_reported():
-    cube = S.cube()
+    cube = S.cube("cube")
     stray = AxisSet("stray", axes={"s0": (1, 2, 3)})
     with pytest.raises(KeyError):
         derived_turns(family_of(cube), stray["s0"], {"cube": 60.0})

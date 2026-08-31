@@ -56,7 +56,7 @@ from cutpattern.engine.operations import Truncated, UncutBoundaryError
 THETA = math.degrees(math.acos(0.45))
 
 # 1. split + turn + 렌더
-faces = S.cube(turns=(45, -45, 90, -90, 180))
+faces = S.cube("cube", turns=(45, -45, 90, -90, 180))
 with puzzle("probe", faces) as p:
     split(faces)
     for x in faces:

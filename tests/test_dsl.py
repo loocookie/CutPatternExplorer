@@ -18,7 +18,7 @@ from cutpattern.engine.operations import RollbackTurns, SplitByAxis, Turn
 
 # 축 id 는 방향을 말해주지 않는다 (`c0`..`c5`). 방향을 박은 id 를 두면
 # axisops.rotate 한 번에 거짓말이 되므로 (§2.2), 테스트에서 부를 이름을 여기서
-# 묶는다. 방향은 S.cube() 를 갓 만든 상태 기준이다.
+# 묶는다. 방향은 S.cube("cube") 를 갓 만든 상태 기준이다.
 R, L = "c-2", "c-4"   # +x, -x
 U, D = "c-3", "c-1"   # +y, -y
 F, B = "c-0", "c-5"   # +z, -z
@@ -30,7 +30,7 @@ F, B = "c-0", "c-5"   # +z, -z
 
 def test_at_angle_covers_perpendicular_opposite_and_self():
     """수직/반대/자기 자신이 전부 at_angle 의 특수한 경우다. 별도 함수는 없다."""
-    faces = S.cube()
+    faces = S.cube("cube")
     assert {a.id for a in at_angle(faces[U], 90, faces)} == {R, L, F, B}
     assert [a.id for a in at_angle(faces[U], 180, faces)] == [D]
     assert [a.id for a in at_angle(faces[U], 0, faces)] == [U]
@@ -38,7 +38,7 @@ def test_at_angle_covers_perpendicular_opposite_and_self():
 
 
 def test_at_angle_accepts_axis_objects_and_ids():
-    faces = S.cube()
+    faces = S.cube("cube")
     assert {a.id for a in at_angle(faces[R], 90, faces)} == {U, D, F, B}
 
 
@@ -52,7 +52,7 @@ def test_at_angle_on_non_cube_set():
 
 
 def test_angle_to_reports_degrees():
-    faces = S.cube()
+    faces = S.cube("cube")
     assert angle_between(faces[U], faces[R]) == pytest.approx(90.0)
     assert angle_between(faces[U], faces[D]) == pytest.approx(180.0)
     assert angle_between(faces[U], faces[U]) == pytest.approx(0.0)
@@ -66,7 +66,7 @@ def test_duplicate_axis_id_is_rejected():
 
 
 def test_dot_access_raises_attribute_error_for_unknown_axis():
-    faces = S.cube()
+    faces = S.cube("cube")
     with pytest.raises(AttributeError):
         faces.Nope
 
@@ -75,7 +75,7 @@ def test_dot_access_raises_attribute_error_for_unknown_axis():
 
 
 def test_split_and_turn_record_operations():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces) as p:
         split(faces)
         split(faces[R])
@@ -89,7 +89,7 @@ def test_split_and_turn_record_operations():
 
 def test_rollback_is_appended_automatically():
     """구성용 회전은 정의 끝에서 자동으로 되돌아간다. 별도 함수가 없다."""
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces) as p:
         split(faces)
         turn(faces[U], 45)
@@ -99,7 +99,7 @@ def test_rollback_is_appended_automatically():
 
 
 def test_split_accepts_multiple_targets():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces) as p:
         split(*at_angle(faces[U], 90, faces))
     # 순서는 at_angle 이 정한다. 여기서 볼 것은 U 에 수직인 네 면이 다 왔는가다
@@ -107,14 +107,14 @@ def test_split_accepts_multiple_targets():
 
 
 def test_split_with_no_target_is_rejected():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces):
         with pytest.raises(TypeError):
             split()
 
 
 def test_turned_block_emits_matching_inverse():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces) as p:
         with turned(faces[U], 45):
             split(faces[R])
@@ -122,7 +122,7 @@ def test_turned_block_emits_matching_inverse():
 
 
 def test_turned_block_closes_even_on_exception():
-    faces = S.cube()
+    faces = S.cube("cube")
     pz = puzzle("t", faces)
     with pytest.raises(RuntimeError, match="boom"):
         with pz:
@@ -133,7 +133,7 @@ def test_turned_block_closes_even_on_exception():
 
 
 def test_nested_turned_blocks_unwind_in_reverse():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces) as p:
         with turned(faces[U], 45):
             with turned(faces[R], 30):
@@ -149,7 +149,7 @@ def test_nested_turned_blocks_unwind_in_reverse():
 
 def test_python_control_flow_works():
     """for, def, 컴프리헨션, 조건문이 그냥 동작해야 한다."""
-    faces = S.cube()
+    faces = S.cube("cube")
 
     def block(x):
         with turned(x, 45):
@@ -165,7 +165,7 @@ def test_python_control_flow_works():
 
 
 def test_operations_outside_block_are_rejected():
-    faces = S.cube()
+    faces = S.cube("cube")
     with pytest.raises(RuntimeError, match="with puzzle"):
         split(faces)
     with pytest.raises(RuntimeError, match="with puzzle"):
@@ -173,14 +173,14 @@ def test_operations_outside_block_are_rejected():
 
 
 def test_split_rejects_wrong_target():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces):
         with pytest.raises(TypeError):
             split("faces")
 
 
 def test_turn_rejects_wrong_target():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces):
         with pytest.raises(TypeError):
             turn(U, 45)
@@ -198,7 +198,7 @@ def test_axis_id_collision_across_sets_is_rejected():
 
 
 def test_missing_cut_angle_is_reported():
-    faces = S.cube()
+    faces = S.cube("cube")
     with puzzle("t", faces) as p:
         split(faces)
     with pytest.raises(KeyError, match="cube"):
@@ -254,7 +254,7 @@ def test_balanced_turns_leave_nothing_to_roll_back():
 
 
 def test_two_axis_sets_with_separate_sliders():
-    faces = S.cube()
+    faces = S.cube("cube")
     edges = S.rhombic_dodecahedron("edges")
     with puzzle("t", faces, edges) as p:
         split(faces)
@@ -279,8 +279,8 @@ def test_split_accepts_sets_axes_lists_and_nesting():
     from cutpattern import solids as S
     from cutpattern.dsl import at_angle, puzzle, split
 
-    cube = S.cube()
-    octa = S.octahedron()
+    cube = S.cube("cube")
+    octa = S.octahedron("octahedron")
     x = cube["c-2"]
 
     cases = {
@@ -303,8 +303,8 @@ def test_split_still_takes_several_arguments():
     from cutpattern import solids as S
     from cutpattern.dsl import puzzle, split
 
-    cube = S.cube()
-    octa = S.octahedron()
+    cube = S.cube("cube")
+    octa = S.octahedron("octahedron")
     with puzzle("t", cube, octa):
         ops = split(cube, octa)
     assert len(_axis_ids(ops)) == 14
@@ -320,7 +320,7 @@ def test_split_rejects_empty_or_non_axis_targets(target):
     from cutpattern import solids as S
     from cutpattern.dsl import puzzle, split
 
-    cube = S.cube()
+    cube = S.cube("cube")
     with puzzle("t", cube):
         with pytest.raises(TypeError):
             split(target)
@@ -330,7 +330,7 @@ def test_queries_reject_a_missing_target_set():
     from cutpattern import solids as S
     from cutpattern.dsl import angles_from, at_angle
 
-    x = S.cube()["c-2"]
+    x = S.cube("cube")["c-2"]
     with pytest.raises(TypeError, match="축 집합"):
         at_angle(x, 90)
     with pytest.raises(TypeError, match="축 집합"):

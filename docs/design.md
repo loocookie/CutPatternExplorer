@@ -168,12 +168,18 @@ orbit(seed, group, expected=n)
 약자는 **집합 id** 에서 딴다 — 낱말 첫 글자를 잇고 끝의 숫자를 붙인다.
 
 ```text
-cube                    -> c    ->  c-0 .. c-5
-cube1                   -> c1   ->  c1-0 .. c1-5
-rhombic_dodecahedron    -> rd   ->  rd-0 .. rd-11
-propello_tetrahedron1   -> pt1  ->  pt1-0 ..
-prism5                  -> p5   ->  p5-0 .. p5-6
+Cube                    -> c    ->  c-0 .. c-5
+Cube 1                  -> c1   ->  c1-0 .. c1-5
+Rhombic Dodecahedron    -> rd   ->  rd-0 .. rd-11
+Propello Tetrahedron 2  -> pt2  ->  pt2-0 ..
+Prism 5                 -> p5   ->  p5-0 .. p5-6
 ```
+
+**집합 id 는 표시용 텍스트다.** 슬라이더에 그대로 나오므로 띄어쓰기와 대문자를
+쓴다. 파이썬 식별자가 아니어도 된다 — 연산이 축을 참조할 때 쓰는 것은 축 id 고,
+집합 id 는 문자열일 뿐이다.
+
+순수 숫자 낱말은 머리글자로 세지 않는다. 그러지 않으면 `Cube 1` 이 `c11` 이 된다.
 
 손으로 정한 접두사 표를 두지 않는다. 표는 프리셋을 늘릴 때마다 어긋나고,
 사용자가 만든 집합에는 아예 없다.
@@ -1877,13 +1883,17 @@ with puzzle("t", faces, rd) as p:                   # (2) 인자 = 슬라이더 
 #### 이름에 인스턴스 번호를 붙인다
 
 ```python
-cube1 = cube("cube1")                                    # c1-0 .. c1-5
-cube2 = cube("cube2")                                    # c2-0 .. c2-5
-rhombic_dodecahedron1 = rhombic_dodecahedron("rhombic_dodecahedron1")
+c1  = cube("Cube 1")                                   # c1-0 .. c1-5
+c2  = cube("Cube 2")                                   # c2-0 .. c2-5
+rd1 = rhombic_dodecahedron("Rhombic Dodecahedron 1")   # rd1-0 ..
 ```
 
-변수와 집합 id 가 같은 이름이고, **번호는 항상 붙는다.** 첫 번째만 `cube` 이고
-두 번째부터 `cube2` 이면 하나를 지웠을 때 이름이 들쭉날쭉해진다.
+**번호는 항상 붙는다.** 첫 번째만 `Cube` 이고 두 번째부터 `Cube 2` 이면 하나를
+지웠을 때 이름이 들쭉날쭉해진다.
+
+집합 id 는 슬라이더에 나오는 표시용 텍스트이고, 변수는 **약자**다 — 축 id
+접두사와 같아서 `c1` 과 `c1-0` 이 눈으로 묶인다. 띄어쓴 id 는 파이썬 식별자가
+될 수 없으므로 둘이 갈리는 것이 자연스럽다.
 
 축 id 접두사는 **집합 id 에서 유도되므로** (§2.5) 따로 줄 것이 없다. 같은 입체를
 두 번 넣어도 `c1-` 과 `c2-` 로 갈리므로 특수처리가 없다.

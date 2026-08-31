@@ -25,7 +25,7 @@ THETA = math.degrees(math.acos(0.45))
 
 
 def _family():
-    faces = S.cube(turns=(45, -45))
+    faces = S.cube("cube", turns=(45, -45))
     edges = S.rhombic_dodecahedron("edges")
     with puzzle("marked", faces, edges) as p:
         split(faces)

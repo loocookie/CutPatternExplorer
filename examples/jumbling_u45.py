@@ -28,11 +28,11 @@ THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
 
 
 def build():
-    faces = S.cube(turns=(45, -45, 90, -90, 180))
+    faces = S.cube("cube", turns=(45, -45, 90, -90, 180))
 
     # 축 id 는 방향을 말해주지 않는다 (`c0`..`c5`). 방향을 박은 id 를 두면
     # axisops.rotate 한 번에 거짓말이 되므로 (§2.2), 이름은 뜻이 있는 이 자리에서
-    # 묶는다. 아래 방향은 S.cube() 를 갓 만든 상태 기준이다.
+    # 묶는다. 아래 방향은 S.cube("cube") 를 갓 만든 상태 기준이다.
     U = faces["c-3"]  # +y
     R = faces["c-2"]  # +x. U 에 수직이면 대칭이라 어느 면이든 같다
 

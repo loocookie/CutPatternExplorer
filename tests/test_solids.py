@@ -84,7 +84,7 @@ def test_octahedron_directions_are_cube_vertices():
             (-1, 1, 1), (-1, 1, -1), (-1, -1, 1), (-1, -1, -1),
         ]
     ]
-    got = [a.normal for a in S.octahedron()]
+    got = [a.normal for a in S.octahedron("octahedron")]
     for v in verts:
         assert any(np.allclose(v, g, atol=1e-9) for g in got)
 
@@ -218,7 +218,7 @@ def test_from_orbit_validates_the_seed():
 
 
 def test_extra_turns_can_be_supplied_per_solid():
-    aset = S.cube(turns=(45.0,))
+    aset = S.cube("cube", turns=(45.0,))
     assert all(a.extra_turn_angles == (45.0,) for a in aset)
 
 
@@ -305,7 +305,7 @@ def test_rhombic_dodecahedron_directions_are_cube_edges():
     예전에는 `dsl.cube_edges()` 와 비교했는데, 그쪽이 같은 것을 다시 만든
     중복이라 순환 검증이었다. 그 생성기를 없애면서 방향을 직접 단정한다.
     """
-    axes = list(S.rhombic_dodecahedron())
+    axes = list(S.rhombic_dodecahedron("rhombic_dodecahedron"))
     assert len(axes) == 12
     r2 = 1 / math.sqrt(2)
     for a in axes:
@@ -318,10 +318,10 @@ def test_archimedean_direction_sets_come_from_merge():
     """아르키메데스 13개 중 11개는 플라톤/카탈란 방향집합의 합집합이다."""
     from cutpattern.axisops import merge
 
-    cuboctahedron = merge("cubocta", S.cube(), S.octahedron())
+    cuboctahedron = merge("cubocta", S.cube("cube"), S.octahedron("octahedron"))
     assert len(cuboctahedron) == 14
     rhombicuboctahedron = merge(
-        "rco", S.cube(), S.octahedron(), S.rhombic_dodecahedron()
+        "rco", S.cube("cube"), S.octahedron("octahedron"), S.rhombic_dodecahedron("rhombic_dodecahedron")
     )
     assert len(rhombicuboctahedron) == 26
 
@@ -335,7 +335,7 @@ def test_pentagonal_icositetrahedron_groups_by_cube_symmetry():
     """네 예시. 24개 축이 정육면체 면 6개마다 4개씩 나뉜다."""
     from cutpattern.query import group_by_nearest
 
-    groups = group_by_nearest(S.pentagonal_icositetrahedron(), S.cube())
+    groups = group_by_nearest(S.pentagonal_icositetrahedron(), S.cube("cube"))
     assert len(groups) == 6
     assert sorted(len(v) for v in groups.values()) == [4] * 6
 

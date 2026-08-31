@@ -64,7 +64,7 @@ THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
 
 
 def build(slice_angle: float = SLICE_ANGLE):
-    faces = S.cube(turns=(45, -45, 90, -90, 180))
+    faces = S.cube("cube", turns=(45, -45, 90, -90, 180))
 
     with puzzle("Mixup Plus", faces) as p:
         split(faces)

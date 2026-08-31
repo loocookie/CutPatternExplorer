@@ -77,17 +77,18 @@ def _axis_set_cls():
 def abbrev(set_id: str) -> str:
     """집합 id 의 약자. 낱말 첫 글자를 따고 끝의 숫자를 붙인다 (§2.5).
 
-        cube                    -> c
-        cube1                   -> c1
-        rhombic_dodecahedron    -> rd
+        Cube                    -> c
+        Cube 1                  -> c1
+        Rhombic Dodecahedron 1  -> rd1
         propello_tetrahedron1   -> pt1
 
     손으로 정한 접두사 표를 두지 않는다. 표는 프리셋을 늘릴 때마다 어긋나고,
     사용자가 만든 집합에는 아예 없다.
     """
     words = [w for w in re.split(r"[_\-\s]+", set_id) if w]
-    head = "".join(w[0] for w in words)
-    tail = re.match(r".*?(\d*)$", set_id).group(1)
+    # 순수 숫자 낱말은 인스턴스 번호다. 머리글자로 세면 "Cube 1" 이 "c11" 이 된다
+    head = "".join(w[0] for w in words if not w.isdigit()).lower()
+    tail = re.search(r"(\d*)$", set_id.rstrip()).group(1)
     return head + tail
 
 
@@ -151,35 +152,35 @@ def from_orbit(
 # 명시하는 자리일 뿐이다.
 
 
-def tetrahedron(id: str = "tetrahedron", turns=()):
+def tetrahedron(id: str = "Tetrahedron", turns=()):
     """정사면체 면축 4개. 반대 방향 축이 없는 대표 사례 (§2.2)."""
     return from_orbit(
         id, (1, 1, 1), "T", 4, None, turns, name="정사면체 면축"
     )
 
 
-def cube(id: str = "cube", turns=()):
+def cube(id: str = "Cube", turns=()):
     """정육면체 면축 6개."""
     return from_orbit(
         id, (1, 0, 0), "O", 6, None, turns, name="정육면체 면축"
     )
 
 
-def octahedron(id: str = "octahedron", turns=()):
+def octahedron(id: str = "Octahedron", turns=()):
     """정팔면체 면축 8개. 정육면체의 꼭짓점 방향과 같다."""
     return from_orbit(
         id, (1, 1, 1), "O", 8, None, turns, name="정팔면체 면축"
     )
 
 
-def dodecahedron(id: str = "dodecahedron", turns=()):
+def dodecahedron(id: str = "Dodecahedron", turns=()):
     """정십이면체 면축 12개."""
     return from_orbit(
         id, (0, 1, PHI), "I", 12, None, turns, name="정십이면체 면축"
     )
 
 
-def icosahedron(id: str = "icosahedron", turns=()):
+def icosahedron(id: str = "Icosahedron", turns=()):
     """정이십면체 면축 20개. 정십이면체의 꼭짓점 방향과 같다."""
     return from_orbit(
         id, (1, 1, 1), "I", 20, None, turns, name="정이십면체 면축"
@@ -246,7 +247,7 @@ def _make_catalan(key: str):
         "pentagonal_hexecontahedron": "오각육십면체",
     }[key]
 
-    def factory(id: str = key, turns=()):
+    def factory(id: str = key.replace("_", " ").title(), turns=()):
         return from_orbit(
             id, seed, group, count, None, turns, name=f"{korean} 면축 ({dual} 쌍대)"
         )
@@ -333,7 +334,7 @@ def prism(n: int, id: str | None = None, turns=()):
     """
     if n < 3:
         raise ValueError(f"각기둥은 n >= 3 이어야 한다 (받은 값: {n})")
-    id = id or f"prism{n}"
+    id = id or f"Prism {n}"
     head = abbrev(id)
     AxisSet = _axis_set_cls()
     s = AxisSet(id, extra_turns=tuple(turns), name=f"{n}각기둥 면축")
@@ -353,7 +354,7 @@ def antiprism(n: int, id: str | None = None, turns=()):
     """
     if n < 3:
         raise ValueError(f"엇각기둥은 n >= 3 이어야 한다 (받은 값: {n})")
-    id = id or f"antiprism{n}"
+    id = id or f"Antiprism {n}"
     head = abbrev(id)
     AxisSet = _axis_set_cls()
     s = AxisSet(id, extra_turns=tuple(turns), name=f"{n}각엇각기둥 면축")
@@ -378,7 +379,7 @@ def bipyramid(n: int, id: str | None = None, turns=()):
     """
     if n < 3:
         raise ValueError(f"쌍뿔은 n >= 3 이어야 한다 (받은 값: {n})")
-    id = id or f"bipyramid{n}"
+    id = id or f"Bipyramid {n}"
     top, bottom = _prism_vertices(n)
     return from_normals(id, list(top) + list(bottom), None, turns, f"{n}각쌍뿔 면축")
 
@@ -390,7 +391,7 @@ def trapezohedron(n: int, id: str | None = None, turns=()):
     """
     if n < 3:
         raise ValueError(f"사다리꼴다면체는 n >= 3 이어야 한다 (받은 값: {n})")
-    id = id or f"trapezo{n}"
+    id = id or f"Trapezohedron {n}"
     top, bottom = _antiprism_vertices(n)
     return from_normals(
         id, list(top) + list(bottom), None, turns, f"{n}각 사다리꼴다면체 면축"

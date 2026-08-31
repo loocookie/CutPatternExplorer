@@ -20,7 +20,7 @@ THETA_333 = math.degrees(math.acos(1.0 / math.sqrt(3.0)))
 
 
 def build():
-    faces = S.cube()
+    faces = S.cube("cube")
 
     with puzzle("Cube faces", faces) as p:
         split(faces)

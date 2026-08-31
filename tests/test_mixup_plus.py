@@ -85,7 +85,7 @@ def test_plain_cube_blocks_face_turns_after_a_45_slice():
     from cutpattern import solids as S
     from cutpattern.engine.operations import SplitByAxis
 
-    faces = S.cube()
+    faces = S.cube("cube")
     fam = PuzzleFamily(
         axis_sets=(faces.to_engine(),),
         operations=tuple([SplitByAxis(a.id) for a in faces]) + SLICE_45,

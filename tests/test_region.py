@@ -17,7 +17,7 @@ TAU = 2.0 * math.pi
 
 
 def _faces():
-    return S.cube()
+    return S.cube("cube")
 
 
 def _pair(axis, faces):
@@ -191,7 +191,7 @@ def octo_hide():
 
 
 def test_octocube_hide_faces_are_intact(octo_hide):
-    faces = S.cube()
+    faces = S.cube("cube")
     for axis in faces:
         bc, _ = octo_hide.find(axis.normal, CUT_OFFSET)
         assert bc.is_complete
@@ -202,7 +202,7 @@ def test_octocube_hide_has_no_dangling_cut(octo_hide):
 
 
 def test_octocube_hide_new_boundaries_are_edge_planes(octo_hide):
-    faces = list(S.cube())
+    faces = list(S.cube("cube"))
     new = [b for b in octo_hide.non_empty() if not _is_face(b.circle.n, faces)]
     assert len(new) == 12
     for bc in new:
@@ -285,7 +285,7 @@ def test_moved_arc_is_not_swallowed_by_hidden_coverage():
 
     theta = 36.0
     offset = math.cos(math.radians(theta))
-    faces = S.dodecahedron()
+    faces = S.dodecahedron("dodecahedron")
     opp = {a.id: at_angle(a, 180, faces)[0] for a in faces}
     by_id = {a.id: a for a in faces}
 
@@ -366,7 +366,7 @@ def test_uncut_boundary_follows_the_on_illegal_policy():
     from cutpattern.engine.operations import Truncated, UncutBoundaryError
 
     def build():
-        f = S.cube(turns=(45, -45, 90, -90, 180))
+        f = S.cube("cube", turns=(45, -45, 90, -90, 180))
         with puzzle("uncut-policy", f) as p:
             split(f)
             turn(f["c-3"], 45)  # +y

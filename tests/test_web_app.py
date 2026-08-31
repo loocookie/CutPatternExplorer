@@ -322,7 +322,7 @@ def test_explicit_imports_still_work(browser_globals):
     source = """from cutpattern import solids as S
 from cutpattern.dsl import puzzle, split
 
-faces = S.cube()
+faces = S.cube("cube")
 with puzzle("명시적 import", faces) as p:
     split(faces)
 """
@@ -599,7 +599,7 @@ def test_insertion_goes_to_all_three_places(browser_globals):
     out = browser_globals["add_axis_set"](DEF3, "rhombic_dodecahedron")
     lines = out.splitlines()
 
-    var = "rhombic_dodecahedron1"
+    var = "rd1"
     assign = next(i for i, l in enumerate(lines) if l.startswith(var + " ="))
     with_at = next(i for i, l in enumerate(lines) if l.startswith("with puzzle("))
     assert assign < with_at, "(1) with 블록 앞에 있어야 한다"
@@ -607,15 +607,15 @@ def test_insertion_goes_to_all_three_places(browser_globals):
     assert lines[-1] == "    split(" + var + ")", "(3) 블록 직속 본문 끝이 아니다"
 
     info = browser_globals["prepare"](out)
-    assert info["inputs"] == ["cube", var]
+    assert info["inputs"] == ["cube", "Rhombic Dodecahedron 1"]
 
 
 def test_split_does_not_land_inside_a_turned_block(browser_globals):
     """중첩 블록 안에 들어가면 회전된 상태에서 자르게 되어 다른 퍼즐이 된다."""
     out = browser_globals["add_axis_set"](DEF3, "icosahedron")
     for line in out.splitlines():
-        if "split(icosa1)" in line:
-            assert line == "    split(icosa1)", "들여쓰기가 깊다 = 중첩 블록 안이다"
+        if "split(i1)" in line:
+            assert line == "    split(i1)", "들여쓰기가 깊다 = 중첩 블록 안이다"
 
 
 def test_generated_names_carry_the_instance_number(browser_globals):
@@ -625,10 +625,10 @@ def test_generated_names_carry_the_instance_number(browser_globals):
     축 id 도 같은 번호를 쓰므로 집합과 축의 대응이 눈으로 보인다.
     """
     out = browser_globals["add_axis_set"]("", "cube")
-    assert out.startswith('cube1 = cube("cube1")'), out
+    assert out.startswith('c1 = cube("Cube 1")'), out
 
     out = browser_globals["add_axis_set"](out, "icosahedron")
-    assert 'icosahedron1 = icosahedron("icosahedron1")' in out
+    assert 'i1 = icosahedron("Icosahedron 1")' in out
 
 
 def test_axis_ids_are_qualified_by_their_set(browser_globals):
@@ -640,7 +640,7 @@ def test_axis_ids_are_qualified_by_their_set(browser_globals):
     out = browser_globals["add_axis_set"]("", "cube")
     out = browser_globals["add_axis_set"](out, "cube")
     info = browser_globals["prepare"](out)
-    assert info["axisSets"] == ["cube1", "cube2"]
+    assert info["axisSets"] == ["Cube 1", "Cube 2"]
 
     puzzle_obj = browser_globals["_state"]["puzzle"]
     first, second = puzzle_obj.axis_sets
@@ -660,20 +660,20 @@ def test_names_are_found_by_parsing_not_by_searching(browser_globals):
     """주석 안의 단어를 세면 멀쩡한 이름을 피해 간다."""
     source = '# cube1 은 여기서 이름이 아니라 주석이다\n'
     out = browser_globals["add_axis_set"](source, "cube")
-    assert 'cube1 = cube(' in out, out
+    assert 'c1 = cube(' in out, out
 
 
 def test_an_empty_editor_gets_a_whole_skeleton(browser_globals):
     out = browser_globals["add_axis_set"]("", "icosahedron")
     info = browser_globals["prepare"](out)
-    assert info["axisSets"] == ["icosahedron1"]
+    assert info["axisSets"] == ["Icosahedron 1"]
     assert info["ops"] > 0
 
 
 def test_code_without_a_puzzle_block_gets_one(browser_globals):
     out = browser_globals["add_axis_set"]("x = 1\n", "cube")
     assert "x = 1" in out, "쓰던 코드를 지우면 안 된다"
-    assert browser_globals["prepare"](out)["axisSets"] == ["cube1"]
+    assert browser_globals["prepare"](out)["axisSets"] == ["Cube 1"]
 
 
 def test_broken_code_is_refused_not_mangled(browser_globals):
