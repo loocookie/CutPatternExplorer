@@ -603,8 +603,13 @@ def axis_op(source, set_id, op, other=None):
     elif op == "rename":
         call = "rename(%s, {%s: %s})" % (
             inner, json.dumps(first), json.dumps(prefix + "-U"))
-    elif op in ("mirror", "invert"):
-        call = "%s(%s)" % (op, inner)
+    elif op == "mirror":
+        # 평면을 드러낸다. 인자를 숨기면 어느 평면인지 코드에 안 보이고
+        # 고칠 곳도 없다 — 기본값이 있다는 것과 안 보여도 된다는 것은 다르다
+        call = "mirror(%s, normal=(0, 0, 1))" % inner
+    elif op == "invert":
+        # 원점 반전은 인자가 없다. 고를 것이 없다
+        call = "invert(%s)" % inner
     else:
         if not other:
             raise ValueError("merge needs a second axis set")

@@ -18,7 +18,7 @@ class Engine {
   }
 
   _spawn() {
-    this.worker = new Worker("worker.js?v=bf4762f1", { type: "module" });
+    this.worker = new Worker("worker.js?v=5a54abe4", { type: "module" });
     this.worker.onmessage = (ev) => {
       const msg = ev.data;
       if (msg.type === "status") { this.onStatus(msg.text); return; }

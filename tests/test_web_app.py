@@ -1086,6 +1086,19 @@ def test_the_delete_button_moved_off_the_slider():
     assert "removeAxisSet" not in sliders
 
 
+def test_mirror_shows_the_plane(ready):
+    """`mirror` 는 평면의 법선을 받는다. 기본값이 있다는 것과 안 보여도 된다는
+    것은 다르다 — 안 쓰면 어느 평면인지 코드에 없고 고칠 곳도 없다."""
+    assert ready["axis_op"](DEF_SETS, "Cube 1", "mirror").startswith(
+        'c1 = mirror(cube("Cube 1"), normal=(0, 0, 1))')
+
+
+def test_invert_takes_nothing(ready):
+    """원점 반전은 고를 것이 없다. 없는 인자를 지어내지 않는다."""
+    assert ready["axis_op"](DEF_SETS, "Cube 1", "invert").startswith(
+        'c1 = invert(cube("Cube 1"))')
+
+
 def test_edits_stack(ready):
     """메뉴는 겹겹이 쌓는 것을 전제한다. 두 번째부터 못 찾으면 안 된다.
 
@@ -1095,7 +1108,7 @@ def test_edits_stack(ready):
     out = ready["axis_op"](DEF_SETS, "Cube 1", "mirror")
     out = ready["axis_op"](out, "Cube 1", "rotate")
     out = ready["axis_op"](out, "Cube 1", "mirror")
-    assert out.startswith('c1 = mirror(rotate(mirror(cube("Cube 1")), ')
+    assert out.startswith('c1 = mirror(rotate(mirror(cube("Cube 1"), ')
     ready["prepare"](out)
 
 
