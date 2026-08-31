@@ -14,6 +14,18 @@ sliders, so a whole family of puzzles is one definition.
 
 ## Running it locally
 
+The Pyodide runtime is not in this repository (12 MB). Fetch it once:
+
+```
+python web/fetch_pyodide.py
+```
+
+It downloads five files into `web/pyodide/` and checks them against
+`web/pyodide.sha256`. There is no CDN fallback on purpose: the page must load
+the runtime from its own origin so that `connect-src` can be locked down. If you
+skip this step the page fails loudly with a 404 rather than quietly reaching out
+to a CDN.
+
 ```
 python -m http.server 8000
 ```
@@ -86,6 +98,7 @@ node web/syntax.test.js      # the browser JS actually parses
 node web/render.test.js      # silhouette splitting and drawing
 node web/editor.test.js      # indentation
 node web/share.test.js       # link round-trip
+node web/revoke.test.js      # the network paths really do close
 ```
 
 Generated files are rebuilt with `python web/bundle_engine.py`. Tests catch them

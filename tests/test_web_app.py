@@ -265,6 +265,52 @@ def test_network_paths_are_closed_before_definitions_run():
     assert "throw new Error" in _function_body(WORKER, "function revokeNetwork()")
 
 
+def test_the_runtime_comes_from_the_same_origin():
+    """CDN 에서 받으면 connect-src 에 그 출처를 열어 두어야 한다 (§19.14).
+
+    열어 두면 정의도 그리로 보낼 수 있으므로 잠그는 뜻이 없어진다. 폴백도
+    두지 않는다 — 폴백이 있으면 구멍이 그대로 남고, 로컬에만 파일이 없는
+    상태를 아무도 못 알아챈다.
+    """
+    assert "cdn.jsdelivr.net" not in WORKER, "런타임을 CDN 에서 받고 있다"
+    assert "loadPyodide(PYODIDE_OPTIONS)" in WORKER
+
+    # indexURL 을 안 넘기면 Pyodide 가 일부러 예외를 던져 스택 트레이스에서
+    # 제 파일 이름을 뽑아 쓴다. 위치를 아는데 그 추론에 기댈 이유가 없다
+    assert "indexURL" in WORKER
+
+
+def test_the_runtime_manifest_is_the_only_place_the_version_lives():
+    """받는 것과 같은지는 파일이 아니라 해시가 보증한다 (§19.14).
+
+    12MB 를 커밋하면 git 이 보증하지만 판올림마다 히스토리에 쌓인다. 해시는
+    300바이트로 같은 것을 보증하고, 오히려 더 강하다 — 커밋은 최초 1회를
+    눈감고 받지만 이것은 매번 검증한다.
+    """
+    text = (ROOT / "web" / "pyodide.sha256").read_text(encoding="utf-8")
+    version = ""
+    files = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("version "):
+            version = line.split(None, 1)[1]
+            continue
+        digest, name = line.split()
+        assert len(digest) == 64, name
+        files[name] = digest
+
+    assert version
+    assert set(files) == {
+        "pyodide.mjs", "pyodide.asm.js", "pyodide.asm.wasm",
+        "python_stdlib.zip", "pyodide-lock.json",
+    }, sorted(files)
+
+    # 버전이 두 곳에 적히면 어긋난다. worker.js 는 경로만 안다
+    assert version not in WORKER, f"worker.js 에 버전 {version} 이 박혀 있다"
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 

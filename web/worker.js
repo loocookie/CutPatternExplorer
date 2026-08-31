@@ -9,7 +9,20 @@
 
 "use strict";
 
-const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.28.3/full/pyodide.mjs";
+// 런타임은 같은 출처에서 온다 (§19.14). CDN 에서 받으면 connect-src 에 그
+// 출처를 열어 두어야 하고, 그러면 정의도 그리로 보낼 수 있다.
+//
+// **버전이 없다.** 버전은 web/pyodide.sha256 한 곳에만 적힌다.
+// python web/fetch_pyodide.py 가 받아 둔다 — 안 돌리면 여기서 404 로 죽는다.
+// 폴백은 두지 않는다. 폴백이 있으면 막으려던 구멍이 그대로 남는다
+const PYODIDE_DIR = new URL("./pyodide/", import.meta.url).href;
+
+/** indexURL 을 **명시로** 넘긴다.
+ *
+ * 안 넘기면 Pyodide 가 일부러 예외를 던져 스택 트레이스에서 제 파일 이름을
+ * 뽑아 쓴다. 여기서는 위치를 이미 아는데 그 추론에 기댈 이유가 없다.
+ */
+const PYODIDE_OPTIONS = { indexURL: PYODIDE_DIR };
 
 // 정의가 밖으로 내보낼 수 있는 통로 (§19.5). Pyodide 는 `js` 모듈로 전역을
 // 그대로 열어 주므로, 여기 남는 것은 `import js` 한 줄이면 닿는다.
@@ -83,11 +96,11 @@ self.onerror = (ev) => {
 
 async function boot() {
   status("Downloading Pyodide…");
-  const { loadPyodide } = await import(PYODIDE);
-  py = await loadPyodide();
+  const { loadPyodide } = await import(PYODIDE_DIR + "pyodide.mjs");
+  py = await loadPyodide(PYODIDE_OPTIONS);
 
   status("Loading the engine…");
-  await import("./engine.js?v=ce85b8ce");   // globalThis.ENGINE_SOURCES 를 채운다
+  await import("./engine.js?v=ce7fb47d");   // globalThis.ENGINE_SOURCES 를 채운다
 
   const FS = py.FS;
   const made = new Set();

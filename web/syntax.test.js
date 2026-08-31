@@ -12,7 +12,9 @@
 
 "use strict";
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 let failures = 0;
 function check(name, cond, extra) {
@@ -20,7 +22,7 @@ function check(name, cond, extra) {
   else { failures++; console.log("  FAIL " + name, extra !== undefined ? extra : ""); }
 }
 
-const FILES = ["render.js", "editor.js", "share.js", "app.js", "worker.js", "vocab.js"];
+const FILES = ["render.js", "editor.js", "share.js", "app.js", "vocab.js"];
 
 for (const name of FILES) {
   const full = path.join(__dirname, name);
@@ -32,6 +34,19 @@ for (const name of FILES) {
     new Function(text.replace(/^window\./gm, "globalThis."));
   } catch (e) { ok = false; err = e.message; }
   check(name + " 파싱", ok, err);
+}
+
+// worker.js 는 **모듈로** 봐야 한다. import.meta.url 로 제 위치를 잡는데
+// (§19.14) 그건 함수 본문에서는 문법 오류라 new Function 으로는 못 판다.
+// 확장자가 .mjs 여야 node 가 모듈로 읽는다
+{
+  const text = fs.readFileSync(path.join(__dirname, "worker.js"), "utf8");
+  const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cutpattern-")), "w.mjs");
+  fs.writeFileSync(tmp, text);
+  const out = spawnSync(process.execPath, ["--check", tmp], { encoding: "utf8" });
+  fs.rmSync(path.dirname(tmp), { recursive: true, force: true });
+  check("worker.js 파싱 (모듈)", out.status === 0,
+    (out.stderr || "").trim().split(/\r?\n/)[0]);
 }
 
 // index.html 안의 인라인 스크립트도 마찬가지다
