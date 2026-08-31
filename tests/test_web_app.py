@@ -403,8 +403,7 @@ def test_the_two_modes_split_the_sidebar():
     #
     # 공유도 그렇다. 그것은 **보내는 쪽** 일이고, §19.4 의 성질은 받는 사람이
     # 코드를 읽는 것이지 보내는 사람이 편집창을 거치는 게 아니다
-    for tag_id in ('id="err"', 'id="sliders"', 'id="sets"', 'id="share"',
-                   'id="stop"'):
+    for tag_id in ('id="err"', 'id="sets"', 'id="share"', 'id="stop"'):
         assert not marked(tag_id), tag_id + " 는 두 모드에 다 있어야 한다"
 
 
@@ -425,7 +424,7 @@ def test_editing_an_axis_set_belongs_to_the_edit_mode():
     지우기는 다르다 — 넣기와 대칭이라 (§19.9) 두 모드에 다 있어야 한다.
     `Add axis set` 이 실행 모드에 있는데 지우기가 없으면 한쪽만 되는 짝이다.
     """
-    body = _function_body(PAGE, "function buildToggles()")
+    body = _function_body(PAGE, "function buildAxisSets()")
     assert 'if (mode === "edit") row.append(pick)' in body
 
     # × 는 조건 없이 붙어야 한다
@@ -1409,11 +1408,22 @@ def test_axis_editing_is_wired_from_the_page_to_the_worker():
     assert "axisOp:" in WORKER and "axis_op" in WORKER
 
 
-def test_the_delete_button_moved_off_the_slider():
-    """슬라이더는 각도만 다룬다. 축 집합을 다루는 자리는 축 집합 목록이다 —
-    거기에만 그려지지 않는 집합도 나온다."""
-    sliders = PAGE.split("function buildSliders")[1].split("function ")[0]
-    assert "removeAxisSet" not in sliders
+def test_one_row_per_axis_set():
+    """목록 둘을 하나로 합친다 (§19.15).
+
+    나뉘어 있던 이유는 **각도가 없는 축 집합이 있어서**였다 (기준으로만 쓰는
+    것, §19.12). 그건 슬라이더 칸을 비우면 될 일이지 목록을 둘로 만들 이유가
+    아니었다 — 실제로 나뉜 이유는 `×` 를 어디 둘지였고 그건 정해졌다.
+    """
+    assert 'id="sliders"' not in PAGE, "Cut angle 목록은 없어졌다"
+
+    body = _function_body(PAGE, "function buildAxisSets()")
+    # 각도가 있는 집합에만 슬라이더가 붙는다. 나머지는 줄만 남는다
+    assert "info.inputs.includes(set.id)" in body
+
+    # 슬라이더 줄은 각도만 다룬다
+    angle = _function_body(PAGE, "function angleRow(id)")
+    assert "removeAxisSet" not in angle and "axisOp" not in angle
 
 
 def test_mirror_shows_the_plane(ready):

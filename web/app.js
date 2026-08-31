@@ -32,7 +32,7 @@ const BOOT_SILENCE_MS = 20000;
 // CSP 는 스크립트가 아니라 **전역**에 붙으므로, https 에서 온 worker.js 가
 // 그 안에서 돌아도 물려받은 정책 아래 있다.
 function workerBlobUrl() {
-  const target = new URL("worker.js?v=f36157ae", location.href).href;
+  const target = new URL("worker.js?v=a383a1df", location.href).href;
   const shim = "import " + JSON.stringify(target) + ";";
   return URL.createObjectURL(new Blob([shim], { type: "text/javascript" }));
 }
