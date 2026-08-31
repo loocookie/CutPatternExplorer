@@ -49,7 +49,10 @@
   aside { border-left: 1px solid #e3e6ee; padding: 16px; overflow-y: auto;
           display: flex; flex-direction: column; gap: 14px; }
   h1 { font-size: 13px; margin: 0; letter-spacing: .02em; color: #5b6172; }
+  /* 긴 줄은 접지 않고 가로로 민다 (§19.6). 접으면 한 줄이 두 줄로 보여
+     들여쓰기 열이 어긋나 보이는데, 파이썬은 그 열이 문법이다 */
   textarea { width: 100%; height: 220px; padding: 10px; resize: vertical;
+             overflow-x: auto;
              font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
              border: 1px solid #dfe3ec; border-radius: 6px; background: #fff;
              tab-size: 4; }
@@ -110,7 +113,8 @@
     <select id="addPick"></select>
     <button id="add">Add axis set</button>
   </div>
-  <textarea id="src" spellcheck="false"></textarea>
+  <!-- wrap="off" 라야 긴 줄이 접히지 않고 가로로 스크롤된다 (§19.6) -->
+  <textarea id="src" spellcheck="false" wrap="off"></textarea>
   <div class="bar">
     <button id="run">Run</button>
     <button id="stop" disabled>Stop</button>
@@ -130,11 +134,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=7cfb5ff9"></script>
-<script src="render.js?v=7cfb5ff9"></script>
-<script src="editor.js?v=7cfb5ff9"></script>
-<script src="share.js?v=7cfb5ff9"></script>
-<script src="app.js?v=7cfb5ff9"></script>
+<script src="vocab.js?v=5eb14b48"></script>
+<script src="render.js?v=5eb14b48"></script>
+<script src="editor.js?v=5eb14b48"></script>
+<script src="share.js?v=5eb14b48"></script>
+<script src="app.js?v=5eb14b48"></script>
 <script>
 "use strict";
 

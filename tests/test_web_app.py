@@ -367,6 +367,17 @@ def test_the_page_carries_a_policy():
     assert "blob:" not in rules["script-src"]
 
 
+def test_the_editor_does_not_wrap_long_lines():
+    """접으면 한 줄이 두 줄로 보인다 (§19.6).
+
+    파이썬은 들여쓰기 열이 문법이라, 어디가 진짜 줄머리인지 눈으로 세는 것이
+    편집창에서 제일 자주 하는 일이다. 접힌 줄은 그걸 못 하게 한다.
+    """
+    assert 'id="src"' in PAGE
+    tag = PAGE[PAGE.index('<textarea id="src"'):]
+    assert 'wrap="off"' in tag[:tag.index(">")]
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 
