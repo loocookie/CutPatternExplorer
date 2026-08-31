@@ -222,7 +222,28 @@ def test_definitions_run_only_in_the_worker():
 
 def test_worker_is_spawned_as_a_module_worker():
     """worker.js 가 engine.js 를 import 하므로 classic worker 로는 안 된다."""
-    assert re.search(r'new Worker\("worker\.js[^"]*", \{ type: "module" \}\)', APP)
+    assert re.search(r'new Worker\(this\.blobUrl, \{ type: "module" \}\)', APP)
+
+
+def test_worker_is_spawned_from_a_blob_so_it_inherits_the_policy():
+    """**worker 는 문서의 CSP 를 물려받지 않는다** (§19.14).
+
+    worker 전역의 정책은 worker 스크립트의 응답 헤더에서 오는데, GitHub Pages
+    는 헤더를 줄 수 없다. 그래서 meta 로 박은 CSP 는 `fetch` 가 실제로 도는
+    worker 안에 안 닿는다. 스크립트의 출처가 `blob:` 같은 로컬 스킴일 때만
+    만든 쪽의 정책을 물려받는다.
+
+    **본문을 blob 에 넣으면 안 된다.** blob URL 에는 디렉터리가 없어서
+    worker.js 안의 상대 경로가 다 깨진다. import 한 줄만 넣으면 worker.js 는
+    제 https 주소에서 받아지고 상대 지정자는 그 base URL 로 풀린다.
+    """
+    body = _function_body(APP, "function workerBlobUrl()")
+    assert "createObjectURL" in body
+    assert '"import "' in body, "blob 에는 import 한 줄만 넣는다"
+    # 표식이 붙은 진짜 파일을 가리켜야 한다. 캐시 손잡이가 여기서 끊기면
+    # 옛 worker 가 새 engine 을 부르는 어긋남이 돌아온다 (§19.11)
+    assert re.search(r'new URL\("worker\.js\?v=[0-9a-f]+", location\.href\)', APP)
+    assert "ENGINE_SOURCES" not in APP, "본문을 옮겨 담으면 상대 경로가 깨진다"
 
 
 def test_boot_has_a_watchdog():
@@ -1001,7 +1022,9 @@ def test_every_subresource_carries_a_cache_stamp():
                     assert quote + ref + quote not in text, ref + " 에 표식이 없다"
 
     assert re.search(r'src="app\.js\?v=[0-9a-f]+"', PAGE)
-    assert re.search(r'new Worker\("worker\.js\?v=[0-9a-f]+"', APP)
+    # worker 는 blob 으로 띄우지만 (§19.14) 그 blob 이 가리키는 진짜 파일에는
+    # 표식이 붙어야 한다. 여기서 끊기면 옛 worker 가 새 engine 을 부른다
+    assert re.search(r'new URL\("worker\.js\?v=[0-9a-f]+"', APP)
 
 
 def test_the_stamp_is_one_value_everywhere():

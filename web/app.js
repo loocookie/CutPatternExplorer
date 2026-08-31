@@ -17,9 +17,30 @@
 // 하나 만들어 내는 셈이다. 말만 하고 계속 기다린다.
 const BOOT_SILENCE_MS = 20000;
 
+// worker 를 **blob 으로 띄운다** (§19.14).
+//
+// worker 는 문서의 CSP 를 물려받지 않는다 — worker 전역의 정책은 worker
+// 스크립트의 **응답 헤더**에서 오는데, GitHub Pages 는 헤더를 줄 수 없다.
+// 예외가 하나 있다: 스크립트의 출처가 `blob:` 같은 로컬 스킴이면 만든 쪽의
+// 정책을 물려받는다. 그래야 `connect-src` 가 정의가 도는 곳에 실제로 닿는다.
+//
+// **본문을 blob 에 넣지 않는다.** 넣으면 worker.js 안의 상대 경로가 다 깨진다 —
+// blob URL 에는 디렉터리가 없다. import 한 줄만 넣으면 worker.js 는 여전히
+// 제 https 주소에서 받아지고, 모듈의 상대 지정자는 **그 모듈의 base URL** 로
+// 풀린다. `./engine.js` 도 `./pyodide/` 도 그대로다.
+//
+// CSP 는 스크립트가 아니라 **전역**에 붙으므로, https 에서 온 worker.js 가
+// 그 안에서 돌아도 물려받은 정책 아래 있다.
+function workerBlobUrl() {
+  const target = new URL("worker.js?v=14f21f68", location.href).href;
+  const shim = "import " + JSON.stringify(target) + ";";
+  return URL.createObjectURL(new Blob([shim], { type: "text/javascript" }));
+}
+
 class Engine {
   constructor(onStatus) {
     this.worker = null;
+    this.blobUrl = null;
     this.failure = null;
     this.onStatus = onStatus || (() => {});
     this.pending = new Map();
@@ -29,7 +50,8 @@ class Engine {
   }
 
   _spawn() {
-    this.worker = new Worker("worker.js?v=ce7fb47d", { type: "module" });
+    this.blobUrl = workerBlobUrl();
+    this.worker = new Worker(this.blobUrl, { type: "module" });
     this.worker.onmessage = (ev) => {
       const msg = ev.data;
       if (msg.type === "status") {
@@ -58,8 +80,18 @@ class Engine {
   _die(err) {
     this.failure = err;
     if (this.worker) { this.worker.terminate(); this.worker = null; }
+    this._dropBlob();
     for (const slot of this.pending.values()) slot.reject(err);
     this.pending.clear();
+  }
+
+  /** blob URL 을 거둔다.
+   *
+   * 만들자마자 거두면 worker 가 아직 못 받아 갔을 수 있다 (스펙상 경합이다).
+   * 부팅 악수가 끝났으면 이미 받아 간 것이 확실하다.
+   */
+  _dropBlob() {
+    if (this.blobUrl) { URL.revokeObjectURL(this.blobUrl); this.blobUrl = null; }
   }
 
   _send(payload, transfer) {
@@ -89,6 +121,7 @@ class Engine {
     }, BOOT_SILENCE_MS);
     try {
       await this._send({ type: "boot" });
+      this._dropBlob();
     } catch (e) {
       this._die(e);   // 다음 요청이 매달리지 않게 한다
       throw e;
