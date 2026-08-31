@@ -50,9 +50,10 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Pages 를 **켜지는** 못한다. 기본 GITHUB_TOKEN 에 그 권한이 없어
+      # `Resource not accessible by integration` 으로 죽는다. 저장소
+      # Settings -> Pages -> Source 를 GitHub Actions 로 한 번 바꿔 줘야 한다
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       # 브라우저가 받아 가지 않는 것은 올리지 않는다. 파이썬은 전부 engine.js
       # 안에 실려 있어 (§19.2) 파일로는 쓰이지 않는다 — boot.py 도 그렇다.
       # 지울 것을 세는 편이 올릴 것을 세는 것보다 안전하다: 새 런타임 파일이

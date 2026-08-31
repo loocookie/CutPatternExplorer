@@ -2066,6 +2066,11 @@ GitHub Actions 로 `web/` 을 **사이트 뿌리**에 올린다. 저장소를 �
 생겼을 때 넣는 것을 잊는 순간 사이트가 깨진다. 지금 참조하는 것이 다 남는지는
 테스트가 본다.
 
+저장소 `Settings -> Pages -> Source` 를 **GitHub Actions** 로 한 번 바꿔 줘야
+한다. 워크플로가 스스로 켤 수는 없다 — `configure-pages` 에 `enablement: true`
+를 주면 기본 `GITHUB_TOKEN` 권한이 모자라 `Resource not accessible by
+integration` 으로 죽는다.
+
 #### 배포 전에 검사한다
 
 커밋된 생성물의 위험은 **낡는 것**이다 (§19.2). 로컬에서 번들을 다시 만드는

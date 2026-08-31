@@ -1162,6 +1162,12 @@ def test_dev_files_do_not_ship():
         assert not name.endswith((".py", ".test.js")), name
 
 
+def test_the_workflow_does_not_try_to_enable_pages():
+    """기본 GITHUB_TOKEN 에 Pages 를 켤 권한이 없다. 시도하면 배포가 죽는다 —
+    사람이 Settings 에서 한 번 켜 주는 것이 맞다."""
+    assert "enablement" not in WORKFLOW
+
+
 def test_the_workflow_checks_the_bundle_before_deploying():
     """커밋된 생성물의 위험은 낡는 것이다. 그때 배포만 조용히 어긋난다."""
     assert "python web/bundle_engine.py" in WORKFLOW
