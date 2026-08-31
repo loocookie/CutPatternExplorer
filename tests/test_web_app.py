@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import json
 import pathlib
+import sys
 import re
 
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "web"))   # bundle_engine 을 그대로 부른다
 WORKER = (ROOT / "web" / "worker.js").read_text(encoding="utf-8")
 APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 PAGE = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
@@ -355,11 +357,15 @@ def test_vocab_file_matches_the_sources():
 
     import bundle_engine
 
+    import re
+
     text = (ROOT / "web" / "vocab.js").read_text(encoding="utf-8")
-    start, end = text.index("{"), text.rindex("}") + 1
-    assert _json.loads(text[start:end]) == bundle_engine.vocabulary(), (
-        "python web/bundle_engine.py 를 돌린다"
-    )
+    got = {
+        name: _json.loads(body)
+        for name, body in re.findall(r"globalThis\.(\w+) = (.*);", text)
+    }
+    assert got["VOCAB"] == bundle_engine.vocabulary(), "python web/bundle_engine.py 를 돌린다"
+    assert got["MENU"] == bundle_engine.menu(), "python web/bundle_engine.py 를 돌린다"
 
 
 def test_worker_results_are_plain_objects():
@@ -570,3 +576,121 @@ def test_escape_cancels_the_edit():
 def test_the_displayed_angle_shows_enough_digits():
     """두 자리로 보여 주면 정확히 넣은 값이 반올림되어 보인다."""
     assert "toFixed(4)" in PAGE
+
+
+# ---- 축 집합 추가 메뉴 (§19.9) -----------------------------------------
+
+
+DEF3 = """faces = cube("faces", turns=(45, -45))
+
+with puzzle("OctoCube", faces) as p:
+    split(faces)
+    for x in faces:
+        with turned(x, 45):
+            split(*at_angle(x, 90, faces))
+"""
+
+
+def test_insertion_goes_to_all_three_places(browser_globals):
+    """맨 뒤에 붙일 수 없다. 넣을 자리가 셋이다.
+
+    (1) with 블록 앞  (2) puzzle() 인자 = 슬라이더 목록  (3) 블록 직속 본문 끝
+    """
+    out = browser_globals["add_axis_set"](DEF3, "rhombic_dodecahedron")
+    lines = out.splitlines()
+
+    assign = next(i for i, l in enumerate(lines) if "rhombic_dodecahedron(" in l)
+    with_at = next(i for i, l in enumerate(lines) if l.startswith("with puzzle("))
+    assert assign < with_at, "(1) with 블록 앞에 있어야 한다"
+    assert ", rd)" in lines[with_at], "(2) 인자 목록에 없다. 슬라이더가 안 생긴다"
+    assert lines[-1] == "    split(rd)", "(3) 블록 직속 본문 끝이 아니다"
+
+    info = browser_globals["prepare"](out)
+    assert info["inputs"] == ["faces", "rhombic_dodecahedron"]
+
+
+def test_split_does_not_land_inside_a_turned_block(browser_globals):
+    """중첩 블록 안에 들어가면 회전된 상태에서 자르게 되어 다른 퍼즐이 된다."""
+    out = browser_globals["add_axis_set"](DEF3, "icosahedron")
+    for line in out.splitlines():
+        if "split(i)" in line:
+            assert line == "    split(i)", "들여쓰기가 깊다 = 중첩 블록 안이다"
+
+
+def test_generated_names_follow_the_axis_id_convention(browser_globals):
+    """축 id 가 이미 약자 + 숫자다 (c0..c5). 변수도 같은 규약을 쓴다."""
+    out = browser_globals["add_axis_set"]("", "cube")
+    assert out.startswith('c = cube("cube")'), out
+
+    out = browser_globals["add_axis_set"](out, "rhombic_dodecahedron")
+    assert 'rd = rhombic_dodecahedron("rhombic_dodecahedron")' in out
+
+
+def test_adding_the_same_solid_twice_avoids_axis_id_collision(browser_globals):
+    """접두사가 입체마다 고정이라 그냥 두면 rd0 이 두 집합에 생긴다.
+
+    축 id 는 전 집합에서 유일해야 한다 (§5).
+    """
+    out = browser_globals["add_axis_set"]("", "cube")
+    out = browser_globals["add_axis_set"](out, "cube")
+    assert 'prefix="c2"' in out, out
+    info = browser_globals["prepare"](out)
+    assert info["axisSets"] == ["cube", "cube2"]
+
+
+def test_names_are_found_by_parsing_not_by_searching(browser_globals):
+    """주석 안의 단어를 세면 멀쩡한 이름을 피해 간다."""
+    source = '# c 와 rd 는 여기서 이름이 아니라 주석이다\n'
+    out = browser_globals["add_axis_set"](source, "cube")
+    assert 'c = cube(' in out, out
+
+
+def test_an_empty_editor_gets_a_whole_skeleton(browser_globals):
+    out = browser_globals["add_axis_set"]("", "icosahedron")
+    info = browser_globals["prepare"](out)
+    assert info["axisSets"] == ["icosa"]
+    assert info["ops"] > 0
+
+
+def test_code_without_a_puzzle_block_gets_one(browser_globals):
+    out = browser_globals["add_axis_set"]("x = 1\n", "cube")
+    assert "x = 1" in out, "쓰던 코드를 지우면 안 된다"
+    assert browser_globals["prepare"](out)["axisSets"] == ["cube"]
+
+
+def test_broken_code_is_refused_not_mangled(browser_globals):
+    """타이핑 중에는 늘 문법이 깨져 있다. 억지로 끼우면 남의 코드를 망친다."""
+    with pytest.raises(ValueError, match="문법 오류"):
+        browser_globals["add_axis_set"]("with puzzle(\n", "cube")
+
+
+def test_comments_and_formatting_survive(browser_globals):
+    """ast.unparse 로 재생성하면 주석과 서식이 다 날아간다."""
+    source = """# 이 주석은 살아야 한다
+faces = cube("faces")
+
+
+with puzzle("t", faces) as p:      # 여기 주석도
+    split(faces)
+"""
+    out = browser_globals["add_axis_set"](source, "octahedron")
+    assert "# 이 주석은 살아야 한다" in out
+    assert "# 여기 주석도" in out
+
+
+def test_the_menu_lists_only_zero_argument_presets():
+    """각기둥 계열은 n 이 필요해서 뺐다. 목록은 카탈로그에서 뽑는다 (§2.5)."""
+    import bundle_engine
+    from cutpattern import solids
+
+    menu = bundle_engine.menu()
+    assert {k for k, _ in menu["정다면체"]} == set(solids.PLATONIC)
+    assert {k for k, _ in menu["카탈란"]} == set(solids.CATALAN)
+    assert "prism" not in {k for items in menu.values() for k, _ in items}
+
+
+def test_the_menu_writes_code():
+    """숨은 상태를 들면 메뉴로 시작해 손으로 이어 쓰는 길이 막힌다."""
+    assert "engine.addAxisSet(els.src.value" in PAGE
+    assert "els.src.value = await engine.addAxisSet" in PAGE
+    assert 'id="addPick"' in PAGE and "globalThis.MENU" in PAGE

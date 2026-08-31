@@ -61,6 +61,7 @@
             border-radius: 6px; padding: 10px 12px; font-size: 12px;
             line-height: 1.6; color: #5c4a12; }
   .bar { display: flex; gap: 8px; align-items: center; }
+  .bar select { flex: 1; min-width: 0; padding: 5px; }
   .bar .msg { font-size: 12px; color: #7b8194; }
 </style>
 
@@ -73,6 +74,10 @@
 <aside>
   <h1>Cut Pattern Explorer</h1>
   <div id="shared"></div>
+  <div class="bar">
+    <select id="addPick"></select>
+    <button id="add">축 집합 추가</button>
+  </div>
   <textarea id="src" spellcheck="false"></textarea>
   <div class="bar">
     <button id="run">실행</button>
@@ -137,7 +142,17 @@ const els = {
   boot: document.getElementById("boot"), shared: document.getElementById("shared"),
   share: document.getElementById("share"), msg: document.getElementById("msg"),
   stop: document.getElementById("stop"),
+  add: document.getElementById("add"), addPick: document.getElementById("addPick"),
 };
+
+// "축 집합 추가" 메뉴. 고르면 **코드를 쓴다** — 숨은 상태를 들고 있으면 메뉴로
+// 시작해 손으로 이어 쓰는 길이 막히고, DSL 이 파이썬인 이유가 사라진다 (§19.9)
+for (const [group, items] of Object.entries(globalThis.MENU || {})) {
+  const optgroup = document.createElement("optgroup");
+  optgroup.label = group;
+  for (const [key, label] of items) optgroup.append(new Option(label, key));
+  els.addPick.append(optgroup);
+}
 
 const engine = new Engine((msg) => { els.boot.textContent = msg; els.boot.style.display = msg ? "grid" : "none"; });
 let angles = {};
@@ -323,6 +338,15 @@ els.share.onclick = async () => {
     els.msg.textContent += " — 너무 길어 잘릴 수 있다";
   }
   setTimeout(() => { els.msg.textContent = ""; }, 4000);
+};
+
+els.add.onclick = async () => {
+  if (!engine.ready) { fail("엔진이 올라와 있지 않다. 새로고침한다."); return; }
+  try {
+    els.src.value = await engine.addAxisSet(els.src.value, els.addPick.value);
+    clearError();
+    await run();
+  } catch (e) { fail(e); }
 };
 
 els.run.onclick = run;

@@ -103,6 +103,7 @@ function describe(e) {
 
 const HANDLERS = {
   prepare: (msg) => ({ result: call("prepare", [msg.source]) }),
+  addAxisSet: (msg) => ({ result: call("add_axis_set", [msg.source, msg.factory]) }),
   evaluate: (msg) => {
     const result = call("evaluate", [JSON.stringify(msg.angles), msg.maxStep]);
     const buffer = sceneBytes();

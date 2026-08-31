@@ -76,6 +76,28 @@ def vocabulary() -> dict[str, list[str]]:
     }
 
 
+def menu() -> dict[str, list[list[str]]]:
+    """"축 집합 추가" 메뉴에 올릴 것 (§19.9).
+
+    인자 없이 부를 수 있는 프리셋만 올린다. 각기둥 계열은 `n` 이 필요해서
+    빠진다 — 숫자를 받는 자리를 메뉴에 만들면 그때 넣는다.
+
+    `PLATONIC` 과 `CATALAN` 이 여기서 또 값을 한다 (§2.5). 목록을 손으로
+    유지하면 프리셋을 늘렸을 때 메뉴에서 조용히 빠진다.
+    """
+    sys.path.insert(0, str(ROOT))
+    from cutpattern import solids
+
+    def entries(catalog):
+        out = []
+        for key, factory in catalog.items():
+            aset = factory()
+            out.append([key, "%s (%d)" % (key.replace("_", " "), len(aset))])
+        return out
+
+    return {"정다면체": entries(solids.PLATONIC), "카탈란": entries(solids.CATALAN)}
+
+
 def main() -> None:
     sources = collect()
     text = render(sources)
@@ -84,8 +106,10 @@ def main() -> None:
     print(f"  파일 {len(sources)}개  소스 {total / 1024:.0f}KB  -> {TARGET.name} {len(text) / 1024:.0f}KB")
 
     groups = vocabulary()
+    groups_menu = menu()
     header = "// python web/bundle_engine.py 가 만든다. 손으로 고치지 않는다.\n"
     body = "globalThis.VOCAB = " + json.dumps(groups, ensure_ascii=False) + ";\n"
+    body += "globalThis.MENU = " + json.dumps(groups_menu, ensure_ascii=False) + ";\n"
     VOCAB.write_text(header + body, encoding="utf-8")
     print(f"  이름 {sum(len(v) for v in groups.values())}개  -> {VOCAB.name}")
     for name in sorted(sources):

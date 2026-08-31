@@ -113,38 +113,38 @@ def from_orbit(
 # 명시하는 자리일 뿐이다.
 
 
-def tetrahedron(id: str = "tetra", turns=()):
+def tetrahedron(id: str = "tetra", turns=(), prefix: str = "t"):
     """정사면체 면축 4개. 반대 방향 축이 없는 대표 사례 (§2.2)."""
     return from_orbit(
-        id, (1, 1, 1), "T", 4, "t", turns, name="정사면체 면축"
+        id, (1, 1, 1), "T", 4, prefix, turns, name="정사면체 면축"
     )
 
 
-def cube(id: str = "cube", turns=()):
+def cube(id: str = "cube", turns=(), prefix: str = "c"):
     """정육면체 면축 6개."""
     return from_orbit(
-        id, (1, 0, 0), "O", 6, "c", turns, name="정육면체 면축"
+        id, (1, 0, 0), "O", 6, prefix, turns, name="정육면체 면축"
     )
 
 
-def octahedron(id: str = "octa", turns=()):
+def octahedron(id: str = "octa", turns=(), prefix: str = "o"):
     """정팔면체 면축 8개. 정육면체의 꼭짓점 방향과 같다."""
     return from_orbit(
-        id, (1, 1, 1), "O", 8, "o", turns, name="정팔면체 면축"
+        id, (1, 1, 1), "O", 8, prefix, turns, name="정팔면체 면축"
     )
 
 
-def dodecahedron(id: str = "dodeca", turns=()):
+def dodecahedron(id: str = "dodeca", turns=(), prefix: str = "d"):
     """정십이면체 면축 12개."""
     return from_orbit(
-        id, (0, 1, PHI), "I", 12, "d", turns, name="정십이면체 면축"
+        id, (0, 1, PHI), "I", 12, prefix, turns, name="정십이면체 면축"
     )
 
 
-def icosahedron(id: str = "icosa", turns=()):
+def icosahedron(id: str = "icosa", turns=(), prefix: str = "i"):
     """정이십면체 면축 20개. 정십이면체의 꼭짓점 방향과 같다."""
     return from_orbit(
-        id, (1, 1, 1), "I", 20, "i", turns, name="정이십면체 면축"
+        id, (1, 1, 1), "I", 20, prefix, turns, name="정이십면체 면축"
     )
 
 
@@ -208,7 +208,7 @@ def _make_catalan(key: str):
         "pentagonal_hexecontahedron": "오각육십면체",
     }[key]
 
-    def factory(id: str = key, turns=()):
+    def factory(id: str = key, turns=(), prefix: str = prefix):
         return from_orbit(
             id, seed, group, count, prefix, turns, name=f"{korean} 면축 ({dual} 쌍대)"
         )

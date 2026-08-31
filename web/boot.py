@@ -9,7 +9,7 @@ worker 가 Pyodide 를 올린 뒤 이 파일을 실행한다 (`web/worker.js`).
 문자열을 오려내지 않고 그대로 import 한다.
 """
 
-import array, sys, json
+import array, ast, inspect, json, sys
 sys.path.insert(0, "/engine")
 
 import math
@@ -136,3 +136,176 @@ def scene_bytes():
     WASM 과 JS 가 둘 다 little-endian 이므로 바이트 순서를 맞출 필요가 없다.
     """
     return array.array("d", _state["scene"].xyz).tobytes()
+
+
+# ---- 메뉴가 코드를 쓴다 (§19.9) ----------------------------------------
+
+
+def _taken_names(tree, ns):
+    """이미 쓰인 이름. 미리 넣어 둔 저작 계층 이름도 포함한다 (§19.7).
+
+    문자열로 찾으면 주석 안의 단어까지 세어 틀린다. 파싱한 트리에서 본다.
+    """
+    used = set(ns)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            used.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            used.add(node.name)
+        elif isinstance(node, ast.arg):
+            used.add(node.arg)
+    return used
+
+
+def _existing_ids(tree, ns):
+    """이미 쓰인 축 집합 id. **문자열**이라 파이썬 이름과 겹쳐도 된다.
+
+    슬라이더에 그대로 나오므로 `rhombic_dodecahedron2` 보다
+    `rhombic_dodecahedron` 이 낫다.
+    """
+    ids = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in ns
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)):
+            ids.add(node.args[0].value)
+    return ids
+
+
+def _free_name(base, taken):
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}{n}" in taken:
+        n += 1
+    return f"{base}{n}"
+
+
+def _offsets(source):
+    """(줄, 열) -> 절대 위치. ast 가 주는 좌표를 문자열 인덱스로 바꾼다."""
+    starts = [0]
+    for line in source.splitlines(True):
+        starts.append(starts[-1] + len(line))
+    return lambda lineno, col: starts[lineno - 1] + col
+
+
+SKELETON = '''%(call)s
+
+with puzzle("%(id)s", %(var)s) as p:
+    split(%(var)s)
+'''
+
+
+def _naming(factory):
+    """프리셋이 정해 둔 짧은 이름과 축 id 접두사를 꺼낸다.
+
+    축 id 는 이미 **약자 + 숫자**다 (`c0..c5`, `rd0..rd11`). 메뉴가 만드는
+    변수도 같은 규약을 따르는 것이 자연스럽다 — `faces2` 보다 `c` 가 짧고,
+    한두 글자 접두사는 저작 계층 이름과 겹칠 일이 없다.
+    """
+    params = inspect.signature(_namespace()[factory]).parameters
+    default_id = params["id"].default
+    prefix = params["prefix"].default if "prefix" in params else "a"
+    if not isinstance(default_id, str):
+        default_id = factory
+    return default_id, prefix
+
+
+def _call(factory, set_id, var, prefix, canonical):
+    """축 집합을 만드는 한 줄. 접두사가 기본과 다를 때만 적는다.
+
+    같은 입체를 두 번 넣으면 축 id 가 겹친다 — 접두사가 입체마다 고정이라
+    `rd0` 이 두 집합에 생긴다. 축 id 는 전 집합에서 유일해야 하므로 (§5)
+    두 번째부터는 접두사를 달리 준다.
+    """
+    if prefix == canonical:
+        return '%s = %s("%s")' % (var, factory, set_id)
+    return '%s = %s("%s", prefix="%s")' % (var, factory, set_id, prefix)
+
+
+def add_axis_set(source, factory):
+    """축 집합 하나를 정의에 끼워 넣고 새 소스를 돌려준다 (§19.9).
+
+    메뉴는 **코드를 쓴다.** 숨은 상태를 들고 있으면 메뉴로 시작해 손으로 이어
+    쓰는 길이 막히고, DSL 이 파이썬인 이유가 사라진다 (§9.1).
+
+    맨 뒤에 붙일 수는 없다. 넣을 자리가 셋이다.
+
+        edges = rhombic_dodecahedron("edges")     (1) with 블록 앞
+        with puzzle("t", faces, edges) as p:      (2) 인자 목록. 곧 슬라이더 목록이다
+            split(faces)
+            split(edges)                          (3) 블록 **직속** 본문 맨 끝
+
+    (3) 이 직속이어야 한다. `with turned(...)` 같은 중첩 블록 안에 들어가면
+    회전된 상태에서 자르는 것이 되어 전혀 다른 퍼즐이 된다.
+
+    문자열을 오려 붙이지 않고 `ast` 로 위치만 얻어 원본을 쪼갠다. `ast.unparse`
+    로 재생성하면 주석과 서식이 다 날아간다.
+    """
+    ns = _namespace()
+    if factory not in ns:
+        raise ValueError("모르는 축 집합: %r" % factory)
+
+    default_id, canonical = _naming(factory)
+
+    stripped = source.strip()
+    if not stripped:
+        var = _free_name(canonical, set(ns))
+        return SKELETON % {
+            "call": _call(factory, default_id, var, canonical, canonical),
+            "var": var, "id": default_id,
+        }
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        raise ValueError(
+            "코드에 문법 오류가 있어 넣을 수 없다 (%d번째 줄). 먼저 고친다."
+            % (exc.lineno or 0)
+        ) from None
+
+    blocks = [
+        node for node in tree.body
+        if isinstance(node, ast.With)
+        and isinstance(node.items[0].context_expr, ast.Call)
+        and getattr(node.items[0].context_expr.func, "id", None) == "puzzle"
+    ]
+    taken = _taken_names(tree, ns)
+    var = _free_name(canonical, taken)
+    set_id = _free_name(default_id, _existing_ids(tree, ns))
+    # 변수가 밀렸다는 것은 같은 입체가 이미 있다는 뜻이다. 축 id 도 밀려야 한다
+    prefix = canonical if var == canonical else var
+
+    if not blocks:
+        # puzzle 블록이 없다. 골격째 만든다
+        return source.rstrip("\n") + "\n\n" + SKELETON % {
+            "call": _call(factory, set_id, var, prefix, canonical),
+            "var": var, "id": set_id,
+        }
+
+    block = blocks[-1]              # 마지막 블록을 쓴다. load() 와 같은 규약
+    call = block.items[0].context_expr
+    if not call.args:
+        raise ValueError("puzzle() 에 이름이 없다. puzzle(\"이름\", 축집합) 꼴이어야 한다")
+
+    at = _offsets(source)
+    body = block.body
+    indent = " " * body[0].col_offset
+
+    # 뒤에서부터 넣는다. 앞을 먼저 넣으면 뒤 위치가 밀린다
+    edits = [
+        # (3) 블록 직속 본문 맨 끝
+        (at(body[-1].end_lineno, 0) + len(source.splitlines(True)[body[-1].end_lineno - 1]),
+         "%ssplit(%s)\n" % (indent, var)),
+        # (2) 인자 목록 = 슬라이더 목록
+        (at(call.args[-1].end_lineno, call.args[-1].end_col_offset), ", %s" % var),
+        # (1) with 블록 앞
+        (at(block.lineno, 0), _call(factory, set_id, var, prefix, canonical) + '\n\n'),
+    ]
+    out = source
+    for pos, text in edits:
+        out = out[:pos] + text + out[pos:]
+    return out

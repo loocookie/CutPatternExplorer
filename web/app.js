@@ -84,6 +84,11 @@ class Engine {
     return this.pending.size > 0;
   }
 
+  /** 축 집합 하나를 정의에 끼워 넣은 새 소스 (§19.9). */
+  async addAxisSet(source, factory) {
+    return (await this._send({ type: "addAxisSet", source, factory })).result;
+  }
+
   async prepare(source) {
     return (await this._send({ type: "prepare", source })).result;
   }
