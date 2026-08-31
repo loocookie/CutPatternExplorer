@@ -136,24 +136,17 @@
   </div>
   <div id="err"></div>
   <fieldset id="sets"><legend>Axis sets</legend></fieldset>
-  <!-- 아직 두 모드에 다 있다. 마커는 축 집합 패널로 갈 예정이고 (§19.15)
-       그때 이 토글 둘은 끌 대상이 없어져 사라진다. 그 전까지 편집 모드에만
-       두면 실행 모드는 마커가 보이는데 못 끄는 상태가 된다 -->
-  <fieldset>
-    <label class="tog"><input type="checkbox" id="mk" checked> Axis markers</label>
-    <label class="tog"><input type="checkbox" id="lb" checked> Axis labels</label>
-  </fieldset>
   <details id="vocab" class="editonly">
     <summary>Names in scope</summary>
     <div id="vocabList"></div>
   </details>
 </aside>
 
-<script src="vocab.js?v=a4cefd89"></script>
-<script src="render.js?v=a4cefd89"></script>
-<script src="editor.js?v=a4cefd89"></script>
-<script src="share.js?v=a4cefd89"></script>
-<script src="app.js?v=a4cefd89"></script>
+<script src="vocab.js?v=6c88f1a0"></script>
+<script src="render.js?v=6c88f1a0"></script>
+<script src="editor.js?v=6c88f1a0"></script>
+<script src="share.js?v=6c88f1a0"></script>
+<script src="app.js?v=6c88f1a0"></script>
 <script>
 "use strict";
 
@@ -685,8 +678,6 @@ els.src.oninput = () => {
 els.src.onkeydown = (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
 };
-document.getElementById("mk").onchange = (e) => { view.showMarkers = e.target.checked; view.draw(); };
-document.getElementById("lb").onchange = (e) => { view.showLabels = e.target.checked; view.draw(); };
 // window resize 는 창 크기만 본다. 패널이나 폰트 변화로 캔버스만 바뀌는 경우를
 // 놓치므로 요소를 직접 관찰한다
 new ResizeObserver(() => view.draw()).observe(document.getElementById("stage"));

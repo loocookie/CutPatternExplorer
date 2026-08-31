@@ -133,7 +133,9 @@ def evaluate(angles_json, max_step):
     p = _state["puzzle"]
     angles = json.loads(angles_json)
     reg, log = p.evaluate(angles, on_illegal="truncate")
-    scene = build_scene(reg, p.family, max_step=max_step)
+    # 마커는 편집 모드 무대 것이다 (§19.15). 절단 패턴에 얹으면 진짜 얕은
+    # 절단과 섞여 보이고, 축 위치를 보는 자리는 따로 있다
+    scene = build_scene(reg, p.family, max_step=max_step, markers=False)
     _state["scene"] = scene
     trunc = [r for r in log if isinstance(r, Truncated)]
     note = ""

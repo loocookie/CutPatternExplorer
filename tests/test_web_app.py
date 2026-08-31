@@ -705,6 +705,25 @@ def test_every_cut_input_gets_an_angle():
     assert "= 60" not in _function_body(PAGE, "function angleRow(id)")
 
 
+def test_the_run_stage_has_no_markers():
+    """마커는 편집 모드 무대 것이다 (§19.15).
+
+    절단 패턴에 얹으면 진짜 얕은 절단과 섞여 보인다 — 절단 각도를 2도로 놓을
+    수 있으므로 크기만으로는 구분이 안 된다 (§11.4). 축 위치를 보는 자리는
+    이제 따로 있으므로 거기 둘 이유가 없다.
+
+    그래서 `Axis markers` / `Axis labels` 체크박스도 사라졌다. 옮긴 것이
+    아니라 **끌 대상이 없어졌다** — 실행 모드에는 마커가 없고, 편집 모드는
+    마커를 보려고 들어가는 곳이다. 집합별로 감추는 것은 축 집합 줄이 한다.
+    """
+    assert "markers=False" in BOOT
+    assert 'id="mk"' not in PAGE and 'id="lb"' not in PAGE
+
+    render = (ROOT / "web" / "render.js").read_text(encoding="utf-8")
+    assert "showMarkers" not in render, "늘 켜져 있는 스위치는 스위치가 아니다"
+    assert "showLabels" not in render
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 

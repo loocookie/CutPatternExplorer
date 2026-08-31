@@ -58,8 +58,6 @@ class SphereView {
     this.scene = null;
     this.view = null;          // 변환된 좌표. 장면이 바뀔 때만 다시 잡는다
     this.hidden = new Set();   // 꺼진 축 집합 인덱스 (§11.5)
-    this.showMarkers = true;
-    this.showLabels = true;
     this._bindDrag();
   }
 
@@ -145,7 +143,7 @@ class SphereView {
     ctx.stroke();
     this._strokeAll(cx, cy, R, true);
 
-    if (this.showMarkers && this.showLabels) this._labels(cx, cy, R);
+    this._labels(cx, cy, R);
   }
 
   // front 가 참이면 depth > 0 인 조각만 그린다.
@@ -156,7 +154,6 @@ class SphereView {
     ctx.lineCap = "round";
     for (let i = 0; i < scene.starts.length; i++) {
       const kind = scene.kinds[i];
-      if (kind === MARKER && !this.showMarkers) continue;
       const group = scene.groups[i];
       if (this.hidden.has(group)) continue;
 
