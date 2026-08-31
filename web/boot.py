@@ -330,8 +330,8 @@ def _binding_for(tree, set_id):
     return None, None
 
 
-def _mentions(node, name):
-    return any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(node))
+def _mentions(node, names):
+    return any(isinstance(n, ast.Name) and n.id in names for n in ast.walk(node))
 
 
 def _is_puzzle_block(stmt):
@@ -340,8 +340,73 @@ def _is_puzzle_block(stmt):
             and getattr(stmt.items[0].context_expr.func, "id", None) == "puzzle")
 
 
-def _prune(body, name, drop):
-    """`name` 을 쓰는 문장을 걷어낸 새 본문. 지운 문장은 `drop` 에 쌓는다.
+def _bound(node):
+    """이 문장이 만드는 이름들."""
+    out = []
+    targets = []
+    if isinstance(node, ast.Assign):
+        targets = node.targets
+    elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.For)):
+        targets = [node.target]
+    elif isinstance(node, ast.With):
+        targets = [i.optional_vars for i in node.items if i.optional_vars]
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return [node.name]
+    for target in targets:
+        out += [n.id for n in ast.walk(target) if isinstance(n, ast.Name)]
+    return out
+
+
+def _feeds(node):
+    """이 문장이 만든 이름을 결정하는 표현식들 — 값 쪽."""
+    if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+        return [node.value] if node.value is not None else []
+    if isinstance(node, ast.For):
+        return [node.iter]
+    if isinstance(node, ast.With):
+        return [i.context_expr for i in node.items]
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return node.body
+    return []
+
+
+def _doomed(tree, var):
+    """`var` 에서 **파생된 이름까지** 모은다.
+
+    한 단계만 보면 모자란다. 실제로 이렇게 깨졌다.
+
+        pair = lambda a: [a, at_angle(a, 180, o1)[0]]
+        a, b = tuple(pair(nearest(t1["t1-0"], o1)))
+        with turned(a, 15):                  # o1 을 직접 쓰지 않는다
+
+    `with turned(a, 15)` 는 `o1` 이라는 글자가 없어서 살아남고, `a` 를 만들던
+    줄은 사라진다. 남는 것은 `NameError` 다. 이름이 아니라 **값의 흐름**을
+    따라가야 한다.
+
+    변수가 다시 대입되는 경우는 보지 않는다 — 흐름에 둔감한 근사라 그럴 때는
+    더 지운다. 짧은 정의 스크립트에서 이름을 재사용하는 일은 드물고, 덜 지워
+    깨진 코드를 남기는 쪽이 더 나쁘다.
+    """
+    names = {var}
+    while True:
+        grown = False
+        for node in ast.walk(tree):
+            # `with puzzle(...)` 의 머리에 이름이 있는 것은 슬라이더 목록이라는
+            # 뜻이다. `p` 가 축 집합에서 파생된 것이 아니다
+            if _is_puzzle_block(node):
+                continue
+            if not any(_mentions(e, names) for e in _feeds(node)):
+                continue
+            for name in _bound(node):
+                if name not in names:
+                    names.add(name)
+                    grown = True
+        if not grown:
+            return names
+
+
+def _prune(body, names, drop):
+    """`names` 를 쓰는 문장을 걷어낸 새 본문. 지운 문장은 `drop` 에 쌓는다.
 
     겹블록은 **머리**가 그 이름을 쓰면 통째로 지운다 — `for x in c1:` 의 본문만
     남기면 `x` 가 어디서 오는지 사라진다. 머리가 안 쓰면 본문만 훑고, 본문이
@@ -350,39 +415,55 @@ def _prune(body, name, drop):
     kept = []
     for stmt in body:
         if isinstance(stmt, (ast.For, ast.With, ast.While, ast.If)):
-            # `with puzzle(...)` 의 머리는 예외다. 거기 이름이 있는 것은
-            # 슬라이더 목록이라는 뜻이고, 인자에서 빼는 것으로 따로 다룬다.
-            # 머리만 보고 블록째 지우면 퍼즐이 통째로 사라진다
-            header = [] if _is_puzzle_block(stmt) else list(getattr(stmt, "items", []))
-            header += [x for x in (getattr(stmt, "iter", None),
-                                   getattr(stmt, "test", None)) if x is not None]
-            if any(_mentions(h, name) for h in header):
+            # `with puzzle(...)` 의 머리는 예외다. 인자에서 빼는 것으로 따로
+            # 다룬다. 머리만 보고 지우면 퍼즐이 통째로 사라진다
+            header = [] if _is_puzzle_block(stmt) else _feeds(stmt)
+            if any(_mentions(h, names) for h in header):
                 drop.append(stmt)
                 continue
-            stmt.body = _prune(stmt.body, name, drop)
-            stmt.orelse = _prune(getattr(stmt, "orelse", []), name, drop)
-            if not stmt.body:
+            stmt.body = _prune(stmt.body, names, drop)
+            stmt.orelse = _prune(getattr(stmt, "orelse", []), names, drop)
+            # 빈 퍼즐 블록은 여기서 지우지 않는다. 축 집합이 남아 있으면
+            # 자르지 않은 퍼즐로 살려 두는 것이 맞고, 그 판단은 인자를 보는
+            # 쪽에 있다
+            if not stmt.body and not _is_puzzle_block(stmt):
                 drop.append(stmt)
                 continue
             kept.append(stmt)
-        elif _mentions(stmt, name):
+        elif _mentions(stmt, names):
             drop.append(stmt)
         else:
             kept.append(stmt)
     return kept
 
 
+def _coalesce(cuts):
+    """겹치는 구간을 합친다.
+
+    한 블록이 통째로 지워지면 그 블록과 자식이 둘 다 목록에 오른다. 겹친 채로
+    뒤에서부터 자르면 앞서 적용한 결과 위에 옛 위치로 다시 자르게 되어, 끼워
+    넣은 글자가 조용히 지워진다. 실제로 `pass` 가 그렇게 사라졌다.
+    """
+    merged = []
+    for start, end, insert in sorted(cuts):
+        if merged and start <= merged[-1][1]:
+            prev = merged.pop()
+            merged.append((prev[0], max(prev[1], end), prev[2] + insert))
+        else:
+            merged.append((start, end, insert))
+    return merged
+
+
 def remove_axis_set(source, set_id):
-    """축 집합 하나와 **그것을 쓰는 모든 코드**를 지우고 새 소스를 돌려준다.
+    """축 집합 하나와 **그것에 딸린 모든 코드**를 지우고 새 소스를 돌려준다.
 
     변형을 여럿 만들어 보다가 하나를 통으로 버리는 것이 실제 흐름이다. 참조를
-    남기면 `NameError` 만 남으므로 같이 걷어낸다.
+    남기면 `NameError` 만 남으므로 같이 걷어낸다. 어디까지 딸린 것인지는 축
+    집합이 무슨 **역할**이었는지가 아니라 **값의 흐름**이 정한다 (`_doomed`).
 
     넣을 때와 대칭이다 (§19.9). `ast` 로 위치만 얻어 원본을 쪼갠다 — 주석과
     서식이 살아남는다. 지운 문장 안의 주석은 함께 간다. 그 위의 주석은 어느
     쪽 것인지 알 수 없으므로 남긴다. 남아서 지저분한 것이 지워서 잃는 것보다 낫다.
-
-    마지막 축 집합이면 `with puzzle` 블록째 지운다. 축 집합 없는 퍼즐은 없다.
     """
     try:
         tree = ast.parse(source)
@@ -397,37 +478,47 @@ def remove_axis_set(source, set_id):
         raise ValueError("no axis set named %r in this definition" % set_id)
 
     at = _offsets(source)
-    lines = source.splitlines(True)
     line_starts = [0]
-    for line in lines:
+    for line in source.splitlines(True):
         line_starts.append(line_starts[-1] + len(line))
 
     def whole_lines(node):
         return line_starts[node.lineno - 1], line_starts[node.end_lineno]
 
-    drop = []
-    _prune(tree.body, var, drop)          # 대입문도 여기서 걸린다
-    cuts = [whole_lines(node) for node in drop]
+    # 본문 구간은 **가지치기 전에** 재 둔다. 잘라낸 뒤에는 첫 문장이 없다
+    block = next((n for n in tree.body if _is_puzzle_block(n)), None)
+    body_span = indent = None
+    if block is not None and block.body:
+        body_span = (line_starts[block.body[0].lineno - 1],
+                     line_starts[block.end_lineno])
+        indent = " " * block.body[0].col_offset
 
-    # puzzle(...) 인자에서 뺀다. 인자 목록이 곧 슬라이더 목록이다 (§19.9)
-    for node in tree.body:
-        if not (isinstance(node, ast.With)
-                and isinstance(node.items[0].context_expr, ast.Call)
-                and getattr(node.items[0].context_expr.func, "id", None) == "puzzle"):
-            continue
-        call = node.items[0].context_expr
-        others = [a for a in call.args[1:]
-                  if not (isinstance(a, ast.Name) and a.id == var)]
-        if not others:
-            cuts.append(whole_lines(node))       # 축 집합이 없어진다
-            continue
-        for i, arg in enumerate(call.args[1:], start=1):
-            if isinstance(arg, ast.Name) and arg.id == var:
-                prev = call.args[i - 1]
-                cuts.append((at(prev.end_lineno, prev.end_col_offset),
-                             at(arg.end_lineno, arg.end_col_offset)))
+    names = _doomed(tree, var)
+    drop = []
+    _prune(tree.body, names, drop)        # 대입문도 여기서 걸린다
+    cuts = [whole_lines(node) + ("",) for node in drop]
+
+    if block is not None:
+        # puzzle(...) 인자에서 뺀다. 인자 목록이 곧 슬라이더 목록이다 (§19.9)
+        call = block.items[0].context_expr
+        args = call.args[1:]
+        doomed_args = [a for a in args if isinstance(a, ast.Name) and a.id in names]
+        if len(doomed_args) == len(args):
+            # 축 집합이 하나도 안 남는다. 축 집합 없는 퍼즐은 없다
+            cuts.append(whole_lines(block) + ("",))
+        else:
+            for i, arg in enumerate(args, start=1):
+                if arg in doomed_args:
+                    prev = call.args[i - 1]
+                    cuts.append((at(prev.end_lineno, prev.end_col_offset),
+                                 at(arg.end_lineno, arg.end_col_offset), ""))
+            if not block.body and body_span is not None:
+                # 자를 것이 하나도 안 남았다. 축 집합은 남았으므로 퍼즐은 산다 —
+                # 자르지 않은 퍼즐로 두고 사용자가 이어 쓰게 한다. 여기서 자를
+                # 것을 지어내는 쪽이 나쁘다
+                cuts.append(body_span + (indent + "pass" + chr(10),))
 
     out = source
-    for start, end in sorted(set(cuts), reverse=True):
-        out = out[:start] + out[end:]
+    for start, end, insert in reversed(_coalesce(cuts)):
+        out = out[:start] + insert + out[end:]
     return out

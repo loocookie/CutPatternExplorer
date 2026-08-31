@@ -930,3 +930,55 @@ def test_the_stamp_is_idempotent():
     import bundle_engine
 
     assert bundle_engine.stamp() == bundle_engine.stamp()
+
+
+DEF_DERIVED = '''o1 = octahedron("Octahedron 1", turns=(15, 120, 135, -120, -105))
+rd1 = rhombic_dodecahedron("Rhombic Dodecahedron 1")
+t1 = tetrahedron("Tetrahedron 1")
+
+with puzzle("Octahedron 1", o1, rd1) as p:
+    split(o1)
+    pair = lambda a: [a, at_angle(a, 180, o1)[0]]
+    for i in range(4):
+        a, b = tuple(pair(nearest(t1[f"t1-{i}"], o1)))
+        with turned(a, 15):
+            with turned(b, 15):
+                split(at_angle(a, 90, rd1, start=t1[f"t1-{(i + 1) % 4}"])[1::2])
+'''
+
+
+@pytest.mark.parametrize("target", ["Octahedron 1", "Rhombic Dodecahedron 1",
+                                    "Tetrahedron 1"])
+def test_removal_leaves_runnable_code(browser_globals, target):
+    """지우고 나서 도는 코드가 남아야 한다. 이것이 유일한 합격선이다."""
+    out = browser_globals["remove_axis_set"](DEF_DERIVED, target)
+    browser_globals["prepare"](out)          # 문법도 이름도 성해야 통과한다
+
+
+def test_removal_follows_derived_names(browser_globals):
+    """한 단계만 보면 모자란다.
+
+    `with turned(a, 15)` 는 `o1` 이라는 글자가 없지만 `a` 가 `o1` 에서 나온다.
+    이름이 아니라 값의 흐름을 따라가야 한다 — 실제로 이렇게 깨졌다.
+    """
+    out = browser_globals["remove_axis_set"](DEF_DERIVED, "Octahedron 1")
+    assert "turned(a" not in out, "파생된 이름을 쓰는 문장이 남았다"
+    assert "pair" not in out
+
+
+def test_removal_keeps_the_puzzle_alive_when_a_set_remains(browser_globals):
+    """자를 것이 다 날아가도 축 집합이 남으면 퍼즐은 산다.
+
+    빈 `with` 는 문법 오류다. 여기서 자를 것을 지어내는 쪽이 더 나쁘므로
+    `pass` 를 넣고 사용자가 이어 쓰게 둔다.
+    """
+    out = browser_globals["remove_axis_set"](DEF_DERIVED, "Octahedron 1")
+    assert 'with puzzle("Octahedron 1", rd1) as p:' in out
+    assert out.rstrip().endswith("pass")
+    assert browser_globals["prepare"](out)["axisSets"] == ["Rhombic Dodecahedron 1"]
+
+
+def test_removal_does_not_wipe_the_inserted_pass(browser_globals):
+    """블록과 그 자식이 둘 다 지울 목록에 오른다. 겹친 채로 뒤에서부터 자르면
+    끼워 넣은 글자가 조용히 사라진다. 구간을 합쳐야 한다."""
+    assert "pass" in browser_globals["remove_axis_set"](DEF_DERIVED, "Octahedron 1")
