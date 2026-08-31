@@ -452,10 +452,25 @@ with puzzle("test", axes1, axes2) as p:
     assert info["axisSets"] == ["dodecahedron", "icosahedron"]
 
 
-def test_the_script_contract_is_stated_up_front():
-    """오류로 가르치기 전에 미리 알 수 있어야 한다."""
-    assert "정의는 <b>스크립트</b>다" in PAGE
-    assert "return" in PAGE and "with puzzle(...) as p:" in PAGE
+def test_the_script_contract_is_documented():
+    """편집창에서 뺐다. 화면은 좁고, 규약은 한 번 읽으면 되는 것이다.
+
+    오류 메시지가 그 자리에서 가르치므로 (§19.7) 화면에 상주할 이유가 없다.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "정의는 스크립트다" in readme
+    assert "with puzzle(...)" in readme
+    assert "축 집합마다 절단 각도 슬라이더가 하나씩" in readme
+    # 편집창 조작법도 여기 있다
+    for key in ("Tab", "Shift+Tab", "Esc", "Ctrl+Enter"):
+        assert key in readme, key
+
+
+def test_the_panel_keeps_only_what_goes_stale_on_paper():
+    """이름 목록은 생성물이라 문서에 박으면 낡는다. 패널에 남긴다."""
+    assert 'id="vocab"' in PAGE
+    assert "globalThis.VOCAB" in PAGE
+    assert 'class="note"' not in PAGE, "설명 문단이 남아 있다"
 
 
 def test_browser_javascript_actually_parses():
