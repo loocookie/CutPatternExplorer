@@ -44,7 +44,7 @@ def test_polylines_round_trip_through_the_flat_arrays(built):
     p, reg = built
     scene = build_scene(reg, p.family)
     arcs = build_arcs(reg, max_step=0.03)
-    markers = build_axis_markers(p.family)
+    markers = build_axis_markers(p.family.axis_sets)
 
     assert len(scene) == len(arcs) + len(markers)
     assert scene.point_count == sum(len(a.points) for a in arcs) + sum(
@@ -88,7 +88,7 @@ def test_groups_point_at_real_axis_sets(built):
     assert set(scene.kinds) == {ARC, MARKER}
 
     # 마커는 자기 축 집합에 속한다
-    markers = build_axis_markers(p.family)
+    markers = build_axis_markers(p.family.axis_sets)
     n_arcs = len(scene) - len(markers)
     for j, marker in enumerate(markers):
         assert scene.axis_sets[scene.groups[n_arcs + j]] == marker.axis_set_id
@@ -98,7 +98,7 @@ def test_labels_carry_the_axis_id_outside_the_sphere(built):
     """라벨은 구 밖에 띄운다. 표면에 붙으면 호에 묻힌다 (§11.4)."""
     p, reg = built
     scene = build_scene(reg, p.family)
-    markers = build_axis_markers(p.family)
+    markers = build_axis_markers(p.family.axis_sets)
     assert len(scene.labels) == len(markers)
     for (text, x, y, z, group), marker in zip(scene.labels, markers):
         assert text == marker.axis_id

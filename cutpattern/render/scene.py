@@ -113,7 +113,7 @@ def build_scene(
         add(arc.points, index.get(arc.provenance.origin_axis_set, 0), ARC)
 
     if markers:
-        for marker in build_axis_markers(family):
+        for marker in build_axis_markers(family.axis_sets):
             group = index.get(marker.axis_set_id, 0)
             add(marker.points, group, MARKER)
             x, y, z = marker.label_position

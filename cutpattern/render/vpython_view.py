@@ -102,7 +102,7 @@ class SphereView:
         self._make_toggles()
         self.status = vp.wtext(text="")
 
-        self.markers = build_axis_markers(family)
+        self.markers = build_axis_markers(family.axis_sets)
         self._draw_markers()
         self.rebuild(FINAL_STEP)
 

@@ -39,7 +39,7 @@ def _family():
 
 def test_one_marker_per_axis_with_the_axis_id_as_label():
     family = _family()
-    markers = build_axis_markers(family)
+    markers = build_axis_markers(family.axis_sets)
     assert len(markers) == sum(len(a.axes) for a in family.axis_sets) == 18
     labels = {(m.axis_set_id, m.axis_id) for m in markers}
     assert labels == {
@@ -49,7 +49,7 @@ def test_one_marker_per_axis_with_the_axis_id_as_label():
 
 def test_marker_points_lie_on_the_unit_sphere_at_the_marker_angle():
     """절단 호와 같은 면 위에 있어야 반투명 구의 깊이 표현을 그대로 받는다."""
-    markers = build_axis_markers(_family())
+    markers = build_axis_markers(_family().axis_sets)
     want = math.cos(math.radians(MARKER_ANGLE_DEG))
     for m in markers:
         for p in m.points:
@@ -61,8 +61,8 @@ def test_marker_points_lie_on_the_unit_sphere_at_the_marker_angle():
 def test_marker_id_is_stable_across_cut_angles():
     """호 ID 와 달리 절단 각도가 안 섞인다. 렌더 객체 pool 이 유지된다 (§11)."""
     family = _family()
-    a = [m.id for m in build_axis_markers(family)]
-    b = [m.id for m in build_axis_markers(family)]
+    a = [m.id for m in build_axis_markers(family.axis_sets)]
+    b = [m.id for m in build_axis_markers(family.axis_sets)]
     assert a == b
     assert a[0] == marker_id(family.axis_sets[0].id, family.axis_sets[0].axes[0].id)
 
@@ -78,7 +78,7 @@ def test_markers_never_touch_the_registry():
     family = _family()
     reg, _log = evaluate(family, {"cube": THETA, "edges": 70.0})
     before = (len(reg), reg.total_arc_length())
-    build_axis_markers(family)
+    build_axis_markers(family.axis_sets)
     assert (len(reg), reg.total_arc_length()) == before
 
 

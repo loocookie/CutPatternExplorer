@@ -12,7 +12,7 @@
 **registry 를 거치지 않는다.** 마커는 표시 전용이다. 마커 원이
 `BoundaryRegistry` 에 들어가면 `total_arc_length` 가 오염되고 `is_complete` 가
 바뀌어 §7.1 회전 합법성 판정이 달라진다. 조용히 틀리는 종류라, 아예 `evaluate`
-를 태우지 않고 `PuzzleFamily` 에서 직접 만든다.
+를 태우지 않고 축 집합에서 직접 만든다.
 
 절단 각도와 무관하다. 축 방향은 슬라이더가 움직여도 그대로이므로 (실림이
 선언된 축도 평가가 끝나면 제자리다, §2.1) 한 번 만들어 두고 쓰면 된다.
@@ -21,9 +21,10 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-from ..engine.axes import PuzzleFamily
+from ..engine.axes import AxisSet
 from ..geometry.angular_coverage import TAU
 from ..geometry.spherical_circle import SphericalCircle
 from ..geometry.vector import Vec3
@@ -75,12 +76,16 @@ def marker_id(axis_set_id: str, axis_id: str) -> str:
 
 
 def build_axis_markers(
-    family: PuzzleFamily,
+    axis_sets: Iterable[AxisSet],
     angle_deg: float = MARKER_ANGLE_DEG,
     arc_step: float = MARKER_ARC_STEP,
     label_offset: float = LABEL_OFFSET,
 ) -> list[AxisMarker]:
     """축 집합의 모든 축에 대해 마커를 만든다.
+
+    **퍼즐이 아니라 축 집합 목록을 받는다.** 마커는 축 방향만 쓰므로 절단과도
+    회전과도 무관하고, `puzzle()` 인자가 아닌 집합 — 기준으로만 쓰는 것 — 도
+    보여야 한다 (§19.12). 퍼즐을 받으면 그 집합들에 닿을 길이 없다.
 
     angle_deg 는 마커 원의 각반경이다. 축이 많은 집합(카탈란 60면체, 120면체)
     에서는 줄여서 겹침을 줄인다.
@@ -94,7 +99,7 @@ def build_axis_markers(
     if radius > 0.0:
         max_step = min(max_step, arc_step / radius)
     out: list[AxisMarker] = []
-    for aset in family.axis_sets:
+    for aset in axis_sets:
         for axis in aset.axes:
             n = axis.normal
             circle = SphericalCircle.from_axis_angle(n, theta)
