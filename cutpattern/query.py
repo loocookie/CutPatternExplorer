@@ -17,6 +17,7 @@ import math
 from collections import defaultdict
 
 from .engine.axes import Axis
+from .epsilon import NORMAL_EPS
 from .geometry.angular_coverage import TAU
 from .geometry.vector import Vec3, as_vec, clamp, normalize, orthonormal_basis
 
@@ -77,6 +78,40 @@ def angle_between(a, b) -> float:
 _GAP_GRID = 9
 
 
+def _azimuths(ref, axes):
+    """기준 축 둘레의 방위각. `(u, v, n)` 이 오른손계라 증가 방향이 반시계다."""
+    u, v = orthonormal_basis(ref)
+    return [math.atan2(float(a.normal @ v), float(a.normal @ u)) for a in axes]
+
+
+def _start_azimuth(ref, start):
+    """시작 방향의 방위각. 기준 축과 나란하면 사영이 0 이라 정의되지 않는다."""
+    d = _normal(start)
+    u, v = orthonormal_basis(ref)
+    x, y = float(d @ u), float(d @ v)
+    if math.hypot(x, y) < NORMAL_EPS:
+        raise ValueError(
+            "start is parallel to the reference axis, so it has no azimuth"
+        )
+    return math.atan2(y, x)
+
+
+def _ordered_from(ref, axes, start):
+    """`start` 의 방위각을 0 으로 놓고 반시계로 센다 (§2.6).
+
+    방위각이 `start` 와 **정확히 같은** 축은 뺄셈 오차로 `(phi - start) % 2pi`
+    가 0 이 아니라 2pi 바로 아래로 떨어져 맨 뒤로 밀릴 수 있다. 격자에 붙여
+    그 자리를 0 으로 되돌린다.
+    """
+    base = _start_azimuth(ref, start)
+    def offset(phi):
+        d = round((phi - base) % TAU, _GAP_GRID)
+        return 0.0 if abs(d - round(TAU, _GAP_GRID)) < 10 ** -_GAP_GRID else d
+    return [a for _, a in sorted(
+        zip(_azimuths(ref, axes), axes), key=lambda pair: (offset(pair[0]), pair[1].id)
+    )]
+
+
 def _canonical_ring(ref, axes):
     """고리를 반시계로 정렬하고, 회전 중 하나를 표준형으로 고른다 (§2.6).
 
@@ -97,18 +132,17 @@ def _canonical_ring(ref, axes):
     """
     if len(axes) < 3:
         return list(axes)                     # 간격이 하나뿐이면 회전할 것이 없다
-    u, v = orthonormal_basis(ref)
-    ordered = sorted(
-        axes, key=lambda a: math.atan2(float(a.normal @ v), float(a.normal @ u))
-    )
-    phi = [math.atan2(float(a.normal @ v), float(a.normal @ u)) for a in ordered]
+    ordered = [a for _, a in sorted(zip(_azimuths(ref, axes), axes),
+                                    key=lambda pair: (pair[0], pair[1].id))]
+    phi = _azimuths(ref, ordered)
     n = len(ordered)
     gaps = [round((phi[(i + 1) % n] - phi[i]) % TAU, _GAP_GRID) for i in range(n)]
     start = min(range(n), key=lambda s: tuple(gaps[(s + i) % n] for i in range(n - 1)))
     return [ordered[(start + i) % n] for i in range(n)]
 
 
-def at_angle(reference, degrees: float, *targets, tol_deg: float = ANGLE_TOL_DEG):
+def at_angle(reference, degrees: float, *targets, tol_deg: float = ANGLE_TOL_DEG,
+             start=None):
     """기준에서 지정한 사잇각을 이루는 축들. **표준 순서로 돌려준다** (§2.6).
 
         at_angle(faces.c0, 90, faces)              같은 집합 안
@@ -117,6 +151,11 @@ def at_angle(reference, degrees: float, *targets, tol_deg: float = ANGLE_TOL_DEG
     결과는 기준 축 둘레로 반시계 정렬하고, 이웃 간격 수열이 사전순 최소가 되는
     회전에서 시작한다. 그래서 기하가 같은 두 고리는 같은 순서로 나온다 —
     `x, y, z = at_angle(...)` 로 풀 때 어느 축을 어느 이름에 묶을지가 정해진다.
+
+    `start` 를 주면 그 방향의 방위각을 0 으로 놓고 반시계로 센다. 방위각이
+    0, 120, 240 인 고리에서 방위각 60 인 것을 `start` 로 주면 120, 240, 0 순서가
+    된다. 시작점을 바깥에서 정하고 싶을 때 쓴다 — 이때는 목걸이 표준형을 쓰지
+    않는다.
 
     고리 밖은 담기지 않는다. 극각이 다른 두 고리가 같은 간격 수열을 가질 수
     있으므로, 비교할 때는 각도도 함께 봐야 한다.
@@ -130,6 +169,8 @@ def at_angle(reference, degrees: float, *targets, tol_deg: float = ANGLE_TOL_DEG
         if abs(math.degrees(math.acos(float(clamp(float(a.normal @ ref))))) - degrees)
         <= tol_deg
     ]
+    if start is not None:
+        return _ordered_from(ref, found, start)
     return _canonical_ring(ref, found)
 
 

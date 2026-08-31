@@ -419,3 +419,70 @@ def test_gaps_are_compared_on_a_grid():
     first = [a.id for a in at_angle(ref, 65.905157, co)]
     for _ in range(5):
         assert [a.id for a in at_angle(ref, 65.905157, co)] == first
+
+
+def _frame(reference):
+    from cutpattern.geometry.vector import orthonormal_basis
+
+    return orthonormal_basis(reference.normal)
+
+
+def _direction_at(reference, degrees):
+    """기준 축 둘레 지정한 방위각의 방향. 고리에 없는 자리도 줄 수 있다."""
+    from cutpattern.geometry.vector import Vec3
+
+    u, v = _frame(reference)
+    r = math.radians(degrees)
+    return Vec3(tuple(math.cos(r) * u[i] + math.sin(r) * v[i] for i in range(3)))
+
+
+def _azimuth(reference, axis):
+    u, v = _frame(reference)
+    return round(
+        math.degrees(math.atan2(float(axis.normal @ v), float(axis.normal @ u))) % 360, 1
+    )
+
+
+def test_start_puts_the_ring_in_order_from_a_given_direction():
+    """방위각 0, 120, 240 인 고리에서 60 을 기준으로 주면 120, 240, 0 이 된다."""
+    octa = S.octahedron("octa")
+    rd = S.rhombic_dodecahedron("rd")
+    exact = math.degrees(math.acos(2 / math.sqrt(6)))
+    ref = octa["o-0"]
+
+    assert sorted(_azimuth(ref, a) for a in at_angle(ref, exact, rd)) == [90.0, 210.0, 330.0]
+
+    cases = {0: [90.0, 210.0, 330.0], 150: [210.0, 330.0, 90.0], 331: [90.0, 210.0, 330.0]}
+    for start_deg, expected in cases.items():
+        ring = at_angle(ref, exact, rd, start=_direction_at(ref, start_deg))
+        assert [_azimuth(ref, a) for a in ring] == expected, start_deg
+
+
+def test_an_axis_on_the_start_azimuth_comes_first():
+    """뺄셈 오차로 0 이 2pi 바로 아래가 되면 맨 뒤로 밀린다. 그 자리를 되돌린다."""
+    octa = S.octahedron("octa")
+    rd = S.rhombic_dodecahedron("rd")
+    exact = math.degrees(math.acos(2 / math.sqrt(6)))
+    ref = octa["o-0"]
+    for axis in at_angle(ref, exact, rd):
+        assert at_angle(ref, exact, rd, start=axis)[0].id == axis.id
+
+
+def test_start_none_keeps_the_canonical_form():
+    """기준을 안 주면 목걸이 표준형 그대로다."""
+    octa = S.octahedron("octa")
+    rd = S.rhombic_dodecahedron("rd")
+    exact = math.degrees(math.acos(2 / math.sqrt(6)))
+    ref = octa["o-0"]
+    assert [a.id for a in at_angle(ref, exact, rd)] == [
+        a.id for a in at_angle(ref, exact, rd, start=None)
+    ]
+
+
+def test_a_start_parallel_to_the_reference_is_rejected():
+    """사영이 0 이라 방위각이 정의되지 않는다. 조용히 아무 순서나 주면 안 된다."""
+    octa = S.octahedron("octa")
+    rd = S.rhombic_dodecahedron("rd")
+    exact = math.degrees(math.acos(2 / math.sqrt(6)))
+    with pytest.raises(ValueError, match="parallel"):
+        at_angle(octa["o-0"], exact, rd, start=octa["o-0"])
