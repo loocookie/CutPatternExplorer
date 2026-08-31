@@ -280,13 +280,25 @@ def add_axis_set(source, factory):
         and isinstance(node.items[0].context_expr, ast.Call)
         and getattr(node.items[0].context_expr.func, "id", None) == "puzzle"
     ]
-    # 집합 id 와 변수가 둘 다 비어 있는 번호를 고른다. 축 id 접두사는 집합 id
-    # 에서 유도되므로 (§2.5) 따로 줄 것이 없다
-    taken = _taken_names(tree, ns) | _existing_ids(tree, ns)
+    # 집합 id, 변수, **축 id 접두사**가 셋 다 비어 있는 번호를 고른다.
+    #
+    # 접두사가 집합 id 에서 유도된다는 것(§2.5)이 유일하다는 뜻은 아니다.
+    # `abbrev("cube1")` 도 `abbrev("Cube 1")` 도 `c1` 이라, 손으로 `cube1` 이라
+    # 쓴 정의에 메뉴가 `Cube 1` 을 얹으면 엔진이 거부한다 (§5):
+    #
+    #     axis id 'c1-0' appears in both 'cube1' and 'Cube 1'
+    #
+    # 손으로 지은 이름을 규칙에 맞추라고 할 수는 없으므로 메뉴가 비켜 간다.
+    # §19.12 가 "안 쓰인 축을 기본값으로 고른다" 로 한 것과 같은 판단이다
+    from cutpattern.solids import abbrev
+
+    existing = _existing_ids(tree, ns)
+    taken = _taken_names(tree, ns) | existing
+    prefixes = {abbrev(x) for x in existing}
     n = 1
     while True:
         set_id, var = _names(default_id, n, taken)
-        if set_id not in taken and var not in taken:
+        if set_id not in taken and var not in taken and var not in prefixes:
             break
         n += 1
 

@@ -471,6 +471,33 @@ def test_a_shared_link_opens_the_editor():
     assert "run()" not in branch[:branch.index("await engine.boot()")]
 
 
+def test_the_menu_avoids_colliding_axis_id_prefixes(browser_globals):
+    """접두사가 집합 id 에서 **유도된다는 것이 유일하다는 뜻은 아니다** (§2.5).
+
+    `abbrev("cube1")` 도 `abbrev("Cube 1")` 도 `c1` 이다. 그래서 손으로
+    `cube1` 이라 쓴 정의 — 화면이 처음 띄우는 바로 그 정의다 — 에 메뉴가
+    `Cube 1` 을 얹으면 엔진이 거부한다 (§5):
+
+        axis id 'c1-0' appears in both 'cube1' and 'Cube 1'
+
+    `abbrev` 를 고치는 것은 답이 아니다. 축 id 는 공유 링크와 예제에 박혀
+    있어서 바꾸면 다 깨진다. 손으로 지은 이름을 규칙에 맞추라고 할 수도 없다.
+    메뉴가 비켜 간다.
+    """
+    out = browser_globals["add_axis_set"](DEFAULT_SOURCE, "cube")
+    # 여기서 ValueError 가 났었다
+    info = browser_globals["prepare"](out)
+    assert info["axisSets"] == ["cube1", "Cube 2"], info["axisSets"]
+
+    # 번호가 1 을 건너뛴 것은 `cube1` 이 이미 `c1` 을 쓰고 있어서다.
+    # 들쭉날쭉해 보여도 그것이 사실이다
+    assert 'cube("Cube 2")' in out
+
+    # 한 번 더 얹어도 겹치지 않는다
+    again = browser_globals["prepare"](browser_globals["add_axis_set"](out, "cube"))
+    assert again["axisSets"] == ["cube1", "Cube 2", "Cube 3"], again["axisSets"]
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 
