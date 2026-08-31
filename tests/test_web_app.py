@@ -599,63 +599,81 @@ def test_insertion_goes_to_all_three_places(browser_globals):
     out = browser_globals["add_axis_set"](DEF3, "rhombic_dodecahedron")
     lines = out.splitlines()
 
-    assign = next(i for i, l in enumerate(lines) if "rhombic_dodecahedron(" in l)
+    var = "rhombic_dodecahedron1"
+    assign = next(i for i, l in enumerate(lines) if l.startswith(var + " ="))
     with_at = next(i for i, l in enumerate(lines) if l.startswith("with puzzle("))
     assert assign < with_at, "(1) with 블록 앞에 있어야 한다"
-    assert ", rd)" in lines[with_at], "(2) 인자 목록에 없다. 슬라이더가 안 생긴다"
-    assert lines[-1] == "    split(rd)", "(3) 블록 직속 본문 끝이 아니다"
+    assert ", " + var + ")" in lines[with_at], "(2) 인자 목록에 없다. 슬라이더가 안 생긴다"
+    assert lines[-1] == "    split(" + var + ")", "(3) 블록 직속 본문 끝이 아니다"
 
     info = browser_globals["prepare"](out)
-    assert info["inputs"] == ["faces", "rhombic_dodecahedron"]
+    assert info["inputs"] == ["faces", var]
 
 
 def test_split_does_not_land_inside_a_turned_block(browser_globals):
     """중첩 블록 안에 들어가면 회전된 상태에서 자르게 되어 다른 퍼즐이 된다."""
     out = browser_globals["add_axis_set"](DEF3, "icosahedron")
     for line in out.splitlines():
-        if "split(i)" in line:
-            assert line == "    split(i)", "들여쓰기가 깊다 = 중첩 블록 안이다"
+        if "split(icosa1)" in line:
+            assert line == "    split(icosa1)", "들여쓰기가 깊다 = 중첩 블록 안이다"
 
 
-def test_generated_names_follow_the_axis_id_convention(browser_globals):
-    """축 id 가 이미 약자 + 숫자다 (c0..c5). 변수도 같은 규약을 쓴다."""
+def test_generated_names_carry_the_instance_number(browser_globals):
+    """번호를 항상 붙인다. 첫 번째만 `cube` 이고 두 번째부터 `cube2` 이면
+    하나를 지웠을 때 이름이 들쭉날쭉해진다.
+
+    축 id 도 같은 번호를 쓰므로 집합과 축의 대응이 눈으로 보인다.
+    """
     out = browser_globals["add_axis_set"]("", "cube")
-    assert out.startswith('c = cube("cube")'), out
+    assert out.startswith('cube1 = cube("cube1", prefix="c1-")'), out
 
-    out = browser_globals["add_axis_set"](out, "rhombic_dodecahedron")
-    assert 'rd = rhombic_dodecahedron("rhombic_dodecahedron")' in out
+    out = browser_globals["add_axis_set"](out, "icosahedron")
+    assert 'icosa1 = icosahedron("icosa1", prefix="i1-")' in out
 
 
-def test_adding_the_same_solid_twice_avoids_axis_id_collision(browser_globals):
-    """접두사가 입체마다 고정이라 그냥 두면 rd0 이 두 집합에 생긴다.
+def test_axis_ids_are_qualified_by_their_set(browser_globals):
+    """축 id 를 집합으로 한정한다. 같은 입체를 두 번 넣어도 안 겹친다.
 
-    축 id 는 전 집합에서 유일해야 한다 (§5).
+    축 id 는 전 집합에서 유일해야 하는데 (§5) 접두사가 입체마다 고정이면
+    `c0` 이 두 집합에 생긴다. 도형 이름과 축 번호가 눈으로 갈라지는 것은 덤이다.
     """
     out = browser_globals["add_axis_set"]("", "cube")
     out = browser_globals["add_axis_set"](out, "cube")
-    assert 'prefix="c2"' in out, out
     info = browser_globals["prepare"](out)
-    assert info["axisSets"] == ["cube", "cube2"]
+    assert info["axisSets"] == ["cube1", "cube2"]
+
+    puzzle_obj = browser_globals["_state"]["puzzle"]
+    first, second = puzzle_obj.axis_sets
+    assert [a.id for a in first][:2] == ["c1-0", "c1-1"]
+    assert [a.id for a in second][:2] == ["c2-0", "c2-1"]
+
+
+def test_presets_keep_their_short_ids():
+    """구분자를 접두사 문자열에 담으므로 프리셋 기본값은 안 바뀐다."""
+    from cutpattern import solids
+
+    assert [a.id for a in solids.cube()][:2] == ["c0", "c1"]
+    assert [a.id for a in solids.rhombic_dodecahedron()][:2] == ["rd0", "rd1"]
 
 
 def test_names_are_found_by_parsing_not_by_searching(browser_globals):
     """주석 안의 단어를 세면 멀쩡한 이름을 피해 간다."""
-    source = '# c 와 rd 는 여기서 이름이 아니라 주석이다\n'
+    source = '# cube1 은 여기서 이름이 아니라 주석이다\n'
     out = browser_globals["add_axis_set"](source, "cube")
-    assert 'c = cube(' in out, out
+    assert 'cube1 = cube(' in out, out
 
 
 def test_an_empty_editor_gets_a_whole_skeleton(browser_globals):
     out = browser_globals["add_axis_set"]("", "icosahedron")
     info = browser_globals["prepare"](out)
-    assert info["axisSets"] == ["icosa"]
+    assert info["axisSets"] == ["icosa1"]
     assert info["ops"] > 0
 
 
 def test_code_without_a_puzzle_block_gets_one(browser_globals):
     out = browser_globals["add_axis_set"]("x = 1\n", "cube")
     assert "x = 1" in out, "쓰던 코드를 지우면 안 된다"
-    assert browser_globals["prepare"](out)["axisSets"] == ["cube"]
+    assert browser_globals["prepare"](out)["axisSets"] == ["cube1"]
 
 
 def test_broken_code_is_refused_not_mangled(browser_globals):

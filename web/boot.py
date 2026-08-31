@@ -175,13 +175,17 @@ def _existing_ids(tree, ns):
     return ids
 
 
-def _free_name(base, taken):
-    if base not in taken:
-        return base
-    n = 2
+def _free_instance(base, taken):
+    """`cube1`, `cube2` … 중 처음으로 비어 있는 것.
+
+    번호를 **항상** 붙인다. 첫 번째만 `cube` 이고 두 번째부터 `cube2` 이면
+    나중에 하나를 지웠을 때 이름이 들쭉날쭉해진다. 축 id 도 같은 번호를 쓰므로
+    (`c1-0`) 집합과 축의 대응이 눈으로 보인다.
+    """
+    n = 1
     while f"{base}{n}" in taken:
         n += 1
-    return f"{base}{n}"
+    return n
 
 
 def _offsets(source):
@@ -214,16 +218,17 @@ def _naming(factory):
     return default_id, prefix
 
 
-def _call(factory, set_id, var, prefix, canonical):
-    """축 집합을 만드는 한 줄. 접두사가 기본과 다를 때만 적는다.
+def _call(factory, set_id, prefix):
+    """축 집합을 만드는 한 줄.
 
-    같은 입체를 두 번 넣으면 축 id 가 겹친다 — 접두사가 입체마다 고정이라
-    `rd0` 이 두 집합에 생긴다. 축 id 는 전 집합에서 유일해야 하므로 (§5)
-    두 번째부터는 접두사를 달리 준다.
+    축 id 를 집합으로 한정한다 — `c1-0`, `c2-0`. 그러지 않으면 같은 입체를 두 번
+    넣을 때 `c0` 이 두 집합에 생기는데, 축 id 는 전 집합에서 유일해야 한다 (§5).
+    도형 이름과 축 번호가 눈으로 갈라지는 것은 덤이다.
+
+    구분자를 접두사 문자열에 담으므로 프리셋의 기본값(`cube()` -> `c0..c5`)은
+    그대로다.
     """
-    if prefix == canonical:
-        return '%s = %s("%s")' % (var, factory, set_id)
-    return '%s = %s("%s", prefix="%s")' % (var, factory, set_id, prefix)
+    return '%s = %s("%s", prefix="%s")' % (set_id, factory, set_id, prefix)
 
 
 def add_axis_set(source, factory):
@@ -253,10 +258,11 @@ def add_axis_set(source, factory):
 
     stripped = source.strip()
     if not stripped:
-        var = _free_name(canonical, set(ns))
+        n = _free_instance(default_id, set(ns))
+        set_id = "%s%d" % (default_id, n)
         return SKELETON % {
-            "call": _call(factory, default_id, var, canonical, canonical),
-            "var": var, "id": default_id,
+            "call": _call(factory, set_id, "%s%d-" % (canonical, n)),
+            "var": set_id, "id": set_id,
         }
 
     try:
@@ -273,16 +279,16 @@ def add_axis_set(source, factory):
         and isinstance(node.items[0].context_expr, ast.Call)
         and getattr(node.items[0].context_expr.func, "id", None) == "puzzle"
     ]
-    taken = _taken_names(tree, ns)
-    var = _free_name(canonical, taken)
-    set_id = _free_name(default_id, _existing_ids(tree, ns))
-    # 변수가 밀렸다는 것은 같은 입체가 이미 있다는 뜻이다. 축 id 도 밀려야 한다
-    prefix = canonical if var == canonical else var
+    # 변수와 집합 id 를 같은 이름으로 쓴다. 둘 다 비어 있는 번호를 고른다
+    taken = _taken_names(tree, ns) | _existing_ids(tree, ns)
+    n = _free_instance(default_id, taken)
+    set_id = var = "%s%d" % (default_id, n)
+    prefix = "%s%d-" % (canonical, n)
 
     if not blocks:
         # puzzle 블록이 없다. 골격째 만든다
         return source.rstrip("\n") + "\n\n" + SKELETON % {
-            "call": _call(factory, set_id, var, prefix, canonical),
+            "call": _call(factory, set_id, prefix),
             "var": var, "id": set_id,
         }
 
@@ -303,7 +309,7 @@ def add_axis_set(source, factory):
         # (2) 인자 목록 = 슬라이더 목록
         (at(call.args[-1].end_lineno, call.args[-1].end_col_offset), ", %s" % var),
         # (1) with 블록 앞
-        (at(block.lineno, 0), _call(factory, set_id, var, prefix, canonical) + '\n\n'),
+        (at(block.lineno, 0), _call(factory, set_id, prefix) + '\n\n'),
     ]
     out = source
     for pos, text in edits:
