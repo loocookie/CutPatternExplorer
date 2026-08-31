@@ -1,0 +1,60 @@
+# 설계 문서 §19.13. web/ 를 사이트 뿌리로 올린다.
+#
+# 저장소를 그대로 서빙하면 주소가 /CutPatternExplorer/web/ 이 된다. 아티팩트로
+# 올리면 web/ 이 뿌리가 되고 파일을 옮길 필요도 없다.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 하나씩. 뒤엣것이 이긴다
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # vpython 은 개발용 뷰어에만 필요하고 테스트는 스텁을 쓴다 (§11.2)
+      - run: pip install pytest numpy
+      - run: python -m pytest -q
+      # 브라우저에 올라가는 JS 가 실제로 파싱되는지 본다. 전에 worker.js 가
+      # 통째로 깨졌는데 파이썬 테스트는 전부 통과했다 (§19.5)
+      - run: node web/syntax.test.js
+      - run: node web/editor.test.js
+      - run: node web/render.test.js
+      - run: node web/share.test.js
+      # 번들은 생성물이지만 커밋한다 (§19.2). 낡으면 배포만 조용히 깨진다
+      - name: the bundle matches the sources
+        run: |
+          python web/bundle_engine.py
+          git diff --exit-code -- web/
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4
