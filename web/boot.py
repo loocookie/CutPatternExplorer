@@ -58,6 +58,27 @@ def _compile(source):
         raise SyntaxError("syntax error%s: %s" % (where, exc.msg)) from None
 
 
+def _collect(source):
+    """정의를 실행하고 **축 집합만** 재 둔다. 실행한 이름 공간을 돌려준다.
+
+    퍼즐 블록을 요구하지 않는다. 편집 모드는 아직 `with puzzle(...)` 을 안 쓴
+    상태에서도 축이 어디 있는지 보여야 한다 (§19.15).
+
+    편집 메뉴가 실제 축 id 를 채워 넣는 데도 이 목록을 쓴다 (§19.12).
+    `puzzle()` 인자가 아닌 것도 있다 — 기준으로만 쓰는 집합이 그렇다.
+    """
+    ns = _namespace()
+    exec(_compile(source), ns)
+    bound = [(key, v) for key, v in ns.items()
+             if isinstance(v, AxisSet) and not key.startswith("_")]
+    _state["sets"] = [
+        {"id": v.id, "var": key, "axes": [a.id for a in v]} for key, v in bound
+    ]
+    # 목록만으로는 마커를 못 만든다 — 축 방향이 있어야 한다
+    _state["axis_sets"] = [v for _, v in bound]
+    return ns
+
+
 def load(source):
     """정의를 실행하고 Puzzle 을 찾아 돌려준다.
 
@@ -68,18 +89,7 @@ def load(source):
     것일 뿐 import 를 막지 않는다 — 예전에 만든 공유 링크와 예제가 살아 있어야
     한다.
     """
-    ns = _namespace()
-    exec(_compile(source), ns)
-    # 이름에 묶인 축 집합을 재 둔다. 편집 메뉴가 실제 축 id 를 채워 넣는다
-    # (§19.12). puzzle() 인자가 아닌 것도 있다 — 기준으로만 쓰는 집합이 그렇다
-    bound = [(key, v) for key, v in ns.items()
-             if isinstance(v, AxisSet) and not key.startswith("_")]
-    _state["sets"] = [
-        {"id": v.id, "var": key, "axes": [a.id for a in v]} for key, v in bound
-    ]
-    # 편집 모드의 무대가 이걸 쓴다 (§19.15). 목록만으로는 마커를 못 만든다 —
-    # 축 방향이 있어야 한다
-    _state["axis_sets"] = [v for _, v in bound]
+    ns = _collect(source)
     found = [v for v in ns.values() if isinstance(v, Puzzle)]
     if not found:
         # 예제 파일을 통째로 붙여 넣으면 정의가 함수 안에 있고 아무도 안 부른다
@@ -143,22 +153,31 @@ def evaluate(angles_json, max_step):
     }
 
 
-def axis_scene():
+def axis_scene(source):
     """축 마커만 담은 장면. 편집 모드의 무대다 (§19.15).
+
+    **소스를 여기서 실행한다.** 편집창을 고치는 동안 마커가 따라 움직여야
+    하는데, `prepare` 가 재 둔 것을 쓰면 `Run` 을 눌러야만 갱신된다. 퍼즐
+    블록은 요구하지 않는다 — 아직 안 쓴 상태에서도 축은 보여야 한다.
 
     이름 공간의 **모든** 축 집합을 쓴다. `puzzle()` 인자가 아닌 것 — 기준으로만
     쓰는 집합 — 도 고치려면 어디 있는지 보여야 한다 (§19.12).
+
+    `_state["puzzle"]` 은 건드리지 않는다. 절단은 `Run` 이 잡은 퍼즐 그대로다.
 
     절단 각도를 안 받는다. 마커는 축 방향만 쓴다 (§11.4).
     """
     from cutpattern.render.scene import build_marker_scene
 
+    _collect(source)
     scene = build_marker_scene([s.to_engine() for s in _state.get("axis_sets", [])])
     _state["axis_scene"] = scene
     return {
         "starts": scene.starts, "counts": scene.counts,
         "groups": scene.groups, "kinds": scene.kinds,
         "labels": [list(x) for x in scene.labels], "axisSets": scene.axis_sets,
+        # 목록도 같이 준다. 같은 실행에서 나온 것이라 어긋날 수 없다
+        "sets": _state["sets"],
     }
 
 

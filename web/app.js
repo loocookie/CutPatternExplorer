@@ -32,7 +32,7 @@ const BOOT_SILENCE_MS = 20000;
 // CSP 는 스크립트가 아니라 **전역**에 붙으므로, https 에서 온 worker.js 가
 // 그 안에서 돌아도 물려받은 정책 아래 있다.
 function workerBlobUrl() {
-  const target = new URL("worker.js?v=f95f434c", location.href).href;
+  const target = new URL("worker.js?v=b49c0ecb", location.href).href;
   const shim = "import " + JSON.stringify(target) + ";";
   return URL.createObjectURL(new Blob([shim], { type: "text/javascript" }));
 }
@@ -163,15 +163,23 @@ class Engine {
     return (await this._send({ type: "prepare", source })).result;
   }
 
-  /** 축 마커만 담은 장면. 편집 모드의 무대다 (§19.15). */
-  async axisScene() {
-    const msg = await this._send({ type: "axisScene" });
+  /** 축 마커만 담은 장면. 편집 모드의 무대다 (§19.15).
+   *
+   * 소스를 넘긴다 — 편집창을 고치는 동안 마커가 따라 움직여야 하는데,
+   * 마지막 `Run` 이 재 둔 것을 쓰면 눌러야만 갱신된다. 축 집합 목록도 같이
+   * 온다: 같은 실행에서 나온 것이라 어긋날 수 없다.
+   */
+  async axisScene(source) {
+    const msg = await this._send({ type: "axisScene", source });
     const out = msg.result;
     return {
-      xyz: new Float64Array(msg.buffer),
-      starts: out.starts, counts: out.counts,
-      groups: out.groups, kinds: out.kinds,
-      labels: out.labels, axisSets: out.axisSets,
+      scene: {
+        xyz: new Float64Array(msg.buffer),
+        starts: out.starts, counts: out.counts,
+        groups: out.groups, kinds: out.kinds,
+        labels: out.labels, axisSets: out.axisSets,
+      },
+      sets: out.sets,
     };
   }
 

@@ -447,7 +447,8 @@ def test_a_menu_edit_can_be_undone_once():
         assert "remember(els.src.value);" in PAGE[i - 120:i], call
     # 손으로 고치면 그 칸은 버린다. 두 되돌리기가 겹치면 어느 쪽이 이겼는지
     # 안 보인다
-    assert "els.src.oninput = forgetUndo" in PAGE
+    i = PAGE.index("els.src.oninput")
+    assert "forgetUndo()" in PAGE[i:PAGE.index("};", i)]
 
 
 def test_a_shared_link_opens_the_editor():
@@ -547,8 +548,8 @@ def test_the_edit_mode_stage_shows_markers(browser_globals):
         '    split(c1)',
         '',
     ])
-    browser_globals["prepare"](source)
-    out = browser_globals["axis_scene"]()
+    # 퍼즐 블록 없이도 돌아야 한다. 편집 중에는 아직 안 쓴 상태가 있다
+    out = browser_globals["axis_scene"](source)
 
     # `puzzle()` 인자가 아닌 집합도 나온다 (§19.12). 그것을 고치려면 어디
     # 있는지 보여야 하고, build_scene 은 퍼즐에서 얻으므로 닿을 길이 없다
@@ -556,14 +557,28 @@ def test_the_edit_mode_stage_shows_markers(browser_globals):
     assert len(out["starts"]) == 4 + 6
     assert set(out["kinds"]) == {1}, "절단이 섞여 있다"
 
+    # 목록도 같은 실행에서 나온다. 따로 가져오면 어긋날 수 있다
+    assert [s["id"] for s in out["sets"]] == ["Reference 1", "Cube 1"]
+
     # 좌표는 따로 간다 (§11.1). float64 이므로 점 하나가 24바이트
     assert len(browser_globals["axis_scene_bytes"]()) % 24 == 0
+
+
+def test_the_marker_stage_does_not_need_a_puzzle_block(browser_globals):
+    """편집 중에는 아직 `with puzzle(...)` 을 안 쓴 상태가 있다 (§19.15).
+
+    그때도 축이 어디 있는지는 보여야 한다. `prepare` 는 퍼즐을 요구하므로
+    이 길이 따로 있어야 한다.
+    """
+    out = browser_globals["axis_scene"]('c1 = cube("Cube 1")')
+    assert out["axisSets"] == ["Cube 1"]
+    assert len(out["starts"]) == 6
 
 
 def test_the_stage_is_decided_by_the_mode():
     """무대를 그리는 곳이 하나여야 모드와 어긋나지 않는다 (§19.15)."""
     body = _function_body(PAGE, "async function drawStage()")
-    assert 'mode === "edit"' in body and "engine.axisScene()" in body
+    assert 'mode === "edit"' in body and "engine.axisScene(els.src.value)" in body
     assert "lastCutScene" in body
 
     # 평가는 절단 장면을 **들고만** 있는다. 무대에 올릴지는 모드가 정한다
@@ -586,6 +601,51 @@ def test_the_run_button_leaves_for_the_result():
     # 메뉴 쪽에는 없어야 한다
     body = _function_body(PAGE, "function buildAxisSets()")
     assert "setMode" not in body
+
+
+def test_typing_moves_the_markers():
+    """편집창을 고치면 마커가 따라 움직인다 (§19.15).
+
+    `Run` 이 재 둔 것을 쓰면 눌러야만 갱신되는데, `rotate`/`mirror` 는 결과를
+    봐야 뜻이 있는 연산이라 그래서는 패널이 값을 못 한다.
+    """
+    i = PAGE.index("els.src.oninput")
+    handler = PAGE[i:PAGE.index("};", i)]
+    # 글자마다 실행하지 않는다. 멎으면 그린다
+    assert "clearTimeout(typeTimer)" in handler and "drawStage()" in handler
+    assert "const TYPE_MS = 400" in PAGE
+
+
+def test_typing_does_not_flash_errors():
+    """**타이핑 중에는 늘 깨져 있다** (§19.9).
+
+    실패하면 직전 마커를 그대로 두고 넘어간다. 글자를 칠 때마다 빨간 칸이
+    깜빡이면 못 쓴다 — 오류는 `Run` 을 눌렀을 때 뜬다.
+    """
+    body = _function_body(PAGE, "async function drawStage()")
+    catch = body[body.index("catch"):]
+    assert "fail(" not in catch, "타이핑 중 오류를 띄우고 있다"
+
+
+def test_received_code_does_not_run_until_you_press_run():
+    """**타이핑에 반응한다는 것은 곧 실행한다는 뜻이다.**
+
+    링크로 받은 코드가 글자 하나 쳤다고 도는 것은 §19.4 의 "사람이 읽고
+    누른다" 를 뒤에서 무너뜨린다. 자동 실행을 막아 놓고 옆문을 내는 셈이다.
+
+    첫 `Run` 이 동의다. 우리가 쓴 기본 정의는 처음에 자동 실행되므로 바로
+    켜진다.
+    """
+    assert "let live = false" in PAGE
+
+    body = _function_body(PAGE, "async function drawStage()")
+    assert "!live" in body, "동의 전에도 소스를 실행하고 있다"
+
+    # 그 문은 성공한 평가 뒤에만 열린다
+    run_body = _function_body(PAGE, "async function run()")
+    i = run_body.index("live = true")
+    assert run_body.index("await refresh(FINAL_STEP)") < i
+    assert i < run_body.index("catch")
 
 
 def test_engine_can_be_killed():

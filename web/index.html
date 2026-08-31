@@ -149,11 +149,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=f95f434c"></script>
-<script src="render.js?v=f95f434c"></script>
-<script src="editor.js?v=f95f434c"></script>
-<script src="share.js?v=f95f434c"></script>
-<script src="app.js?v=f95f434c"></script>
+<script src="vocab.js?v=b49c0ecb"></script>
+<script src="render.js?v=b49c0ecb"></script>
+<script src="editor.js?v=b49c0ecb"></script>
+<script src="share.js?v=b49c0ecb"></script>
+<script src="app.js?v=b49c0ecb"></script>
 <script>
 "use strict";
 
@@ -242,13 +242,37 @@ let lastCutScene = null;
  */
 async function drawStage() {
   if (mode === "edit") {
-    if (!engine.ready || !info) return;
-    try { view.setScene(await engine.axisScene()); }
-    catch (e) { fail(e); }
+    if (!engine.ready || !live) {
+      console.debug("axis markers: skipped", { ready: engine.ready, live });
+      return;
+    }
+    try {
+      const out = await engine.axisScene(els.src.value);
+      // 목록은 마커와 **같은 실행**에서 온다. 따로 가져오면 어긋난다
+      if (info) { info.sets = out.sets; buildAxisSets(); }
+      view.setScene(out.scene);
+    } catch (e) {
+      // **타이핑 중에는 늘 깨져 있다** (§19.9). 직전 마커를 그대로 두고
+      // 넘어간다 — 글자를 칠 때마다 빨간 칸이 깜빡이면 못 쓴다. 오류는
+      // Run 을 눌렀을 때 뜬다.
+      //
+      // 다만 삼키기만 하면 배선이 끊겼을 때도 조용해진다. 콘솔에는 남긴다
+      console.debug("axis markers:", e && e.message ? e.message : e);
+    }
   } else if (lastCutScene) {
     view.setScene(lastCutScene);
   }
 }
+
+// 편집창을 고치면 마커가 따라 움직인다 (§19.15).
+//
+// **타이핑에 반응한다는 것은 곧 실행한다는 뜻이다.** 링크로 받은 코드가 글자
+// 하나 쳤다고 도는 것은 §19.4 의 "사람이 읽고 누른다" 를 뒤에서 무너뜨린다.
+// 그래서 첫 Run 전까지는 안 돈다 — 그 Run 이 동의다. 우리가 쓴 기본 정의는
+// 처음에 자동 실행되므로 바로 켜진다.
+let live = false;
+let typeTimer = null;
+const TYPE_MS = 400;
 
 async function setMode(next) {
   mode = next;
@@ -545,6 +569,7 @@ async function run() {
     els.shared.style.display = "none";
     buildAxisSets();
     await refresh(FINAL_STEP);
+    live = true;   // 한 번 돌렸다. 이제 타이핑에 반응해도 된다 (§19.4)
   } catch (e) { fail(e); }
   finally { watchSlow(false); bind(false); }
 }
@@ -604,7 +629,12 @@ els.run.onclick = async () => {
 
 // 손으로 한 글자라도 고치면 메뉴 되돌리기는 버린다 (§19.15). 두 되돌리기가
 // 겹치면 어느 쪽이 이겼는지 안 보인다
-els.src.oninput = forgetUndo;
+els.src.oninput = () => {
+  forgetUndo();
+  // 글자마다 실행하지 않는다. 멎으면 그린다
+  clearTimeout(typeTimer);
+  typeTimer = setTimeout(() => { drawStage(); }, TYPE_MS);
+};
 els.src.onkeydown = (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
 };
