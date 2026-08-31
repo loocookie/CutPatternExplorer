@@ -6,10 +6,13 @@ sphere** — there are no piece models.
 You write a puzzle definition in Python and get the cut pattern. Cut angles are
 sliders, so a whole family of puzzles is one definition.
 
+**[Open it in your browser](https://loocookie.github.io/CutPatternExplorer/)**
+— nothing to install, and definitions run entirely on your machine.
+
 - Design and the reasoning behind it: [`docs/design.md`](docs/design.md) (Korean)
 - Browser build: `web/` (Pyodide + Canvas 2D)
 
-## Running it
+## Running it locally
 
 ```
 python -m http.server 8000
