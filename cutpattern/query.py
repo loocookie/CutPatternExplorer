@@ -17,7 +17,8 @@ import math
 from collections import defaultdict
 
 from .engine.axes import Axis
-from .geometry.vector import Vec3, as_vec, clamp, normalize
+from .geometry.angular_coverage import TAU
+from .geometry.vector import Vec3, as_vec, clamp, normalize, orthonormal_basis
 
 __all__ = [
     "ANGLE_TOL_DEG",
@@ -71,21 +72,65 @@ def angle_between(a, b) -> float:
     return math.degrees(math.acos(float(clamp(float(_normal(a) @ _normal(b))))))
 
 
+# 간격을 비교하기 전에 붙일 격자. 사잇각 허용 오차(1e-4 도)보다 훨씬 촘촘하되
+# 부동소수 잡음(~1e-15)보다는 굵다 (§2.6)
+_GAP_GRID = 9
+
+
+def _canonical_ring(ref, axes):
+    """고리를 반시계로 정렬하고, 회전 중 하나를 표준형으로 고른다 (§2.6).
+
+    기준 축 `ref` 둘레의 방위각으로 정렬한다. `orthonormal_basis` 가 결정적이고
+    `(u, v, n)` 이 오른손계이므로 (§4.2) `+n` 에서 볼 때 반시계다.
+
+    정렬만으로는 부족하다. 시작점이 기저에 따라 달라지므로 같은 고리가 다른
+    순서로 나온다. **이웃 간격 수열이 사전순으로 가장 작아지는 회전**을 고르면
+    시작점이 사라진다 — 목걸이 표준형이다. 그러면 기하가 같은 두 고리가 같은
+    순서로 나오고, 간격 수열을 그대로 비교할 수 있다.
+
+    간격은 격자에 붙여 비교한다. 같아야 할 간격이 1e-15 씩 다르므로 (실측)
+    생값으로 사전순 비교를 하면 그 잡음이 어느 회전이 최소인지를 뒤집는다.
+    엡실론 비교는 전순서가 아니라 최소가 정의되지 않으므로 쓰지 않는다.
+
+    거울상은 구분한다. 뒤집기까지 최소화하면 손대칭이 다른 두 고리가 같아진다
+    (§2.5 의 키랄 카탈란 둘).
+    """
+    if len(axes) < 3:
+        return list(axes)                     # 간격이 하나뿐이면 회전할 것이 없다
+    u, v = orthonormal_basis(ref)
+    ordered = sorted(
+        axes, key=lambda a: math.atan2(float(a.normal @ v), float(a.normal @ u))
+    )
+    phi = [math.atan2(float(a.normal @ v), float(a.normal @ u)) for a in ordered]
+    n = len(ordered)
+    gaps = [round((phi[(i + 1) % n] - phi[i]) % TAU, _GAP_GRID) for i in range(n)]
+    start = min(range(n), key=lambda s: tuple(gaps[(s + i) % n] for i in range(n - 1)))
+    return [ordered[(start + i) % n] for i in range(n)]
+
+
 def at_angle(reference, degrees: float, *targets, tol_deg: float = ANGLE_TOL_DEG):
-    """기준에서 지정한 사잇각을 이루는 축들.
+    """기준에서 지정한 사잇각을 이루는 축들. **표준 순서로 돌려준다** (§2.6).
 
         at_angle(faces.c0, 90, faces)              같은 집합 안
         at_angle(faces.c0, 90, faces, edges)       여러 집합에 걸쳐
+
+    결과는 기준 축 둘레로 반시계 정렬하고, 이웃 간격 수열이 사전순 최소가 되는
+    회전에서 시작한다. 그래서 기하가 같은 두 고리는 같은 순서로 나온다 —
+    `x, y, z = at_angle(...)` 로 풀 때 어느 축을 어느 이름에 묶을지가 정해진다.
+
+    고리 밖은 담기지 않는다. 극각이 다른 두 고리가 같은 간격 수열을 가질 수
+    있으므로, 비교할 때는 각도도 함께 봐야 한다.
     """
     if not targets:
         raise TypeError("give the axis set to search: at_angle(reference, angle, axes)")
     ref = _normal(reference)
-    return [
+    found = [
         a
         for a in axes_of(*targets)
         if abs(math.degrees(math.acos(float(clamp(float(a.normal @ ref))))) - degrees)
         <= tol_deg
     ]
+    return _canonical_ring(ref, found)
 
 
 def angles_from(reference, *targets, tol_deg: float = ANGLE_TOL_DEG):

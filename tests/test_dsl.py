@@ -335,3 +335,87 @@ def test_queries_reject_a_missing_target_set():
         at_angle(x, 90)
     with pytest.raises(TypeError, match="axis set"):
         angles_from(x)
+
+
+# ---- at_angle 의 표준 순서 (§2.6) --------------------------------------
+
+
+def _gaps(reference, ring):
+    """기준 축 둘레 이웃 간격. 표준 순서면 이 수열이 고리의 지문이다."""
+    from cutpattern.geometry.angular_coverage import TAU
+    from cutpattern.geometry.vector import orthonormal_basis
+
+    u, v = orthonormal_basis(reference.normal)
+    phi = [math.atan2(float(a.normal @ v), float(a.normal @ u)) for a in ring]
+    n = len(phi)
+    return [round((phi[(i + 1) % n] - phi[i]) % TAU, 9) for i in range(n)]
+
+
+def test_at_angle_returns_a_ring_in_counterclockwise_order():
+    """기준 축 둘레로 돈다. 간격이 전부 양수면 한 방향으로만 돌았다는 뜻이다."""
+    from cutpattern.geometry.angular_coverage import TAU
+
+    # 정팔면체 축끼리는 70.53 / 109.47 / 180 뿐이다. 90 은 없다
+    octa = S.octahedron("octa")
+    ring = at_angle(octa["o-0"], math.degrees(math.acos(1 / 3)), octa)
+    assert len(ring) == 3
+    gaps = _gaps(octa["o-0"], ring)
+    assert all(g > 0 for g in gaps)
+    assert sum(gaps) == pytest.approx(TAU, abs=1e-6)
+
+
+def test_the_same_ring_comes_back_in_the_same_order_from_every_axis():
+    """**이것이 표준형의 쓸모다.**
+
+    대칭 집합에서는 어느 축을 기준으로 잡아도 같은 고리가 나온다. 정렬만 하면
+    시작점이 기저에 따라 달라져 `x, y, z = at_angle(...)` 이 축마다 다른 것을
+    묶는다. 간격 수열이 사전순 최소가 되는 회전을 고르면 시작점이 사라진다.
+    """
+    import math as _math
+
+    octa = S.octahedron("octa")
+    rd = S.rhombic_dodecahedron("rd")
+    exact = _math.degrees(_math.acos(2 / _math.sqrt(6)))
+
+    signatures = set()
+    for axis in octa:
+        ring = at_angle(axis, exact, rd)
+        assert len(ring) == 3, axis.id
+        signatures.add(tuple(_gaps(axis, ring)))
+    assert len(signatures) == 1, signatures
+
+
+def test_canonical_start_picks_the_smallest_gap_sequence():
+    """간격이 다른 고리에서 실제로 회전이 일어난다."""
+    co = S.from_orbit("co", (0.5, 0.5, 1), "O")
+    ref = S.cube("cube")["c-0"]
+    ring = at_angle(ref, 65.905157, co)
+    gaps = _gaps(ref, ring)
+    assert len(ring) == 8
+    # 36.87 과 53.13 이 번갈아 나온다. 작은 쪽에서 시작해야 한다
+    assert gaps[0] < gaps[1]
+    rotations = [tuple(gaps[(s + i) % 8] for i in range(7)) for s in range(8)]
+    assert tuple(gaps[:7]) == min(rotations)
+
+
+def test_short_rings_are_left_alone():
+    """간격이 하나뿐이면 회전할 것이 없다. 축 하나짜리 결과도 그대로 나온다."""
+    faces = S.cube("cube")
+    assert [a.id for a in at_angle(faces[U], 180.0, faces)] == [D]
+    assert at_angle(faces[U], 45.0, faces) == []
+    pair = at_angle(faces[U], 90.0, faces)
+    assert len(pair) == 4
+
+
+def test_gaps_are_compared_on_a_grid():
+    """같아야 할 간격이 1e-15 씩 다르다. 생값으로 사전순 비교를 하면 그 잡음이
+    어느 회전이 최소인지를 뒤집는다."""
+    from cutpattern.query import _GAP_GRID
+
+    assert _GAP_GRID >= 6, "격자가 너무 굵으면 다른 고리가 같아 보인다"
+    co = S.from_orbit("co", (0.5, 0.5, 1), "O")
+    ref = S.cube("cube")["c-0"]
+    # 같은 고리를 여러 번 물어도 같은 순서가 나온다
+    first = [a.id for a in at_angle(ref, 65.905157, co)]
+    for _ in range(5):
+        assert [a.id for a in at_angle(ref, 65.905157, co)] == first
