@@ -403,7 +403,8 @@ def test_the_two_modes_split_the_sidebar():
     #
     # 공유도 그렇다. 그것은 **보내는 쪽** 일이고, §19.4 의 성질은 받는 사람이
     # 코드를 읽는 것이지 보내는 사람이 편집창을 거치는 게 아니다
-    for tag_id in ('id="err"', 'id="sliders"', 'id="sets"', 'id="share"'):
+    for tag_id in ('id="err"', 'id="sliders"', 'id="sets"', 'id="share"',
+                   'id="stop"'):
         assert not marked(tag_id), tag_id + " 는 두 모드에 다 있어야 한다"
 
 
@@ -496,6 +497,41 @@ def test_the_menu_avoids_colliding_axis_id_prefixes(browser_globals):
     # 한 번 더 얹어도 겹치지 않는다
     again = browser_globals["prepare"](browser_globals["add_axis_set"](out, "cube"))
     assert again["axisSets"] == ["cube1", "Cube 2", "Cube 3"], again["axisSets"]
+
+
+def test_stop_appears_only_when_an_evaluation_drags_on():
+    """늘 두면 화면만 먹고, 없으면 멎었을 때 탈출구가 없다 (§19.15).
+
+    몸통 정의는 밀리초대다 (§12.3). 그러나 손으로 쓴 무거운 정의를 실행
+    모드에서 슬라이더로 밀다 멎으면, 거기엔 편집창도 Run 도 없다.
+
+    떠도 강제하는 것은 없다 — 더 기다리고 싶으면 그냥 두면 된다.
+    """
+    assert "const SLOW_MS = 5000" in PAGE
+
+    # 평소엔 숨어 있어야 한다
+    tag = PAGE[PAGE.index('<button id="stop"'):]
+    assert "hidden" in tag[:tag.index(">")]
+
+    body = _function_body(PAGE, "function watchSlow(on)")
+    assert "SLOW_MS" in body and "els.stop.hidden = false" in body
+    # 평가마다 감싸야 한다. 슬라이더도 평가다
+    assert "watchSlow(true)" in _function_body(PAGE, "async function refresh(maxStep)")
+
+
+def test_running_binds_you_to_the_editor():
+    """평가 도중에 화면이 바뀌면 무엇이 그려지는 중인지 안 보인다 (§19.15).
+
+    멎었을 때 어느 정의가 멎은 것인지도 흐려진다. 실행 모드로 나가는 것은
+    결과를 본 뒤다.
+    """
+    body = _function_body(PAGE, "async function run()")
+    assert "bind(true)" in body
+    assert "bind(false)" in body[body.index("finally"):], "끝나면 반드시 풀어야 한다"
+
+    bound = _function_body(PAGE, "function bind(on)")
+    assert "els.mode.disabled = on" in bound
+    assert "Rendering" in bound
 
 
 def test_engine_can_be_killed():

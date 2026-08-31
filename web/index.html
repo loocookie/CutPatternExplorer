@@ -118,6 +118,9 @@
     <!-- 공유는 **보내는 쪽** 일이라 두 모드에 다 있다. §19.4 의 성질은 받는
          사람이 코드를 읽는 것이지, 보내는 사람이 편집창을 거치는 게 아니다 -->
     <button id="share">Copy share link</button>
+    <!-- 평소엔 숨어 있다가 평가가 오래 끌면 나타난다 (§19.15). 늘 있으면
+         화면만 먹고, 없으면 멎었을 때 탈출구가 없다 -->
+    <button id="stop" hidden>Stop</button>
     <span class="msg" id="msg"></span>
   </div>
   <div id="shared" class="editonly"></div>
@@ -130,7 +133,6 @@
   <textarea id="src" class="editonly" spellcheck="false" wrap="off"></textarea>
   <div class="bar editonly">
     <button id="run">Run</button>
-    <button id="stop" disabled>Stop</button>
   </div>
   <div id="err"></div>
   <fieldset id="sliders"><legend>Cut angle</legend></fieldset>
@@ -148,11 +150,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=e5b968a4"></script>
-<script src="render.js?v=e5b968a4"></script>
-<script src="editor.js?v=e5b968a4"></script>
-<script src="share.js?v=e5b968a4"></script>
-<script src="app.js?v=e5b968a4"></script>
+<script src="vocab.js?v=f36157ae"></script>
+<script src="render.js?v=f36157ae"></script>
+<script src="editor.js?v=f36157ae"></script>
+<script src="share.js?v=f36157ae"></script>
+<script src="app.js?v=f36157ae"></script>
 <script>
 "use strict";
 
@@ -164,6 +166,13 @@ with puzzle("OctoCube Master", cube1) as p:
         with turned(x, 45):
             split(*at_angle(x, 90, cube1))
 `;
+
+// 평가가 이만큼 끌면 Stop 을 내놓는다 (§19.15).
+//
+// 늘 두면 화면만 먹는다 — 몸통 정의는 밀리초대다 (§12.3). 아예 없으면 손으로
+// 쓴 무거운 정의를 실행 모드에서 슬라이더로 밀다 멎었을 때 탈출구가 없다.
+// 떠도 강제하는 것은 없다: 더 기다리고 싶으면 그냥 두면 된다.
+const SLOW_MS = 5000;
 
 // 조작 중 / 멎은 뒤 tessellation (§12.3). 조작 중에는 거칠게 그린다
 const DRAG_STEP = 0.12;
@@ -286,10 +295,30 @@ function rewrite(text) {
 let inFlight = false;
 let queued = null;
 
+let slowTimer = null;
+
+/** 평가가 도는 동안 모드 전환을 막고 그 사실을 말한다 (§19.15). */
+function bind(on) {
+  els.mode.disabled = on;
+  els.run.disabled = on;
+  els.msg.textContent = on ? "Rendering…" : "";
+}
+
+/** 평가를 감싼다. 오래 끌면 Stop 이 나타나고, 끝나면 도로 숨는다. */
+function watchSlow(on) {
+  clearTimeout(slowTimer);
+  slowTimer = null;
+  if (on) {
+    slowTimer = setTimeout(() => { els.stop.hidden = false; }, SLOW_MS);
+  } else if (!engine.running) {
+    els.stop.hidden = true;
+  }
+}
+
 async function refresh(maxStep) {
   if (inFlight) { queued = maxStep; return; }
   inFlight = true;
-  els.stop.disabled = false;
+  watchSlow(true);
   try {
     const t0 = performance.now();
     const out = await engine.evaluate(angles, maxStep);
@@ -309,7 +338,7 @@ async function refresh(maxStep) {
     fail(e);
   } finally {
     inFlight = false;
-    els.stop.disabled = true;
+    watchSlow(false);
     if (queued !== null) { const next = queued; queued = null; refresh(next); }
   }
 }
@@ -475,7 +504,11 @@ async function run() {
     return;
   }
   try {
-    els.stop.disabled = false;
+    // 끝날 때까지 모드를 못 바꾸게 한다 (§19.15). 평가 도중에 화면이 바뀌면
+    // 무엇이 그려지는 중인지 안 보이고, 멎었을 때 어느 정의가 멎은 것인지도
+    // 흐려진다. 실행 모드로 나가는 것은 결과를 본 뒤다
+    bind(true);
+    watchSlow(true);
     info = await engine.prepare(els.src.value);
     clearError();
     els.shared.style.display = "none";
@@ -483,13 +516,13 @@ async function run() {
     buildToggles();
     await refresh(FINAL_STEP);
   } catch (e) { fail(e); }
-  finally { els.stop.disabled = !engine.running; }
+  finally { watchSlow(false); bind(false); }
 }
 
 // 무한 루프에 빠진 정의를 죽인다. worker 가 아니면 할 수 없는 일이다 (§19.5)
 els.stop.onclick = async () => {
   engine.stop();
-  els.stop.disabled = true;
+  els.stop.hidden = true;
   queued = null; inFlight = false;
   fail("Stopped. Restarting the engine…");
   try {
