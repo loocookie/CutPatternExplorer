@@ -225,6 +225,21 @@ def test_worker_is_spawned_as_a_module_worker():
     assert re.search(r'new Worker\("worker\.js[^"]*", \{ type: "module" \}\)', APP)
 
 
+def test_boot_has_a_watchdog():
+    """부팅이 조용히 멎는 것을 눈에 보이게 한다.
+
+    CSP 차단이나 worker 로드 실패는 화면에 아무것도 남기지 않는다. 워치독이
+    없으면 "Starting…" 하나로 기다림과 고장이 같아 보인다.
+
+    **죽이지 않는다.** 런타임을 자체 호스팅하므로 (§19.13) 느린 연결에서는
+    이 시간이 정상적으로 넘어간다. terminate 는 _die 에만 있어야 한다.
+    """
+    body = _function_body(APP, "async boot()")
+    assert "BOOT_SILENCE_MS" in body
+    assert "clearTimeout" in body, "부팅이 끝나면 워치독을 거둬야 한다"
+    assert "terminate" not in body, "워치독이 오는 중인 부팅을 끊으면 안 된다"
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 

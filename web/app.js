@@ -8,6 +8,15 @@
 
 "use strict";
 
+// 부팅이 조용히 멎으면 "Starting…" 이 영원히 남는다. 원인이 화면에 아무것도
+// 남기지 않는 종류라 — CSP 차단, worker 스크립트 로드 실패 — 기다리는 것과
+// 죽은 것을 구별할 수 없다.
+//
+// **죽이지는 않는다.** 런타임을 자체 호스팅하므로 (§19.13) 느린 연결에서는
+// 이 시간이 정상적으로 넘어갈 수 있다. 아직 오는 중인 것을 끊으면 진짜 고장을
+// 하나 만들어 내는 셈이다. 말만 하고 계속 기다린다.
+const BOOT_SILENCE_MS = 20000;
+
 class Engine {
   constructor(onStatus) {
     this.worker = null;
@@ -15,13 +24,19 @@ class Engine {
     this.onStatus = onStatus || (() => {});
     this.pending = new Map();
     this.nextId = 1;
+    // 워치독이 "어디까지 갔는지" 를 말할 수 있게 마지막 단계를 들고 있는다
+    this.lastStatus = "";
   }
 
   _spawn() {
-    this.worker = new Worker("worker.js?v=5a54abe4", { type: "module" });
+    this.worker = new Worker("worker.js?v=1ada6f0f", { type: "module" });
     this.worker.onmessage = (ev) => {
       const msg = ev.data;
-      if (msg.type === "status") { this.onStatus(msg.text); return; }
+      if (msg.type === "status") {
+        if (msg.text) this.lastStatus = msg.text;
+        this.onStatus(msg.text);
+        return;
+      }
       if (msg.type === "fatal") { this._die(new Error(msg.error)); return; }
       const slot = this.pending.get(msg.id);
       if (!slot) return;
@@ -61,12 +76,24 @@ class Engine {
 
   async boot() {
     this.failure = null;
+    this.lastStatus = "";
     this._spawn();
+    // 답이 없는 채로 오래 지나면 그 사실 자체를 화면에 띄운다. 부팅이 끝나면
+    // worker 가 빈 status 를 보내 이 글이 덮인다
+    const watchdog = setTimeout(() => {
+      this.onStatus(
+        "The engine has not answered in " + Math.round(BOOT_SILENCE_MS / 1000) +
+        "s" + (this.lastStatus ? " (last step: " + this.lastStatus + ")" : "") +
+        ". It may still be loading — check the browser console for errors."
+      );
+    }, BOOT_SILENCE_MS);
     try {
       await this._send({ type: "boot" });
     } catch (e) {
       this._die(e);   // 다음 요청이 매달리지 않게 한다
       throw e;
+    } finally {
+      clearTimeout(watchdog);
     }
   }
 
