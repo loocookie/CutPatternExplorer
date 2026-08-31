@@ -982,3 +982,105 @@ def test_removal_does_not_wipe_the_inserted_pass(browser_globals):
     """블록과 그 자식이 둘 다 지울 목록에 오른다. 겹친 채로 뒤에서부터 자르면
     끼워 넣은 글자가 조용히 사라진다. 구간을 합쳐야 한다."""
     assert "pass" in browser_globals["remove_axis_set"](DEF_DERIVED, "Octahedron 1")
+
+
+# ---- 축 집합 편집 (§19.12) ------------------------------------------------
+
+DEF_SETS = '''c1 = cube("Cube 1")
+t1 = tetrahedron("Tetrahedron 1")
+rd1 = rhombic_dodecahedron("Rhombic Dodecahedron 1")
+
+with puzzle("Demo", c1, rd1) as p:
+    split(c1)
+    split(at_angle(c1["c1-0"], 90, rd1, start=t1["t1-0"]))
+'''
+
+
+@pytest.fixture
+def ready(browser_globals):
+    """편집 메뉴는 실행 뒤에만 뜬다. 실제 축 id 를 그때 알기 때문이다."""
+    browser_globals["prepare"](DEF_SETS)
+    return browser_globals
+
+
+def test_prepare_reports_sets_that_are_not_drawn(ready):
+    """`puzzle()` 인자만이 축 집합의 전부가 아니다.
+
+    `t1` 은 기준으로만 쓰여 그려지지 않는다. 그래도 고치고 지울 수 있어야 한다.
+    """
+    info = ready["prepare"](DEF_SETS)
+    assert info["axisSets"] == ["Cube 1", "Rhombic Dodecahedron 1"]
+    assert [s["id"] for s in info["sets"]] == [
+        "Cube 1", "Tetrahedron 1", "Rhombic Dodecahedron 1"]
+    assert info["sets"][0]["axes"][:2] == ["c1-0", "c1-1"]
+
+
+@pytest.mark.parametrize("op", ["rotate", "remove", "rename", "mirror", "invert"])
+def test_axis_op_writes_a_call_that_runs(ready, op):
+    """메뉴가 **호출을 써 준다.** 쓴 것이 그대로 돌아야 한다."""
+    out = ready["axis_op"](DEF_SETS, "Cube 1", op)
+    assert out.startswith("c1 = " + op + "(cube(\"Cube 1\")")
+    ready["prepare"](out)
+
+
+def test_axis_op_defaults_to_an_axis_nobody_uses(ready):
+    """첫 축을 그대로 쓰면 그것이 마침 참조 중인 축일 때 메뉴를 누르는 순간
+    정의가 깨진다. `c1-0` 은 `at_angle` 이 쓰고 있다."""
+    for op in ("remove", "rename"):
+        written = ready["axis_op"](DEF_SETS, "Cube 1", op).splitlines()[0]
+        assert '"c1-0"' not in written, written
+
+
+def test_axis_op_keeps_the_id_prefix_when_renaming(ready):
+    """축 id 접두사는 집합에서 나온다 (§2.5). 제안하는 이름도 그 규칙을 따른다."""
+    assert '"c1-U"' in ready["axis_op"](DEF_SETS, "Cube 1", "rename")
+
+
+def test_merge_folds_in_a_set_that_is_not_drawn(ready):
+    out = ready["axis_op"](DEF_SETS, "Rhombic Dodecahedron 1", "merge", "Tetrahedron 1")
+    assert 'merge("Rhombic Dodecahedron 1", rhombic_dodecahedron(' in out
+    assert out.rstrip().splitlines()[2].endswith(", t1)")
+    ready["prepare"](out)
+
+
+def test_merge_refuses_two_drawn_sets(ready):
+    """축 id 를 그대로 물려받으므로 같은 id 가 두 집합에 생긴다 (§5)."""
+    with pytest.raises(ValueError, match="two sets at once"):
+        ready["axis_op"](DEF_SETS, "Rhombic Dodecahedron 1", "merge", "Cube 1")
+
+
+def test_merge_refuses_a_set_defined_later(ready):
+    """파이썬은 위에서 아래로 읽는다. 아직 없는 이름을 쓰면 NameError 다."""
+    with pytest.raises(ValueError, match="defined after"):
+        ready["axis_op"](DEF_SETS, "Cube 1", "merge", "Tetrahedron 1")
+
+
+def test_axis_op_refuses_what_it_does_not_know(ready):
+    with pytest.raises(ValueError, match="unknown axis operation"):
+        ready["axis_op"](DEF_SETS, "Cube 1", "explode")
+    with pytest.raises(ValueError, match="no axis set"):
+        ready["axis_op"](DEF_SETS, "Icosahedron 1", "rotate")
+    with pytest.raises(ValueError, match="syntax error"):
+        ready["axis_op"]("with puzzle(\n", "Cube 1", "rotate")
+
+
+def test_the_names_were_already_in_scope():
+    """C 가 고치는 것은 기능이 아니라 **아무도 모른다**는 사실이다."""
+    import cutpattern.axisops as axisops
+    import cutpattern.dsl as dsl
+
+    for name in ("merge", "rotate", "remove", "rename", "mirror", "invert"):
+        assert name in axisops.__all__ and name in dsl.__all__
+
+
+def test_axis_editing_is_wired_from_the_page_to_the_worker():
+    assert "engine.axisOp(els.src.value" in PAGE and "AXIS_OPS" in PAGE
+    assert "async axisOp(" in APP
+    assert "axisOp:" in WORKER and "axis_op" in WORKER
+
+
+def test_the_delete_button_moved_off_the_slider():
+    """슬라이더는 각도만 다룬다. 축 집합을 다루는 자리는 축 집합 목록이다 —
+    거기에만 그려지지 않는 집합도 나온다."""
+    sliders = PAGE.split("function buildSliders")[1].split("function ")[0]
+    assert "removeAxisSet" not in sliders

@@ -37,10 +37,14 @@
   .row { display: grid; grid-template-columns: 1fr; gap: 2px; margin-bottom: 10px; }
   .row b { font-weight: 500; font-size: 12px; color: #4a5163;
            display: flex; justify-content: space-between; align-items: center; }
-  /* 지우기는 되돌리기 어렵다. 숨기기 체크박스와 나란히 두지 않는다 */
-  .row .del { border: 0; background: none; cursor: pointer; padding: 0 4px;
-              color: #b0b6c6; font-size: 13px; line-height: 1; }
-  .row .del:hover { color: #b3261e; }
+  /* 축 집합 한 줄: 색 / 이름 / 편집 메뉴 / 지우기 (§19.12) */
+  .setrow { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  .setrow .nm { flex: 1; min-width: 0; font-size: 13px; overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; }
+  .setrow select { font-size: 11px; padding: 2px; max-width: 130px; }
+  .del { border: 0; background: none; cursor: pointer; padding: 0 2px;
+         color: #b0b6c6; font-size: 15px; line-height: 1; }
+  .del:hover { color: #b3261e; }
   /* 숫자를 눌러 정확한 값을 넣는다. 슬라이더 스텝(0.05)으로는 63.4349 같은
      값에 닿을 수 없다 (§19.8) */
   .val { cursor: text; border-bottom: 1px dotted #c2c8d6; padding: 0 1px; }
@@ -50,7 +54,9 @@
   input[type=range] { width: 100%; }
   label.tog { display: block; margin: 4px 0; cursor: pointer; font-size: 13px; }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
-        margin-right: 6px; vertical-align: -1px; }
+        margin-right: 6px; vertical-align: -1px; flex: none; }
+  /* puzzle() 인자가 아니면 그려지지 않는다. 기준으로만 쓰는 집합이다 */
+  .sw.off { background: none; border: 1px dashed #c2c8d6; }
   details { font-size: 12px; color: #7b8194; }
   details summary { cursor: pointer; padding: 2px 0; }
   details .grp { margin: 6px 0 2px; color: #4a5163; }
@@ -100,11 +106,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=57e9226e"></script>
-<script src="render.js?v=57e9226e"></script>
-<script src="editor.js?v=57e9226e"></script>
-<script src="share.js?v=57e9226e"></script>
-<script src="app.js?v=57e9226e"></script>
+<script src="vocab.js?v=dffef604"></script>
+<script src="render.js?v=dffef604"></script>
+<script src="editor.js?v=dffef604"></script>
+<script src="share.js?v=dffef604"></script>
+<script src="app.js?v=dffef604"></script>
 <script>
 "use strict";
 
@@ -144,6 +150,15 @@ for (const [group, items] of Object.entries(globalThis.MENU || {})) {
   for (const [key, label] of items) optgroup.append(new Option(label, key));
   els.addPick.append(optgroup);
 }
+
+// 축 집합을 고치는 연산 (§19.12). 말줄임표는 "호출을 써 줄 테니 인자를 고쳐라"
+const AXIS_OPS = [
+  ["rotate", "Rotate…"],
+  ["remove", "Remove an axis…"],
+  ["rename", "Rename an axis…"],
+  ["mirror", "Mirror"],
+  ["invert", "Invert"],
+];
 
 const engine = new Engine((msg) => { els.boot.textContent = msg; els.boot.style.display = msg ? "grid" : "none"; });
 let angles = {};
@@ -214,25 +229,7 @@ function buildSliders() {
     const val = document.createElement("span");
     val.className = "val";
     val.title = "Click to type an exact value";
-
-    // 축 집합과 그것을 쓰는 코드를 지운다. 슬라이더가 곧 축 집합이므로
-    // 여기가 제자리다 (§19.9)
-    const del = document.createElement("button");
-    del.className = "del";
-    del.textContent = "×";
-    del.title = "Remove this axis set and everything that uses it";
-    del.onclick = async () => {
-      if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
-      try {
-        rewrite(await engine.removeAxisSet(els.src.value, id));
-        clearError();
-        await run();
-      } catch (e) { fail(e); }
-    };
-
-    const left = document.createElement("span");
-    left.append(label, val);
-    name.append(left, del);
+    name.append(label, val);
 
     const range = document.createElement("input");
     // 0 과 180 은 퇴화원이다 (r = 0). 터지지 않고 "자를 게 없는 상태" 로
@@ -287,20 +284,83 @@ function buildSliders() {
 function buildToggles() {
   els.sets.replaceChildren(Object.assign(document.createElement("legend"), { textContent: "Axis sets" }));
   view.hidden.clear();
-  info.axisSets.forEach((id, i) => {
-    const label = document.createElement("label");
-    label.className = "tog";
-    const box = document.createElement("input");
-    box.type = "checkbox"; box.checked = true;
-    box.onchange = () => {
-      box.checked ? view.hidden.delete(i) : view.hidden.add(i);
-      view.draw(); refresh(FINAL_STEP);
-    };
+  // 그려지는 것만이 축 집합의 전부가 아니다. 기준으로만 쓰는 집합도 고치고
+  // 지울 수 있어야 한다 (§19.12)
+  const sets = (info.sets && info.sets.length)
+    ? info.sets : info.axisSets.map((id) => ({ id, axes: [] }));
+
+  sets.forEach((set, n) => {
+    const drawn = info.axisSets.indexOf(set.id);
+    const row = document.createElement("div");
+    row.className = "setrow";
+
     const sw = document.createElement("span");
     sw.className = "sw";
-    sw.style.background = `rgb(${PALETTE[i % PALETTE.length]})`;
-    label.append(box, sw, document.createTextNode(id));
-    els.sets.append(label);
+    if (drawn >= 0) {
+      const box = document.createElement("input");
+      box.type = "checkbox"; box.checked = true;
+      box.title = "Hide this axis set (the material is still there)";
+      box.onchange = () => {
+        box.checked ? view.hidden.delete(drawn) : view.hidden.add(drawn);
+        view.draw(); refresh(FINAL_STEP);
+      };
+      sw.style.background = `rgb(${PALETTE[drawn % PALETTE.length]})`;
+      row.append(box, sw);
+    } else {
+      sw.className = "sw off";
+      sw.title = "Not passed to puzzle(...), so it is not drawn";
+      row.append(sw);
+    }
+
+    const name = document.createElement("span");
+    name.className = "nm";
+    name.textContent = set.id;
+    name.title = set.axes.length ? set.axes.length + " axes: " + set.axes.join(", ") : set.id;
+    row.append(name);
+
+    // 메뉴가 **호출을 써 준다.** 이 이름들은 진작 있었는데 아무도 몰랐다.
+    // 부르는 대신 써 주면 다음부터는 손으로 쓸 수 있다 (§19.12)
+    const pick = document.createElement("select");
+    pick.append(new Option("Edit…", ""));
+    for (const [op, label] of AXIS_OPS) pick.append(new Option(label, op));
+    // merge 는 축 id 를 그대로 물려받는다. 상대가 그려지는 집합이면 같은 id 가
+    // 두 곳에 생긴다. 앞에 정의된 것만 쓸 수 있다 — 파이썬은 위에서 아래다
+    for (const other of sets.slice(0, n)) {
+      if (info.axisSets.includes(other.id)) continue;
+      pick.append(new Option("Merge with " + other.id, "merge:" + other.id));
+    }
+    pick.onchange = async () => {
+      const raw = pick.value;
+      pick.value = "";
+      if (!raw) return;
+      const at = raw.indexOf(":");
+      const op = at < 0 ? raw : raw.slice(0, at);
+      const other = at < 0 ? null : raw.slice(at + 1);
+      if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
+      try {
+        rewrite(await engine.axisOp(els.src.value, set.id, op, other));
+        clearError();
+        await run();
+      } catch (e) { fail(e); }
+    };
+    row.append(pick);
+
+    // 지우기는 딸린 코드까지 데려간다 (§19.9). 되돌리기가 살아 있다
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.title = "Remove this axis set and everything that uses it";
+    del.onclick = async () => {
+      if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
+      try {
+        rewrite(await engine.removeAxisSet(els.src.value, set.id));
+        clearError();
+        await run();
+      } catch (e) { fail(e); }
+    };
+    row.append(del);
+
+    els.sets.append(row);
   });
 }
 

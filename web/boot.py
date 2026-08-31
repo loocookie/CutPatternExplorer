@@ -16,7 +16,7 @@ import math
 
 import cutpattern.dsl as _dsl
 from cutpattern import solids as _solids
-from cutpattern.dsl import Puzzle
+from cutpattern.dsl import AxisSet, Puzzle
 from cutpattern.render.scene import build_scene
 
 
@@ -70,6 +70,13 @@ def load(source):
     """
     ns = _namespace()
     exec(_compile(source), ns)
+    # 이름에 묶인 축 집합을 재 둔다. 편집 메뉴가 실제 축 id 를 채워 넣는다
+    # (§19.12). puzzle() 인자가 아닌 것도 있다 — 기준으로만 쓰는 집합이 그렇다
+    _state["sets"] = [
+        {"id": v.id, "var": key, "axes": [a.id for a in v]}
+        for key, v in ns.items()
+        if isinstance(v, AxisSet) and not key.startswith("_")
+    ]
     found = [v for v in ns.values() if isinstance(v, Puzzle)]
     if not found:
         # 예제 파일을 통째로 붙여 넣으면 정의가 함수 안에 있고 아무도 안 부른다
@@ -94,6 +101,9 @@ def prepare(source):
         "name": p.name,
         "inputs": list(p.family.cut_angle_inputs()),
         "axisSets": [a.id for a in p.axis_sets],
+        # 그려지는 것만이 축 집합의 전부가 아니다. 기준으로만 쓰는 집합도
+        # 고치고 지울 수 있어야 한다 (§19.12)
+        "sets": _state.get("sets", []),
         "ops": len(p.family.operations),
     }
 
@@ -522,3 +532,87 @@ def remove_axis_set(source, set_id):
     for start, end, insert in reversed(_coalesce(cuts)):
         out = out[:start] + insert + out[end:]
     return out
+
+
+# 축 집합을 고치는 연산 (§19.12). 이미 저작 계층에 있는데 아무도 몰랐다
+_AXIS_OPS = ("rotate", "remove", "rename", "mirror", "invert", "merge")
+
+
+def axis_op(source, set_id, op, other=None):
+    """축 집합을 만드는 식을 `op(...)` 로 감싼 새 소스를 돌려준다.
+
+        c1 = cube("Cube 1")
+        c1 = rotate(cube("Cube 1"), axis=(0, 0, 1), angle=45)
+
+    `merge` / `rotate` / `remove` / `rename` / `mirror` / `invert` 는 진작
+    구현돼 있고 이름 공간에도 있었다. 없던 것은 **아무도 모른다**는 사실을
+    고칠 길이었다. 메뉴가 부르는 대신 **호출을 써 준다** — 다음부터는 손으로
+    쓸 수 있다 (§19.9).
+
+    인자는 자리만 채운다. 실제 축 id 를 넣어 주므로 고칠 곳이 눈에 보인다.
+    """
+    if op not in _AXIS_OPS:
+        raise ValueError("unknown axis operation %r" % op)
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        raise ValueError(
+            "cannot edit: the code has a syntax error (line %d). fix it first."
+            % (exc.lineno or 0)
+        ) from None
+
+    assign, _var = _binding_for(tree, set_id)
+    if assign is None:
+        raise ValueError("no axis set named %r in this definition" % set_id)
+
+    at = _offsets(source)
+    value = assign.value
+    start = at(value.lineno, value.col_offset)
+    end = at(value.end_lineno, value.end_col_offset)
+    inner = source[start:end]
+
+    axes = next((s["axes"] for s in _state.get("sets", []) if s["id"] == set_id), [])
+    # **소스에 안 쓰인 축**을 기본값으로 고른다. 첫 축을 그대로 쓰면 그것이
+    # 마침 참조 중인 축일 때 메뉴를 누르는 순간 정의가 깨진다
+    free = [a for a in axes if a not in source]
+    first = (free or axes or ["axis id"])[0]
+    prefix = first.rsplit("-", 1)[0] if "-" in first else first
+
+    if op == "rotate":
+        call = "rotate(%s, axis=(0, 0, 1), angle=45)" % inner
+    elif op == "remove":
+        call = "remove(%s, %s)" % (inner, json.dumps(first))
+    elif op == "rename":
+        call = "rename(%s, {%s: %s})" % (
+            inner, json.dumps(first), json.dumps(prefix + "-U"))
+    elif op in ("mirror", "invert"):
+        call = "%s(%s)" % (op, inner)
+    else:
+        if not other:
+            raise ValueError("merge needs a second axis set")
+        other_assign, other_var = _binding_for(tree, other)
+        if other_assign is None:
+            raise ValueError("no axis set named %r in this definition" % other)
+        # 파이썬은 위에서 아래로 읽는다. 아직 없는 이름을 쓰면 NameError 다
+        if other_assign.lineno > assign.lineno:
+            raise ValueError(
+                "%r is defined after %r. move it up first, or merge the other way."
+                % (other, set_id)
+            )
+        # 축 id 는 그대로 물려받는다. 두 집합이 다 puzzle() 인자면 같은
+        # id 가 두 곳에 생겨 엔진이 거부한다 (§5). 미리 말해 준다
+        drawn = set()
+        for node in tree.body:
+            if _is_puzzle_block(node):
+                drawn = {a.id for a in node.items[0].context_expr.args[1:]
+                         if isinstance(a, ast.Name)}
+        if other_var in drawn:
+            raise ValueError(
+                "%r is one of the puzzle's own axis sets, so merging would put its "
+                "axis ids in two sets at once. remove it from puzzle(...) first."
+                % other
+            )
+        call = "merge(%s, %s, %s)" % (
+            json.dumps(set_id), inner, other_var)
+
+    return source[:start] + call + source[end:]

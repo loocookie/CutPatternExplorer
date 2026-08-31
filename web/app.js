@@ -18,7 +18,7 @@ class Engine {
   }
 
   _spawn() {
-    this.worker = new Worker("worker.js?v=57e9226e", { type: "module" });
+    this.worker = new Worker("worker.js?v=dffef604", { type: "module" });
     this.worker.onmessage = (ev) => {
       const msg = ev.data;
       if (msg.type === "status") { this.onStatus(msg.text); return; }
@@ -92,6 +92,11 @@ class Engine {
   /** 축 집합과 그것을 쓰는 코드를 지운 새 소스 (§19.9). */
   async removeAxisSet(source, setId) {
     return (await this._send({ type: "removeAxisSet", source, setId })).result;
+  }
+
+  /** 축 집합을 만드는 식을 op(...) 로 감싼 새 소스 (§19.12). */
+  async axisOp(source, setId, op, other = null) {
+    return (await this._send({ type: "axisOp", source, setId, op, other })).result;
   }
 
   async prepare(source) {
