@@ -136,6 +136,7 @@ with puzzle("두 번째", edges) as q:
 def test_page_scripts_are_loaded_in_dependency_order():
     """render.js 는 app.js 보다 먼저 와야 하고, engine.js 가 제일 앞이다."""
     order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
+    order = [name.split("?")[0] for name in order]
     # engine.js 는 worker 만 읽는다. 메인 스레드가 135KB 를 파싱할 이유가 없다
     assert order == ["vocab.js", "render.js", "editor.js", "share.js", "app.js"]
     assert "engine.js" in WORKER
@@ -196,6 +197,7 @@ def test_link_carries_code_only_in_the_fragment():
 
 def test_page_loads_share_before_app():
     order = [m.group(1) for m in re.finditer(r'<script src="([^"]+)"', PAGE)]
+    order = [name.split("?")[0] for name in order]
     assert order.index("share.js") < order.index("app.js")
 
 
@@ -220,7 +222,7 @@ def test_definitions_run_only_in_the_worker():
 
 def test_worker_is_spawned_as_a_module_worker():
     """worker.js 가 engine.js 를 import 하므로 classic worker 로는 안 된다."""
-    assert 'new Worker("worker.js", { type: "module" })' in APP
+    assert re.search(r'new Worker\("worker\.js[^"]*", \{ type: "module" \}\)', APP)
 
 
 def test_engine_can_be_killed():
@@ -892,3 +894,39 @@ def test_menu_edits_survive_undo():
     assert "setRangeText(text, 0, els.src.value.length" in PAGE
     for call in ("engine.removeAxisSet(", "engine.addAxisSet("):
         assert "rewrite(await " + call in PAGE, call + " 가 되돌리기를 죽인다"
+
+
+# ---- 캐시 (§19.11) --------------------------------------------------------
+
+
+def test_every_subresource_carries_a_cache_stamp():
+    """문서만 새것이고 스크립트가 옛것인 상태가 실제로 났다.
+
+    `python -m http.server` 는 `Cache-Control` 을 안 붙이므로 브라우저가 임의로
+    캐시한다. 문서는 늘 재검증하지만 하위 리소스는 아니다 — 새 UI 가 옛
+    `app.js` 를 불러 `engine.removeAxisSet is not a function` 이 났다.
+    """
+    import bundle_engine
+
+    for asset in bundle_engine.ASSETS:
+        for text in (PAGE, APP, WORKER):
+            for quote in ('"', "'"):
+                for ref in (asset, "./" + asset):
+                    assert quote + ref + quote not in text, ref + " 에 표식이 없다"
+
+    assert re.search(r'src="app\.js\?v=[0-9a-f]+"', PAGE)
+    assert re.search(r'new Worker\("worker\.js\?v=[0-9a-f]+"', APP)
+
+
+def test_the_stamp_is_one_value_everywhere():
+    """파일마다 제 해시를 쓰면 `engine.js` 만 바뀔 때 캐시된 옛 `worker.js` 가
+    옛 `engine.js` 를 계속 가리킨다. 하나로 묶으면 그 구멍이 없다."""
+    stamps = set(re.findall(r"\?v=([0-9a-f]+)", PAGE + APP + WORKER))
+    assert len(stamps) == 1, stamps
+
+
+def test_the_stamp_is_idempotent():
+    """번들을 두 번 돌려도 같아야 한다. 표식이 제 해시에 섞이면 안 멎는다."""
+    import bundle_engine
+
+    assert bundle_engine.stamp() == bundle_engine.stamp()

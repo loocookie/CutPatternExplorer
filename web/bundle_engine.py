@@ -16,8 +16,10 @@
 브라우저에서는 `web/render.js` 가 그 자리를 대신한다 (§11.2).
 """
 
+import hashlib
 import json
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -98,6 +100,49 @@ def menu() -> dict[str, list[list[str]]]:
     return {"Platonic": entries(solids.PLATONIC), "Catalan": entries(solids.CATALAN)}
 
 
+# 브라우저가 개별로 받아 가는 것들. 한 덩어리인 engine.js 도 여기 낀다
+ASSETS = ("vocab.js", "render.js", "editor.js", "share.js",
+          "app.js", "worker.js", "engine.js")
+STAMP = re.compile(r"\.js\?v=[0-9a-f]+")
+
+
+def stamp() -> str:
+    """모든 참조에 `?v=<해시>` 를 박는다. 캐시를 끊는 유일한 손잡이다.
+
+    `python -m http.server` 는 `Cache-Control` 을 안 붙이므로 브라우저가
+    **임의로** 캐시한다. 문서(index.html)는 늘 재검증하지만 하위 리소스는
+    아니다. 그래서 새 UI 가 옛 `app.js` 를 부르는 어긋난 상태가 생긴다 —
+    `engine.removeAxisSet is not a function` 이 그 모습이다.
+
+    **해시 하나를 전부에 쓴다.** 파일마다 제 해시를 쓰면 `engine.js` 만 바뀐
+    경우 `worker.js` 의 URL 이 그대로라 캐시된 옛 worker 가 옛 engine 을
+    가리킨다. 하나로 묶으면 그 구멍이 없다.
+    """
+    web = ROOT / "web"
+    files = {name: (web / name).read_text(encoding="utf-8") for name in ASSETS}
+    files["index.html"] = (web / "index.html").read_text(encoding="utf-8")
+
+    # 해시는 **박기 전** 내용으로 낸다. 안 그러면 스스로를 물어 안 멎는다
+    digest = hashlib.sha256()
+    for name in sorted(files):
+        digest.update(STAMP.sub(".js", files[name]).encode("utf-8"))
+    version = digest.hexdigest()[:8]
+
+    for name, text in files.items():
+        fixed = STAMP.sub(".js", text)
+        # 따옴표로 닫힌 **참조**만 박는다. 그냥 이름을 갈면
+        # 주석과 오류 메시지 속 파일 이름까지 바뀐다
+        for asset in ASSETS:
+            for quote in ("\"", "'"):
+                for ref in (asset, "./" + asset):
+                    fixed = fixed.replace(
+                        quote + ref + quote,
+                        quote + ref + "?v=" + version + quote)
+        if fixed != text:
+            (web / name).write_text(fixed, encoding="utf-8")
+    return version
+
+
 def main() -> None:
     sources = collect()
     text = render(sources)
@@ -112,6 +157,7 @@ def main() -> None:
     body += "globalThis.MENU = " + json.dumps(groups_menu, ensure_ascii=False) + ";\n"
     VOCAB.write_text(header + body, encoding="utf-8")
     print(f"  이름 {sum(len(v) for v in groups.values())}개  -> {VOCAB.name}")
+    print(f"  캐시 표식 ?v={stamp()}")
     for name in sorted(sources):
         print(f"    {name}")
 
