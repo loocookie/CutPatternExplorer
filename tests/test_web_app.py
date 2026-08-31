@@ -726,7 +726,7 @@ def test_the_menu_lists_only_zero_argument_presets():
 def test_the_menu_writes_code():
     """숨은 상태를 들면 메뉴로 시작해 손으로 이어 쓰는 길이 막힌다."""
     assert "engine.addAxisSet(els.src.value" in PAGE
-    assert "els.src.value = await engine.addAxisSet" in PAGE
+    assert "rewrite(await engine.addAxisSet" in PAGE, "고른 결과가 편집창 글자로 나와야 한다"
     assert 'id="addPick"' in PAGE and "globalThis.MENU" in PAGE
 
 
@@ -813,3 +813,82 @@ def test_readme_is_in_english():
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert not re.search(r"[가-힣]", readme.replace("(Korean)", ""))
+
+
+# --- 축 집합 지우기 (§19.9) -------------------------------------------------
+
+DEF_TWO = """c1 = cube("Cube 1")
+
+# 이 주석은 남는다
+rd1 = rhombic_dodecahedron("Rhombic Dodecahedron 1")
+
+with puzzle("Demo", c1, rd1) as p:
+    split(c1)
+    split(rd1)
+    for x in c1:
+        with turned(x, 45):
+            split(rd1)
+"""
+
+
+def test_removal_takes_the_references_with_it(browser_globals):
+    """참조를 남기면 `NameError` 만 남는다. 같이 걷어낸다.
+
+    사용자가 정한 바다 — 변형을 여럿 만들어 보다 하나를 통으로 버리는 흐름.
+    """
+    out = browser_globals["remove_axis_set"](DEF_TWO, "Cube 1")
+
+    assert "c1" not in out, "이름이 어딘가 남았다"
+    assert "for x in" not in out, "머리가 지워진 이름을 쓰는 블록은 통째로 가야 한다"
+    assert 'rd1 = rhombic_dodecahedron("Rhombic Dodecahedron 1")' in out
+    assert "    split(rd1)" in out, "관계없는 문장까지 지웠다"
+
+    info = browser_globals["prepare"](out)
+    assert info["axisSets"] == ["Rhombic Dodecahedron 1"]
+
+
+def test_removal_drops_the_slider_argument(browser_globals):
+    """`puzzle()` 인자 목록이 곧 슬라이더 목록이다. 거기서도 빠져야 한다."""
+    out = browser_globals["remove_axis_set"](DEF_TWO, "Cube 1")
+    assert 'with puzzle("Demo", rd1) as p:' in out
+
+
+def test_removal_keeps_the_comment_above(browser_globals):
+    """지운 문장 위의 주석은 어느 쪽 것인지 알 수 없다. 남긴다."""
+    assert "# 이 주석은 남는다" in browser_globals["remove_axis_set"](DEF_TWO, "Cube 1")
+
+
+def test_removing_the_last_axis_set_removes_the_puzzle(browser_globals):
+    """축 집합 없는 퍼즐은 없다. 빈 인자의 `puzzle()` 을 남기면 실행이 깨진다."""
+    src = 'c1 = cube("Cube 1")\n\nwith puzzle("D", c1) as p:\n    split(c1)\n'
+    out = browser_globals["remove_axis_set"](src, "Cube 1")
+    assert "puzzle" not in out and "cube" not in out
+
+
+def test_removal_names_what_it_cannot_find(browser_globals):
+    with pytest.raises(ValueError, match="no axis set"):
+        browser_globals["remove_axis_set"](DEF_TWO, "Icosahedron 1")
+
+
+def test_removal_refuses_broken_source(browser_globals):
+    """문법이 깨진 코드는 `ast` 로 못 읽는다. 자르지 말고 말한다."""
+    with pytest.raises(ValueError, match="syntax error"):
+        browser_globals["remove_axis_set"]("with puzzle(\n", "Cube 1")
+
+
+def test_removal_is_wired_from_the_page_to_the_worker():
+    """UI → app.js → worker.js → boot.py 가 이어져 있어야 실제로 지워진다."""
+    assert "removeAxisSet" in PAGE, "슬라이더 옆 삭제 버튼이 없다"
+    assert "async removeAxisSet(" in APP
+    assert "removeAxisSet:" in WORKER and "remove_axis_set" in WORKER
+
+
+def test_menu_edits_survive_undo():
+    """잘못 지웠을 때 되돌릴 길이 있어야 한다.
+
+    `.value =` 로 통째 대입하면 되돌리기 기록이 날아간다. 편집창이 쓰는 것과
+    같은 `setRangeText` 를 써야 한다 (§19.6).
+    """
+    assert "setRangeText(text, 0, els.src.value.length" in PAGE
+    for call in ("engine.removeAxisSet(", "engine.addAxisSet("):
+        assert "rewrite(await " + call in PAGE, call + " 가 되돌리기를 죽인다"

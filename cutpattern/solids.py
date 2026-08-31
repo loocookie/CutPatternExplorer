@@ -108,7 +108,8 @@ def from_normals(id: str, normals, prefix: str | None = None, turns=(),
     AxisSet = _axis_set_cls()
     s = AxisSet(id, extra_turns=tuple(turns), name=name or id)
     head = abbrev(id) if prefix is None else prefix
-    normals = list(normals)
+    # Axis 목록도 그대로 받는다 (§2.5)
+    normals = [getattr(n, "normal", n) for n in normals]
     labels = list(names) if names is not None else range(len(normals))
     if len(labels) != len(normals):
         raise ValueError(

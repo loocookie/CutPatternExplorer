@@ -35,7 +35,12 @@
   fieldset { border: 0; padding: 0; margin: 0; }
   legend { font-size: 12px; color: #7b8194; padding: 0 0 6px; }
   .row { display: grid; grid-template-columns: 1fr; gap: 2px; margin-bottom: 10px; }
-  .row b { font-weight: 500; font-size: 12px; color: #4a5163; }
+  .row b { font-weight: 500; font-size: 12px; color: #4a5163;
+           display: flex; justify-content: space-between; align-items: center; }
+  /* 지우기는 되돌리기 어렵다. 숨기기 체크박스와 나란히 두지 않는다 */
+  .row .del { border: 0; background: none; cursor: pointer; padding: 0 4px;
+              color: #b0b6c6; font-size: 13px; line-height: 1; }
+  .row .del:hover { color: #b3261e; }
   /* 숫자를 눌러 정확한 값을 넣는다. 슬라이더 스텝(0.05)으로는 63.4349 같은
      값에 닿을 수 없다 (§19.8) */
   .val { cursor: text; border-bottom: 1px dotted #c2c8d6; padding: 0 1px; }
@@ -152,6 +157,14 @@ function fail(e) {
 
 function clearError() { els.err.style.display = "none"; els.err.textContent = ""; }
 
+// 메뉴가 고친 코드를 편집창에 되쓴다 (§19.9). `.value =` 로 통째 대입하면
+// 되돌리기 기록이 날아간다 — 잘못 지웠을 때 되돌릴 길이 없어진다.
+// setRangeText 는 기록에 남는다 (editor.js 가 쓰는 것과 같은 기계)
+function rewrite(text) {
+  els.src.focus();
+  els.src.setRangeText(text, 0, els.src.value.length, "end");
+}
+
 // 평가가 worker 에서 도므로 여기서 기다려도 UI 가 안 멈춘다. 다만 슬라이더가
 // 평가보다 빨리 움직이므로, 도는 중이면 마지막 요청만 남겨 두고 합친다
 let inFlight = false;
@@ -201,7 +214,25 @@ function buildSliders() {
     const val = document.createElement("span");
     val.className = "val";
     val.title = "Click to type an exact value";
-    name.append(label, val);
+
+    // 축 집합과 그것을 쓰는 코드를 지운다. 슬라이더가 곧 축 집합이므로
+    // 여기가 제자리다 (§19.9)
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.title = "Remove this axis set and everything that uses it";
+    del.onclick = async () => {
+      if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
+      try {
+        rewrite(await engine.removeAxisSet(els.src.value, id));
+        clearError();
+        await run();
+      } catch (e) { fail(e); }
+    };
+
+    const left = document.createElement("span");
+    left.append(label, val);
+    name.append(left, del);
 
     const range = document.createElement("input");
     // 0 과 180 은 퇴화원이다 (r = 0). 터지지 않고 "자를 게 없는 상태" 로
@@ -329,7 +360,7 @@ els.share.onclick = async () => {
 els.add.onclick = async () => {
   if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
   try {
-    els.src.value = await engine.addAxisSet(els.src.value, els.addPick.value);
+    rewrite(await engine.addAxisSet(els.src.value, els.addPick.value));
     clearError();
     await run();
   } catch (e) { fail(e); }

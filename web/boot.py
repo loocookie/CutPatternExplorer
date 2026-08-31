@@ -310,3 +310,124 @@ def add_axis_set(source, factory):
     for pos, text in edits:
         out = out[:pos] + text + out[pos:]
     return out
+
+
+def _binding_for(tree, set_id):
+    """`set_id` 를 만드는 대입문과 변수 이름을 찾는다.
+
+    `c1 = cube("Cube 1")` 처럼 **첫 인자가 그 id 인 호출**을 대입한 문장이다.
+    `merge` 나 `rotate` 로 만든 것도 같은 모양이라 그대로 잡힌다.
+    """
+    for node in tree.body:
+        if (isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Call)
+                and node.value.args
+                and isinstance(node.value.args[0], ast.Constant)
+                and node.value.args[0].value == set_id):
+            return node, node.targets[0].id
+    return None, None
+
+
+def _mentions(node, name):
+    return any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(node))
+
+
+def _is_puzzle_block(stmt):
+    return (isinstance(stmt, ast.With)
+            and isinstance(stmt.items[0].context_expr, ast.Call)
+            and getattr(stmt.items[0].context_expr.func, "id", None) == "puzzle")
+
+
+def _prune(body, name, drop):
+    """`name` 을 쓰는 문장을 걷어낸 새 본문. 지운 문장은 `drop` 에 쌓는다.
+
+    겹블록은 **머리**가 그 이름을 쓰면 통째로 지운다 — `for x in c1:` 의 본문만
+    남기면 `x` 가 어디서 오는지 사라진다. 머리가 안 쓰면 본문만 훑고, 본문이
+    비면 그 블록도 지운다. 빈 블록은 문법 오류다.
+    """
+    kept = []
+    for stmt in body:
+        if isinstance(stmt, (ast.For, ast.With, ast.While, ast.If)):
+            # `with puzzle(...)` 의 머리는 예외다. 거기 이름이 있는 것은
+            # 슬라이더 목록이라는 뜻이고, 인자에서 빼는 것으로 따로 다룬다.
+            # 머리만 보고 블록째 지우면 퍼즐이 통째로 사라진다
+            header = [] if _is_puzzle_block(stmt) else list(getattr(stmt, "items", []))
+            header += [x for x in (getattr(stmt, "iter", None),
+                                   getattr(stmt, "test", None)) if x is not None]
+            if any(_mentions(h, name) for h in header):
+                drop.append(stmt)
+                continue
+            stmt.body = _prune(stmt.body, name, drop)
+            stmt.orelse = _prune(getattr(stmt, "orelse", []), name, drop)
+            if not stmt.body:
+                drop.append(stmt)
+                continue
+            kept.append(stmt)
+        elif _mentions(stmt, name):
+            drop.append(stmt)
+        else:
+            kept.append(stmt)
+    return kept
+
+
+def remove_axis_set(source, set_id):
+    """축 집합 하나와 **그것을 쓰는 모든 코드**를 지우고 새 소스를 돌려준다.
+
+    변형을 여럿 만들어 보다가 하나를 통으로 버리는 것이 실제 흐름이다. 참조를
+    남기면 `NameError` 만 남으므로 같이 걷어낸다.
+
+    넣을 때와 대칭이다 (§19.9). `ast` 로 위치만 얻어 원본을 쪼갠다 — 주석과
+    서식이 살아남는다. 지운 문장 안의 주석은 함께 간다. 그 위의 주석은 어느
+    쪽 것인지 알 수 없으므로 남긴다. 남아서 지저분한 것이 지워서 잃는 것보다 낫다.
+
+    마지막 축 집합이면 `with puzzle` 블록째 지운다. 축 집합 없는 퍼즐은 없다.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        raise ValueError(
+            "cannot remove: the code has a syntax error (line %d). fix it first."
+            % (exc.lineno or 0)
+        ) from None
+
+    assign, var = _binding_for(tree, set_id)
+    if assign is None:
+        raise ValueError("no axis set named %r in this definition" % set_id)
+
+    at = _offsets(source)
+    lines = source.splitlines(True)
+    line_starts = [0]
+    for line in lines:
+        line_starts.append(line_starts[-1] + len(line))
+
+    def whole_lines(node):
+        return line_starts[node.lineno - 1], line_starts[node.end_lineno]
+
+    drop = []
+    _prune(tree.body, var, drop)          # 대입문도 여기서 걸린다
+    cuts = [whole_lines(node) for node in drop]
+
+    # puzzle(...) 인자에서 뺀다. 인자 목록이 곧 슬라이더 목록이다 (§19.9)
+    for node in tree.body:
+        if not (isinstance(node, ast.With)
+                and isinstance(node.items[0].context_expr, ast.Call)
+                and getattr(node.items[0].context_expr.func, "id", None) == "puzzle"):
+            continue
+        call = node.items[0].context_expr
+        others = [a for a in call.args[1:]
+                  if not (isinstance(a, ast.Name) and a.id == var)]
+        if not others:
+            cuts.append(whole_lines(node))       # 축 집합이 없어진다
+            continue
+        for i, arg in enumerate(call.args[1:], start=1):
+            if isinstance(arg, ast.Name) and arg.id == var:
+                prev = call.args[i - 1]
+                cuts.append((at(prev.end_lineno, prev.end_col_offset),
+                             at(arg.end_lineno, arg.end_col_offset)))
+
+    out = source
+    for start, end in sorted(set(cuts), reverse=True):
+        out = out[:start] + out[end:]
+    return out

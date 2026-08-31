@@ -89,6 +89,11 @@ class Engine {
     return (await this._send({ type: "addAxisSet", source, factory })).result;
   }
 
+  /** 축 집합과 그것을 쓰는 코드를 지운 새 소스 (§19.9). */
+  async removeAxisSet(source, setId) {
+    return (await this._send({ type: "removeAxisSet", source, setId })).result;
+  }
+
   async prepare(source) {
     return (await this._send({ type: "prepare", source })).result;
   }

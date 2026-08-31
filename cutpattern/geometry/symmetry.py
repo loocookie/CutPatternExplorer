@@ -195,7 +195,10 @@ def orbit(seed, group, expected: int | None = None) -> list[Vec3]:
     """
     if isinstance(group, str):
         group = rotation_group(group)
-    seed = Vec3(seed)
+    # Axis 를 그대로 받는다. 손에 있는 축을 씨앗으로 쓰는 것이 자연스러운데
+    # .normal 을 벗기는 것은 사용자가 알 이유가 없는 내부 사정이다.
+    # import 하지 않고 덕 타이핑으로 본다 — geometry 는 engine 을 모른다 (§15)
+    seed = Vec3(getattr(seed, "normal", seed))
     length = norm(seed)
     if length < NORMAL_EPS:
         raise ValueError("the seed is a zero vector")
