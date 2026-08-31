@@ -17,7 +17,8 @@ from cutpattern.dsl import at_angle, puzzle, split, turned
 from cutpattern.geometry.vector import norm
 from cutpattern.render.arcs import build_arcs
 from cutpattern.render.markers import build_axis_markers
-from cutpattern.render.scene import ARC, MARKER, build_scene
+from cutpattern.render.scene import (ARC, MARKER, build_marker_scene,
+                                     build_scene)
 
 THETA = math.degrees(math.acos(0.45))
 
@@ -125,3 +126,43 @@ def test_json_is_flat_and_rounds_coordinates(built):
     for k in range(0, len(data["xyz"]) // 3, 7):
         assert norm(data["xyz"][3 * k : 3 * k + 3]) == pytest.approx(1.0, abs=1e-5)
     assert len(scene.to_json()) < len(scene.to_json(17))
+
+
+# ---- 편집 모드의 무대 (§19.15) ------------------------------------------
+
+
+def test_the_marker_scene_has_no_cuts():
+    """편집 모드에서 보려는 것은 축이 어디 있느냐다 (§19.15).
+
+    절단이 같이 보이면 지금 무엇을 고치는 중인지가 흐려지고, 어차피 절단은
+    `Run` 전까지 바뀌지 않는다.
+    """
+    faces = S.cube("cube")
+    scene = build_marker_scene([faces.to_engine()])
+    assert len(scene) == len(faces)
+    assert set(scene.kinds) == {MARKER}
+    assert [lab[0] for lab in scene.labels] == [a.id for a in faces]
+
+
+def test_the_marker_scene_takes_sets_that_are_not_drawn():
+    """`puzzle()` 인자가 아닌 집합도 고치려면 어디 있는지 보여야 한다 (§19.12).
+
+    `build_scene` 은 퍼즐에서 축 집합을 얻으므로 이런 집합에 닿을 길이 없다.
+    """
+    faces = S.cube("cube")
+    ref = S.tetrahedron("ref")
+    scene = build_marker_scene([faces.to_engine(), ref.to_engine()])
+
+    assert scene.axis_sets == ["cube", "ref"]
+    assert len(scene) == len(faces) + len(ref)
+    # 그룹이 두 집합에 갈려야 색이 갈린다
+    assert set(scene.groups) == {0, 1}
+
+
+def test_the_marker_scene_does_not_depend_on_the_cut_angle():
+    """마커는 축 방향만 쓴다 (§11.4). 슬라이더를 밀어도 같은 장면이다."""
+    faces = S.cube("cube")
+    a = build_marker_scene([faces.to_engine()])
+    b = build_marker_scene([faces.to_engine()])
+    assert a.xyz == b.xyz and a.starts == b.starts
+

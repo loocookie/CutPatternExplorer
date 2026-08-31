@@ -72,11 +72,14 @@ def load(source):
     exec(_compile(source), ns)
     # 이름에 묶인 축 집합을 재 둔다. 편집 메뉴가 실제 축 id 를 채워 넣는다
     # (§19.12). puzzle() 인자가 아닌 것도 있다 — 기준으로만 쓰는 집합이 그렇다
+    bound = [(key, v) for key, v in ns.items()
+             if isinstance(v, AxisSet) and not key.startswith("_")]
     _state["sets"] = [
-        {"id": v.id, "var": key, "axes": [a.id for a in v]}
-        for key, v in ns.items()
-        if isinstance(v, AxisSet) and not key.startswith("_")
+        {"id": v.id, "var": key, "axes": [a.id for a in v]} for key, v in bound
     ]
+    # 편집 모드의 무대가 이걸 쓴다 (§19.15). 목록만으로는 마커를 못 만든다 —
+    # 축 방향이 있어야 한다
+    _state["axis_sets"] = [v for _, v in bound]
     found = [v for v in ns.values() if isinstance(v, Puzzle)]
     if not found:
         # 예제 파일을 통째로 붙여 넣으면 정의가 함수 안에 있고 아무도 안 부른다
@@ -138,6 +141,29 @@ def evaluate(angles_json, max_step):
         "length": reg.total_arc_length(),
         "note": note,
     }
+
+
+def axis_scene():
+    """축 마커만 담은 장면. 편집 모드의 무대다 (§19.15).
+
+    이름 공간의 **모든** 축 집합을 쓴다. `puzzle()` 인자가 아닌 것 — 기준으로만
+    쓰는 집합 — 도 고치려면 어디 있는지 보여야 한다 (§19.12).
+
+    절단 각도를 안 받는다. 마커는 축 방향만 쓴다 (§11.4).
+    """
+    from cutpattern.render.scene import build_marker_scene
+
+    scene = build_marker_scene([s.to_engine() for s in _state.get("axis_sets", [])])
+    _state["axis_scene"] = scene
+    return {
+        "starts": scene.starts, "counts": scene.counts,
+        "groups": scene.groups, "kinds": scene.kinds,
+        "labels": [list(x) for x in scene.labels], "axisSets": scene.axis_sets,
+    }
+
+
+def axis_scene_bytes():
+    return array.array("d", _state["axis_scene"].xyz).tobytes()
 
 
 def scene_bytes():

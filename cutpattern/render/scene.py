@@ -58,6 +58,17 @@ class Scene:
         s, n = self.starts[i] * 3, self.counts[i]
         return [tuple(self.xyz[s + 3 * k : s + 3 * k + 3]) for k in range(n)]
 
+    def add(self, points, group: int, kind: int) -> None:
+        """폴리라인 하나를 평탄한 수열에 이어 붙인다."""
+        self.starts.append(len(self.xyz) // 3)
+        self.counts.append(len(points))
+        self.groups.append(group)
+        self.kinds.append(kind)
+        for p in points:
+            self.xyz.append(p[0])
+            self.xyz.append(p[1])
+            self.xyz.append(p[2])
+
     def __len__(self) -> int:
         return len(self.starts)
 
@@ -98,25 +109,35 @@ def build_scene(
     scene = Scene(axis_sets=[aset.id for aset in family.axis_sets])
     index = {aid: i for i, aid in enumerate(scene.axis_sets)}
 
-    def add(points, group: int, kind: int) -> None:
-        scene.starts.append(len(scene.xyz) // 3)
-        scene.counts.append(len(points))
-        scene.groups.append(group)
-        scene.kinds.append(kind)
-        for p in points:
-            scene.xyz.append(p[0])
-            scene.xyz.append(p[1])
-            scene.xyz.append(p[2])
-
     for arc in build_arcs(registry, max_step=max_step):
         # 출처를 모르는 호는 있어서는 안 되지만, 있으면 첫 집합으로 그린다
-        add(arc.points, index.get(arc.provenance.origin_axis_set, 0), ARC)
+        scene.add(arc.points, index.get(arc.provenance.origin_axis_set, 0), ARC)
 
     if markers:
-        for marker in build_axis_markers(family.axis_sets):
-            group = index.get(marker.axis_set_id, 0)
-            add(marker.points, group, MARKER)
-            x, y, z = marker.label_position
-            scene.labels.append((marker.axis_id, x, y, z, group))
+        _add_markers(scene, family.axis_sets, index)
 
+    return scene
+
+
+def _add_markers(scene: Scene, axis_sets, index: dict[str, int]) -> None:
+    for marker in build_axis_markers(axis_sets):
+        group = index.get(marker.axis_set_id, 0)
+        scene.add(marker.points, group, MARKER)
+        x, y, z = marker.label_position
+        scene.labels.append((marker.axis_id, x, y, z, group))
+
+
+def build_marker_scene(axis_sets) -> Scene:
+    """축 마커만 담은 장면. 편집 모드의 무대다 (§19.15).
+
+    **절단이 없다.** 편집 모드에서 보려는 것은 축이 어디 있느냐이고, 절단은
+    `Run` 을 눌러 실행 모드로 나가야 다시 그려진다 — 고치는 동안 퍼즐이 바뀌면
+    무엇을 보고 있는지가 흐려진다.
+
+    `build_scene` 과 달리 registry 도 `max_step` 도 안 받는다. 마커는 축 방향만
+    쓰므로 절단 각도와 무관하다 (§11.4).
+    """
+    scene = Scene(axis_sets=[aset.id for aset in axis_sets])
+    index = {aid: i for i, aid in enumerate(scene.axis_sets)}
+    _add_markers(scene, axis_sets, index)
     return scene

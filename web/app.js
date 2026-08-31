@@ -32,7 +32,7 @@ const BOOT_SILENCE_MS = 20000;
 // CSP 는 스크립트가 아니라 **전역**에 붙으므로, https 에서 온 worker.js 가
 // 그 안에서 돌아도 물려받은 정책 아래 있다.
 function workerBlobUrl() {
-  const target = new URL("worker.js?v=efeac2c7", location.href).href;
+  const target = new URL("worker.js?v=f95f434c", location.href).href;
   const shim = "import " + JSON.stringify(target) + ";";
   return URL.createObjectURL(new Blob([shim], { type: "text/javascript" }));
 }
@@ -161,6 +161,18 @@ class Engine {
 
   async prepare(source) {
     return (await this._send({ type: "prepare", source })).result;
+  }
+
+  /** 축 마커만 담은 장면. 편집 모드의 무대다 (§19.15). */
+  async axisScene() {
+    const msg = await this._send({ type: "axisScene" });
+    const out = msg.result;
+    return {
+      xyz: new Float64Array(msg.buffer),
+      starts: out.starts, counts: out.counts,
+      groups: out.groups, kinds: out.kinds,
+      labels: out.labels, axisSets: out.axisSets,
+    };
   }
 
   async evaluate(angles, maxStep) {

@@ -100,7 +100,7 @@ async function boot() {
   py = await loadPyodide(PYODIDE_OPTIONS);
 
   status("Loading the engine…");
-  await import("./engine.js?v=efeac2c7");   // globalThis.ENGINE_SOURCES 를 채운다
+  await import("./engine.js?v=f95f434c");   // globalThis.ENGINE_SOURCES 를 채운다
 
   const FS = py.FS;
   const made = new Set();
@@ -150,8 +150,8 @@ function call(name, args) {
   return toPlain(out);
 }
 
-function sceneBytes() {
-  const fn = py.globals.get("scene_bytes");
+function sceneBytes(name) {
+  const fn = py.globals.get(name);
   const proxy = fn();
   const view = proxy.toJs();
   proxy.destroy();
@@ -176,7 +176,13 @@ const HANDLERS = {
   axisOp: (msg) => ({ result: call("axis_op", [msg.source, msg.setId, msg.op, msg.other]) }),
   evaluate: (msg) => {
     const result = call("evaluate", [JSON.stringify(msg.angles), msg.maxStep]);
-    const buffer = sceneBytes();
+    const buffer = sceneBytes("scene_bytes");
+    return { result, buffer };
+  },
+  // 편집 모드의 무대 (§19.15). 절단 각도를 안 받는다 — 마커는 축 방향만 쓴다
+  axisScene: () => {
+    const result = call("axis_scene", []);
+    const buffer = sceneBytes("axis_scene_bytes");
     return { result, buffer };
   },
 };

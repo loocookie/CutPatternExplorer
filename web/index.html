@@ -149,11 +149,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=efeac2c7"></script>
-<script src="render.js?v=efeac2c7"></script>
-<script src="editor.js?v=efeac2c7"></script>
-<script src="share.js?v=efeac2c7"></script>
-<script src="app.js?v=efeac2c7"></script>
+<script src="vocab.js?v=f95f434c"></script>
+<script src="render.js?v=f95f434c"></script>
+<script src="editor.js?v=f95f434c"></script>
+<script src="share.js?v=f95f434c"></script>
+<script src="app.js?v=f95f434c"></script>
 <script>
 "use strict";
 
@@ -229,12 +229,34 @@ let info = null;
 // start() 를 보라 (§19.4).
 let mode = "run";
 
-function setMode(next) {
+// 마지막으로 그린 절단 장면. 편집 모드에 들어갔다 나올 때 다시 평가하지 않고
+// 그대로 되돌려 놓는다 — 편집 중에 퍼즐이 바뀌면 안 되고 (§19.15), 안 바뀌었
+// 으면 다시 계산할 이유도 없다
+let lastCutScene = null;
+
+/** 무대에 무엇을 그릴지는 **모드가 정한다** (§19.15).
+ *
+ * 실행 모드는 절단 패턴, 편집 모드는 축 마커다. 둘을 같이 띄우지 않는다 —
+ * 편집 중에 절단이 같이 보이면 지금 무엇을 고치는 중인지가 흐려지고, 어차피
+ * 절단은 `Run` 전까지 바뀌지 않는다.
+ */
+async function drawStage() {
+  if (mode === "edit") {
+    if (!engine.ready || !info) return;
+    try { view.setScene(await engine.axisScene()); }
+    catch (e) { fail(e); }
+  } else if (lastCutScene) {
+    view.setScene(lastCutScene);
+  }
+}
+
+async function setMode(next) {
   mode = next;
   for (const el of document.querySelectorAll(".editonly")) el.hidden = next !== "edit";
   els.mode.textContent = next === "edit" ? "Close editor" : "Edit definition";
   // Edit… 와 × 는 편집 모드 것이다. 목록을 다시 그려야 반영된다
   if (info) buildAxisSets();
+  await drawStage();
 }
 
 els.mode.onclick = () => setMode(mode === "edit" ? "run" : "edit");
@@ -322,7 +344,8 @@ async function refresh(maxStep) {
     const t0 = performance.now();
     const out = await engine.evaluate(angles, maxStep);
     const ms = performance.now() - t0;
-    view.setScene(out.scene);
+    lastCutScene = out.scene;
+    await drawStage();
     const hidden = [...view.hidden].map((i) => out.scene.axisSets[i]);
     els.stat.textContent =
       `carriers ${out.carriers}  polylines ${out.scene.starts.length}  ` +
@@ -572,7 +595,12 @@ els.add.onclick = async () => {
   } catch (e) { fail(e); }
 };
 
-els.run.onclick = run;
+// **`Run` 은 결과를 보러 나가는 버튼이다** (§19.15). 메뉴가 부르는 run() 은
+// 편집 모드에 남는다 — 축을 하나 고칠 때마다 화면이 튀면 못 쓴다
+els.run.onclick = async () => {
+  await run();
+  if (engine.ready) await setMode("run");
+};
 
 // 손으로 한 글자라도 고치면 메뉴 되돌리기는 버린다 (§19.15). 두 되돌리기가
 // 겹치면 어느 쪽이 이겼는지 안 보인다

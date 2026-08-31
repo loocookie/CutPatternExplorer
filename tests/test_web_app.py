@@ -533,6 +533,61 @@ def test_running_binds_you_to_the_editor():
     assert "Rendering" in bound
 
 
+def test_the_edit_mode_stage_shows_markers(browser_globals):
+    """편집 모드가 곧 축 집합 패널이다 (§19.15).
+
+    여닫는 창이 아니라 **모드가 무대를 정한다** — 실행 모드는 절단 패턴,
+    편집 모드는 축 마커. 둘을 같이 띄우지 않는다.
+    """
+    source = "\n".join([
+        'ref = tetrahedron("Reference 1")',
+        'c1 = cube("Cube 1")',
+        '',
+        'with puzzle("demo", c1) as p:',
+        '    split(c1)',
+        '',
+    ])
+    browser_globals["prepare"](source)
+    out = browser_globals["axis_scene"]()
+
+    # `puzzle()` 인자가 아닌 집합도 나온다 (§19.12). 그것을 고치려면 어디
+    # 있는지 보여야 하고, build_scene 은 퍼즐에서 얻으므로 닿을 길이 없다
+    assert out["axisSets"] == ["Reference 1", "Cube 1"]
+    assert len(out["starts"]) == 4 + 6
+    assert set(out["kinds"]) == {1}, "절단이 섞여 있다"
+
+    # 좌표는 따로 간다 (§11.1). float64 이므로 점 하나가 24바이트
+    assert len(browser_globals["axis_scene_bytes"]()) % 24 == 0
+
+
+def test_the_stage_is_decided_by_the_mode():
+    """무대를 그리는 곳이 하나여야 모드와 어긋나지 않는다 (§19.15)."""
+    body = _function_body(PAGE, "async function drawStage()")
+    assert 'mode === "edit"' in body and "engine.axisScene()" in body
+    assert "lastCutScene" in body
+
+    # 평가는 절단 장면을 **들고만** 있는다. 무대에 올릴지는 모드가 정한다
+    refresh = _function_body(PAGE, "async function refresh(maxStep)")
+    assert "lastCutScene = out.scene" in refresh
+    assert "drawStage()" in refresh
+    assert "view.setScene" not in refresh, "무대를 두 곳에서 그리면 어긋난다"
+
+
+def test_the_run_button_leaves_for_the_result():
+    """`Run` 은 결과를 보러 나가는 버튼이다 (§19.15).
+
+    메뉴가 부르는 `run()` 은 편집 모드에 남아야 한다 — 축을 하나 고칠 때마다
+    화면이 튀면 못 쓴다.
+    """
+    i = PAGE.index("els.run.onclick")
+    handler = PAGE[i:PAGE.index("};", i)]
+    assert 'setMode("run")' in handler
+
+    # 메뉴 쪽에는 없어야 한다
+    body = _function_body(PAGE, "function buildAxisSets()")
+    assert "setMode" not in body
+
+
 def test_engine_can_be_killed():
     """무한 루프는 terminate 말고 끊을 방법이 없다.
 
