@@ -429,8 +429,9 @@ def test_editing_an_axis_set_belongs_to_the_edit_mode():
 
     # × 는 조건 없이 붙어야 한다
     tail = body[body.index("const del = document.createElement"):]
+    head = tail[:tail.index("row.append(del);")]
     assert "row.append(del);" in tail
-    assert "mode" not in tail, "× 가 모드에 걸려 있다"
+    assert "mode" not in head, "× 가 모드에 걸려 있다"
 
 
 def test_a_menu_edit_can_be_undone_once():
@@ -646,6 +647,62 @@ def test_received_code_does_not_run_until_you_press_run():
     i = run_body.index("live = true")
     assert run_body.index("await refresh(FINAL_STEP)") < i
     assert i < run_body.index("catch")
+
+
+def test_the_cut_angle_belongs_to_the_run_mode():
+    """편집 모드 무대에는 절단이 없다 (§19.15).
+
+    그러니 거기서 슬라이더를 밀거나 "그릴까" 를 꺼도 **보이는 것이 하나도 안
+    바뀐다.** 조용히 바뀌는 상태만 남는다 — 이 프로젝트가 제일 싫어하는
+    종류다. 마커는 축 방향만 쓰므로 절단 각도와 무관하다 (§11.4).
+
+    체크박스 자리는 마커 보임이 차지한다. 두 보임은 서로 다른 것이다.
+    """
+    body = _function_body(PAGE, "function buildAxisSets()")
+    assert 'if (mode === "run" && info.inputs.includes(set.id))' in body
+
+
+def test_one_checkbox_two_stages():
+    """체크박스 하나가 **지금 보고 있는 무대**에서 감출지를 정한다 (§19.15).
+
+    실행 모드면 절단, 편집 모드면 마커다. 기억은 무대마다 따로다 — 하나로
+    합치면 편집 모드에서 어수선해서 마커를 껐는데 `Run` 했더니 절단까지
+    사라져 있는 일이 생기고, 그건 버그로 보인다.
+
+    **인덱스가 아니라 id 로 든다.** 두 무대의 축 집합 목록이 다르고 (절단은
+    그려지는 것만, 마커는 전부), 인덱스로 들면 목록을 다시 그릴 때마다 어느
+    것이 꺼져 있었는지가 사라진다.
+    """
+    assert "const hiddenIn = { run: new Set(), edit: new Set() }" in PAGE
+
+    body = _function_body(PAGE, "function buildAxisSets()")
+    assert "hiddenIn[mode]" in body
+    assert "view.hidden.clear()" not in body, "목록을 다시 그릴 때 풀리면 안 된다"
+
+    # 렌더러는 인덱스로 본다. 옮기는 곳은 무대에 올리는 자리 하나다
+    apply = _function_body(PAGE, "function applyHidden(scene)")
+    assert "scene.axisSets.forEach" in apply and "hiddenIn[mode]" in apply
+    stage = _function_body(PAGE, "async function drawStage()")
+    assert stage.count("applyHidden(") == 2, "두 무대 다 적용해야 한다"
+
+
+def test_every_cut_input_gets_an_angle():
+    """평가는 **모든** 절단 입력에 각도를 요구한다 (§13).
+
+        KeyError: no cut angle given for: ['Tetrahedron 1']
+
+    슬라이더를 만들 때 채우면 슬라이더가 없는 자리에서 비어 있게 된다 —
+    편집 모드에는 슬라이더가 없으므로 (§19.15) 거기서 축을 얹으면 그대로
+    죽는다. 화면이 아니라 정의가 정하는 것이므로 정의를 읽은 자리에서 채운다.
+    """
+    body = _function_body(PAGE, "async function run()")
+    i = body.index("engine.prepare(els.src.value)")
+    seed = body[i:body.index("await refresh(FINAL_STEP)")]
+    assert "for (const id of info.inputs)" in seed
+    assert "DEFAULT_ANGLE" in seed
+
+    # 슬라이더 줄은 이제 기본값을 안 채운다. 두 곳에 있으면 어긋난다
+    assert "= 60" not in _function_body(PAGE, "function angleRow(id)")
 
 
 def test_engine_can_be_killed():

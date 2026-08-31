@@ -149,11 +149,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=b49c0ecb"></script>
-<script src="render.js?v=b49c0ecb"></script>
-<script src="editor.js?v=b49c0ecb"></script>
-<script src="share.js?v=b49c0ecb"></script>
-<script src="app.js?v=b49c0ecb"></script>
+<script src="vocab.js?v=a4cefd89"></script>
+<script src="render.js?v=a4cefd89"></script>
+<script src="editor.js?v=a4cefd89"></script>
+<script src="share.js?v=a4cefd89"></script>
+<script src="app.js?v=a4cefd89"></script>
 <script>
 "use strict";
 
@@ -172,6 +172,9 @@ with puzzle("OctoCube Master", cube1) as p:
 // 쓴 무거운 정의를 실행 모드에서 슬라이더로 밀다 멎었을 때 탈출구가 없다.
 // 떠도 강제하는 것은 없다: 더 기다리고 싶으면 그냥 두면 된다.
 const SLOW_MS = 5000;
+
+// 새 축 집합이 얹혔을 때 쓸 절단 각도
+const DEFAULT_ANGLE = 60;
 
 // 조작 중 / 멎은 뒤 tessellation (§12.3). 조작 중에는 거칠게 그린다
 const DRAG_STEP = 0.12;
@@ -234,6 +237,26 @@ let mode = "run";
 // 으면 다시 계산할 이유도 없다
 let lastCutScene = null;
 
+// 감춘 축 집합. **무대마다 따로 기억한다** (§19.15).
+//
+// 체크박스는 하나이고 뜻도 하나다 — "지금 보고 있는 무대에서 이 집합을
+// 감춘다". 무대가 둘이니 기억도 둘이다. 하나로 합치면, 편집 모드에서 어수선
+// 해서 마커를 껐는데 Run 했더니 절단까지 사라져 있는 일이 생긴다. 그건 버그로
+// 보인다.
+//
+// **인덱스가 아니라 id 로 들고 있는다.** 두 무대의 축 집합 목록이 다르고
+// (절단은 그려지는 것만, 마커는 전부), 인덱스로 들면 목록을 다시 그릴 때마다
+// 어느 것이 꺼져 있었는지가 사라진다.
+const hiddenIn = { run: new Set(), edit: new Set() };
+
+/** id 로 든 것을 이 장면의 인덱스로 옮긴다. 렌더러는 인덱스로 본다 (§11.5). */
+function applyHidden(scene) {
+  view.hidden.clear();
+  scene.axisSets.forEach((id, i) => {
+    if (hiddenIn[mode].has(id)) view.hidden.add(i);
+  });
+}
+
 /** 무대에 무엇을 그릴지는 **모드가 정한다** (§19.15).
  *
  * 실행 모드는 절단 패턴, 편집 모드는 축 마커다. 둘을 같이 띄우지 않는다 —
@@ -250,6 +273,7 @@ async function drawStage() {
       const out = await engine.axisScene(els.src.value);
       // 목록은 마커와 **같은 실행**에서 온다. 따로 가져오면 어긋난다
       if (info) { info.sets = out.sets; buildAxisSets(); }
+      applyHidden(out.scene);
       view.setScene(out.scene);
     } catch (e) {
       // **타이핑 중에는 늘 깨져 있다** (§19.9). 직전 마커를 그대로 두고
@@ -260,6 +284,7 @@ async function drawStage() {
       console.debug("axis markers:", e && e.message ? e.message : e);
     }
   } else if (lastCutScene) {
+    applyHidden(lastCutScene);
     view.setScene(lastCutScene);
   }
 }
@@ -370,7 +395,7 @@ async function refresh(maxStep) {
     const ms = performance.now() - t0;
     lastCutScene = out.scene;
     await drawStage();
-    const hidden = [...view.hidden].map((i) => out.scene.axisSets[i]);
+    const hidden = [...hiddenIn.run];
     els.stat.textContent =
       `carriers ${out.carriers}  polylines ${out.scene.starts.length}  ` +
       `arc length ${out.length.toFixed(3)}  eval ${ms.toFixed(0)}ms` +
@@ -396,7 +421,6 @@ function scheduleFinal() {
 
 /** 각도 슬라이더 한 줄 (§19.8). 그려지는 집합에만 붙는다. */
 function angleRow(id) {
-  if (angles[id] === undefined) angles[id] = 60;
   const row = document.createElement("div");
   row.className = "row";
   const name = document.createElement("b");
@@ -463,7 +487,6 @@ function angleRow(id) {
 // 를 어디 둘지였고 그건 이미 정해졌다.
 function buildAxisSets() {
   els.sets.replaceChildren(Object.assign(document.createElement("legend"), { textContent: "Axis sets" }));
-  view.hidden.clear();
   // 그려지는 것만이 축 집합의 전부가 아니다. 기준으로만 쓰는 집합도 고치고
   // 지울 수 있어야 한다 (§19.12)
   const sets = (info.sets && info.sets.length)
@@ -478,21 +501,33 @@ function buildAxisSets() {
 
     const sw = document.createElement("span");
     sw.className = "sw";
-    if (drawn >= 0) {
+    // 체크박스 하나가 **지금 보고 있는 무대**에서 감출지를 정한다 (§19.15).
+    // 실행 모드면 절단, 편집 모드면 마커다. 기억은 무대마다 따로다.
+    //
+    // 절단은 puzzle() 인자에만 있고 마커는 모든 집합에 있으므로, 끌 수 있는
+    // 줄도 모드마다 다르다
+    const togglable = mode === "edit" || drawn >= 0;
+    if (togglable) {
       const box = document.createElement("input");
-      box.type = "checkbox"; box.checked = true;
-      box.title = "Hide this axis set (the material is still there)";
+      box.type = "checkbox";
+      box.checked = !hiddenIn[mode].has(set.id);
+      box.title = mode === "edit"
+        ? "Hide these axis markers"
+        : "Hide this axis set (the material is still there)";
       box.onchange = () => {
-        box.checked ? view.hidden.delete(drawn) : view.hidden.add(drawn);
-        view.draw(); refresh(FINAL_STEP);
+        box.checked ? hiddenIn[mode].delete(set.id) : hiddenIn[mode].add(set.id);
+        drawStage();
+        if (mode === "run") refresh(FINAL_STEP);
       };
+      row.append(box);
+    }
+    if (drawn >= 0) {
       sw.style.background = `rgb(${PALETTE[drawn % PALETTE.length]})`;
-      row.append(box, sw);
     } else {
       sw.className = "sw off";
       sw.title = "Not passed to puzzle(...), so it is not drawn";
-      row.append(sw);
     }
+    row.append(sw);
 
     const name = document.createElement("span");
     name.className = "nm";
@@ -547,8 +582,10 @@ function buildAxisSets() {
     row.append(del);
 
     cell.append(row);
-    // 각도가 없는 집합은 슬라이더 칸이 빈다. 그것이 이 둘을 합칠 수 있는 이유다
-    if (info.inputs.includes(set.id)) cell.append(angleRow(set.id));
+    // 각도가 없는 집합은 슬라이더 칸이 빈다. 그것이 이 둘을 합칠 수 있는 이유다.
+    // 편집 모드에는 아예 없다 — 절단이 무대에 없으니 밀어도 보이는 것이 안
+    // 바뀐다 (§19.15)
+    if (mode === "run" && info.inputs.includes(set.id)) cell.append(angleRow(set.id));
     els.sets.append(cell);
   });
 }
@@ -565,6 +602,16 @@ async function run() {
     bind(true);
     watchSlow(true);
     info = await engine.prepare(els.src.value);
+    // **모든 절단 입력에 각도가 있어야 evaluate 가 돈다** (§13). 슬라이더를
+    // 만들 때 채우면 슬라이더가 없는 자리에서 비어 있게 된다 — 편집 모드에는
+    // 슬라이더가 없으므로 (§19.15) 거기서 축을 얹으면 그대로 죽는다:
+    //
+    //     KeyError: no cut angle given for: ['Tetrahedron 1']
+    //
+    // 화면이 아니라 정의가 정하는 것이므로 정의를 읽은 자리에서 채운다
+    for (const id of info.inputs) {
+      if (angles[id] === undefined) angles[id] = DEFAULT_ANGLE;
+    }
     clearError();
     els.shared.style.display = "none";
     buildAxisSets();
