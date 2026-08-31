@@ -322,20 +322,38 @@ def add_axis_set(source, factory):
     return out
 
 
+def _names_the_set(value, set_id):
+    """이 식 어딘가에 첫 인자가 `set_id` 인 호출이 있는가. 바깥부터 본다."""
+    layer = [value]
+    while layer:
+        below = []
+        for node in layer:
+            if (isinstance(node, ast.Call) and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == set_id):
+                return True
+            below += list(ast.iter_child_nodes(node))
+        layer = below
+    return False
+
+
 def _binding_for(tree, set_id):
     """`set_id` 를 만드는 대입문과 변수 이름을 찾는다.
 
-    `c1 = cube("Cube 1")` 처럼 **첫 인자가 그 id 인 호출**을 대입한 문장이다.
-    `merge` 나 `rotate` 로 만든 것도 같은 모양이라 그대로 잡힌다.
+    id 를 들고 있는 호출은 **감싸여 있을 수 있다.** 편집 메뉴가 겹겹이 쌓기
+    때문이다 (§19.12).
+
+        c1 = mirror(rotate(octahedron("Octahedron 1"), axis=(0, 0, 1), angle=45))
+
+    맨 바깥 호출의 첫 인자만 보면 두 번째 편집부터 못 찾는다 — 지우기까지
+    같이 막힌다. 식 안을 훑는다.
     """
     for node in tree.body:
-        if (isinstance(node, ast.Assign)
+        if not (isinstance(node, ast.Assign)
                 and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and isinstance(node.value, ast.Call)
-                and node.value.args
-                and isinstance(node.value.args[0], ast.Constant)
-                and node.value.args[0].value == set_id):
+                and isinstance(node.targets[0], ast.Name)):
+            continue
+        if _names_the_set(node.value, set_id):
             return node, node.targets[0].id
     return None, None
 

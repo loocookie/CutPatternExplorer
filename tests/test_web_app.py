@@ -1084,3 +1084,24 @@ def test_the_delete_button_moved_off_the_slider():
     거기에만 그려지지 않는 집합도 나온다."""
     sliders = PAGE.split("function buildSliders")[1].split("function ")[0]
     assert "removeAxisSet" not in sliders
+
+
+def test_edits_stack(ready):
+    """메뉴는 겹겹이 쌓는 것을 전제한다. 두 번째부터 못 찾으면 안 된다.
+
+    id 를 든 호출이 감싸이기 때문에 맨 바깥 첫 인자만 보면 `mirror` 한 것을
+    다시 `mirror` 할 수 없었다. 지우기까지 같이 막혀 있었다.
+    """
+    out = ready["axis_op"](DEF_SETS, "Cube 1", "mirror")
+    out = ready["axis_op"](out, "Cube 1", "rotate")
+    out = ready["axis_op"](out, "Cube 1", "mirror")
+    assert out.startswith('c1 = mirror(rotate(mirror(cube("Cube 1")), ')
+    ready["prepare"](out)
+
+
+def test_a_wrapped_set_can_still_be_deleted(ready):
+    """`remove_axis_set` 도 같은 기계로 대입문을 찾는다."""
+    out = ready["axis_op"](DEF_SETS, "Cube 1", "mirror")
+    gone = ready["remove_axis_set"](out, "Cube 1")
+    assert "cube(" not in gone and "mirror(" not in gone
+    ready["prepare"](gone)
