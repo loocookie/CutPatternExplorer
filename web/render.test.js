@@ -190,5 +190,86 @@ function sizedView(w, h, dpr) {
   global.window.devicePixelRatio = undefined;
 }
 
+// ---- 확대 (§11.6) --------------------------------------------------------
+{
+  const v = new SphereViewStub([0, 0, 1, 1, 0, 0]);
+
+  check("기본 배율은 1", v.zoom === 1);
+
+  const before = v._radius(100, 100);
+  v.zoomBy(2);
+  check("배율이 반지름에 곱해진다", v._radius(100, 100) === before * 2,
+    v._radius(100, 100));
+
+  // 드래그가 커서를 따라오려면 _ball 이 같은 반지름을 써야 한다 (§11.6)
+  v.canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  const R = v._radius(100, 100);
+  const pt = v._ball({ clientX: 50 + R * 0.5, clientY: 50 });
+  check("_ball 이 같은 반지름을 쓴다", Math.abs(pt[0] - 0.5) < 1e-12, pt);
+
+  // 한계. 너무 줄이면 점이 되고 너무 키우면 실루엣이 화면을 벗어난다
+  v.zoom = 1;
+  for (let i = 0; i < 40; i++) v.zoomBy(0.5);
+  check("아래로 한계가 있다", v.zoom === 0.4, v.zoom);
+  check("한계에서는 안 바뀐다고 알린다", v.zoomBy(0.5) === false);
+
+  for (let i = 0; i < 40; i++) v.zoomBy(2);
+  check("위로 한계가 있다", v.zoom === 8, v.zoom);
+  check("한계에서는 안 바뀐다고 알린다", v.zoomBy(2) === false);
+}
+
+// ---- 핀치와 휠 (§11.6) ---------------------------------------------------
+//
+// 기기 없이 확인해야 하는 부분이다. 리스너를 붙잡아 두고 포인터 이벤트를
+// 손으로 흘려보낸다.
+{
+  const on = {};
+  const canvas = {
+    getContext: () => stubCtx(),
+    addEventListener: (name, fn) => { on[name] = fn; },
+    setPointerCapture: () => {}, releasePointerCapture: () => {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+    clientWidth: 100, clientHeight: 100,
+  };
+  const v = new window.SphereView(canvas);
+  v.scene = {
+    xyz: [0, 0, 1], starts: [0], counts: [1],
+    groups: [0], kinds: [0], labels: [], axisSets: ["a"],
+  };
+  v.view = new Float64Array([0, 0, 1]);
+
+  check("휠과 포인터를 모두 듣는다",
+    !!(on.wheel && on.pointerdown && on.pointermove && on.pointerup));
+
+  // 휠을 위로 굴리면(deltaY < 0) 커진다
+  v.zoom = 1;
+  on.wheel({ deltaY: -100, preventDefault: () => {} });
+  check("휠 위로 = 확대", v.zoom > 1, v.zoom);
+  on.wheel({ deltaY: 100, preventDefault: () => {} });
+  check("휠 아래로 = 축소", Math.abs(v.zoom - 1) < 1e-12, v.zoom);
+
+  let prevented = 0;
+  on.wheel({ deltaY: -10, preventDefault: () => { prevented++; } });
+  check("휠 기본 동작을 막는다 — 안 막으면 페이지가 같이 스크롤된다", prevented === 1);
+
+  // 두 손가락을 벌리면 그 비율만큼 확대된다
+  v.zoom = 1;
+  const rot = v.rot.slice ? v.rot.slice() : v.rot;
+  on.pointerdown({ pointerId: 1, clientX: 40, clientY: 50 });
+  on.pointerdown({ pointerId: 2, clientX: 60, clientY: 50 });   // 간격 20
+  on.pointermove({ pointerId: 2, clientX: 80, clientY: 50 });   // 간격 40
+  check("두 배로 벌리면 배율도 두 배", Math.abs(v.zoom - 2) < 1e-12, v.zoom);
+
+  // 손가락 두 개일 때는 회전이 멈춰야 한다. 안 그러면 벌리는 동안 그림이 휘청인다
+  const same = JSON.stringify([...v.rot]) === JSON.stringify([...rot]);
+  check("핀치 중에는 회전하지 않는다", same);
+
+  // 하나를 떼면 남은 손가락에서 회전을 이어 간다
+  on.pointerup({ pointerId: 2 });
+  on.pointermove({ pointerId: 1, clientX: 45, clientY: 55 });
+  check("하나 떼면 회전이 돌아온다", JSON.stringify([...v.rot]) !== JSON.stringify([...rot]));
+  check("떼어도 배율은 그대로", Math.abs(v.zoom - 2) < 1e-12, v.zoom);
+}
+
 console.log(failures === 0 ? "\n전부 통과" : `\n실패 ${failures}개`);
 process.exit(failures === 0 ? 0 : 1);

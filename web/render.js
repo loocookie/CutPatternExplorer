@@ -8,6 +8,13 @@
 const ARC = 0;
 const MARKER = 1;
 
+// 확대 한계. 너무 줄이면 점이 되고, 너무 키우면 실루엣이 화면을 벗어나
+// 어디를 보고 있는지 알 수 없다
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 8;
+// 휠 한 칸의 배율. deltaY 는 장치마다 크기가 달라 지수로 눌러 준다
+const WHEEL_K = 0.0015;
+
 // 축 집합별 색. vpython 뷰어와 같은 팔레트다 (§11)
 const PALETTE = [
   [230, 64, 64], [51, 140, 242], [51, 191, 89],
@@ -55,6 +62,7 @@ class SphereView {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.rot = axisAngle(1, 0.4, 0, -0.5);
+    this.zoom = 1;
     this.scene = null;
     this.view = null;          // 변환된 좌표. 장면이 바뀔 때만 다시 잡는다
     this.hidden = new Set();   // 꺼진 축 집합 인덱스 (§11.5)
@@ -67,10 +75,29 @@ class SphereView {
     this.draw();
   }
 
+  /** 화면에 그릴 구의 반지름. 확대는 여기 하나에 곱한다.
+   *
+   * `_ball` 과 `draw` 가 **같은 값**을 써야 한다. 어긋나면 확대한 뒤 드래그가
+   * 커서를 안 따라온다 — 회전은 멀쩡해 보이는데 손맛만 이상해서 원인을 찾기
+   * 어려운 종류다.
+   */
+  _radius(w, h) {
+    return Math.min(w, h) * 0.45 * this.zoom;
+  }
+
+  /** 배율을 곱한다. 실제로 바뀌었으면 참. */
+  zoomBy(factor) {
+    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.zoom * factor));
+    if (next === this.zoom) return false;
+    this.zoom = next;
+    this.draw();
+    return true;
+  }
+
   // 마우스 위치를 구 위의 점으로. 밖이면 실루엣으로 밀어 넣는다
   _ball(ev) {
     const r = this.canvas.getBoundingClientRect();
-    const R = Math.min(r.width, r.height) * 0.45;
+    const R = this._radius(r.width, r.height);
     const x = (ev.clientX - r.left - r.width / 2) / R;
     const y = -(ev.clientY - r.top - r.height / 2) / R;
     const d = x * x + y * y;
@@ -81,8 +108,39 @@ class SphereView {
 
   _bindDrag() {
     let last = null;
-    const down = (ev) => { last = this._ball(ev); this.canvas.setPointerCapture(ev.pointerId); };
+    // 손가락 두 개까지 기억한다. 하나면 회전, 둘이면 확대다
+    const points = new Map();
+    let pinch = null;
+
+    const spread = () => {
+      const [a, b] = [...points.values()];
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+
+    const down = (ev) => {
+      points.set(ev.pointerId, ev);
+      this.canvas.setPointerCapture(ev.pointerId);
+      if (points.size === 2) {
+        // 두 번째 손가락이 닿는 순간 회전을 멈춘다. 안 그러면 벌리는 동안
+        // 한쪽 손가락의 움직임이 회전으로도 먹혀 그림이 휘청인다
+        last = null;
+        pinch = { spread: spread(), zoom: this.zoom };
+      } else if (points.size === 1) {
+        last = this._ball(ev);
+      }
+    };
+
     const move = (ev) => {
+      if (points.has(ev.pointerId)) points.set(ev.pointerId, ev);
+      if (pinch && points.size >= 2) {
+        const now = spread();
+        if (pinch.spread > 0) {
+          this.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
+            pinch.zoom * (now / pinch.spread)));
+          this.draw();
+        }
+        return;
+      }
       if (!last) return;
       const now = this._ball(ev);
       // arcball: 두 점 사이 회전을 누적한다
@@ -95,11 +153,27 @@ class SphereView {
       last = now;
       this.draw();
     };
-    const up = (ev) => { last = null; try { this.canvas.releasePointerCapture(ev.pointerId); } catch (_) {} };
+
+    const up = (ev) => {
+      points.delete(ev.pointerId);
+      try { this.canvas.releasePointerCapture(ev.pointerId); } catch (_) {}
+      if (points.size < 2) pinch = null;
+      // 손가락이 하나 남으면 거기서 회전을 이어 간다. 남은 점을 다시 잡지
+      // 않으면 뗀 자리와 남은 자리의 차이가 한 번에 회전으로 들어가 튄다
+      last = points.size === 1 ? this._ball([...points.values()][0]) : null;
+    };
+
+    const wheel = (ev) => {
+      ev.preventDefault();
+      this.zoomBy(Math.exp(-ev.deltaY * WHEEL_K));
+    };
+
     this.canvas.addEventListener("pointerdown", down);
     this.canvas.addEventListener("pointermove", move);
     this.canvas.addEventListener("pointerup", up);
     this.canvas.addEventListener("pointercancel", up);
+    // passive:false 라야 preventDefault 가 먹는다. 안 하면 페이지가 같이 스크롤된다
+    this.canvas.addEventListener("wheel", wheel, { passive: false });
   }
 
   // ---- 그리기 ---------------------------------------------------------
@@ -121,7 +195,7 @@ class SphereView {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.45;
+    const cx = w / 2, cy = h / 2, R = this._radius(w, h);
     const m = this.rot, xyz = scene.xyz, view = this.view;
 
     // §11.1 정사영. 전체를 한 번에 변환한다

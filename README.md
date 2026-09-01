@@ -78,6 +78,16 @@ The abbreviation comes from the set id: the first letter of each word plus any
 trailing number. That is what keeps axis ids unique when the same solid appears
 more than once.
 
+## The view
+
+| | |
+|---|---|
+| drag | rotate (arcball) |
+| wheel | zoom |
+| two-finger pinch | zoom |
+
+Zoom is centred on the sphere, from 0.4x to 8x.
+
 ## Editor
 
 | | |
