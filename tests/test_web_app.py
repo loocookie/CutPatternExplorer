@@ -200,9 +200,29 @@ def test_link_carries_code_only_in_the_fragment():
     """fragment 는 서버로 전송되지 않는다. 호스팅에 남의 정의가 안 남는다."""
     share = (ROOT / "web" / "share.js").read_text(encoding="utf-8")
     assert 'KEY = "code="' in share
-    body = _function_body(share, "async function shareLink(text, baseUrl)")
+    body = _function_body(share, "async function shareLink(text, baseUrl, angles)")
     assert 'split("#")[0]' in body, "기존 fragment 를 떼지 않으면 겹쳐 쌓인다"
     assert '"#" + KEY' in body, "질의 문자열이 아니라 fragment 여야 한다"
+
+
+def test_shared_angles_ride_along_as_a_separate_fragment_piece():
+    """각도를 포함해 공유할 수 있다 — code= 의 인코딩 계약은 그대로 둔다.
+
+    #code=...&angles=... 로 붙인다. 각도가 없으면(한 번도 Run 을 안 했으면)
+    그 조각을 아예 안 붙여 옛 링크와 모양이 같아진다.
+    """
+    share = (ROOT / "web" / "share.js").read_text(encoding="utf-8")
+    assert 'ANGLES_KEY = "angles="' in share
+    assert "anglesFromHash" in share
+
+    # sourceFromHash 가 & 로 조각을 갈라야 angles= 가 붙어도 code= 만 뗀다
+    body = _function_body(share, "async function sourceFromHash(hash)")
+    assert 'split("&")' in body
+
+    # info.inputs 로 거른다. 지운 축 집합의 옛 각도가 링크에 안 새어 나가야 한다
+    handler = _function_body(PAGE, "els.share.onclick = async ()")
+    assert "info.inputs" in handler
+    assert "Share.shareLink(els.src.value, location.href, shareAngles)" in handler
 
 
 def test_page_loads_share_before_app():

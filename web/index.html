@@ -149,11 +149,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=fc29497b"></script>
-<script src="render.js?v=fc29497b"></script>
-<script src="editor.js?v=fc29497b"></script>
-<script src="share.js?v=fc29497b"></script>
-<script src="app.js?v=fc29497b"></script>
+<script src="vocab.js?v=d819196c"></script>
+<script src="render.js?v=d819196c"></script>
+<script src="editor.js?v=d819196c"></script>
+<script src="share.js?v=d819196c"></script>
+<script src="app.js?v=d819196c"></script>
 <script>
 "use strict";
 
@@ -640,7 +640,14 @@ els.stop.onclick = async () => {
 // ---- 공유 링크 (§19.4) ------------------------------------------------
 
 els.share.onclick = async () => {
-  const link = await Share.shareLink(els.src.value, location.href);
+  // info.inputs 로 걸러 낸다. angles 는 세션 동안 지운 축 집합의 옛 각도까지
+  // 쌓일 수 있는데 (§13), 그걸 그대로 실으면 링크에 죽은 이름이 남는다.
+  // info 가 아직 없으면(한 번도 Run 을 안 했으면) 각도 없이 코드만 싣는다
+  const shareAngles = {};
+  if (info) for (const id of info.inputs) {
+    if (angles[id] !== undefined) shareAngles[id] = angles[id];
+  }
+  const link = await Share.shareLink(els.src.value, location.href, shareAngles);
   try {
     await navigator.clipboard.writeText(link);
     els.msg.textContent = `Copied (${link.length} chars)`;
@@ -728,6 +735,10 @@ async function start() {
     els.src.value = DEFAULT_SOURCE;
   } else {
     els.src.value = shared;
+    // 각도는 코드와 별도 조각이다. 없거나 손상됐으면 null — 코드를 읽는 것을
+    // 막지 않는다. 슬라이더가 처음 생기는 자리(각도를 시드하는 곳)가 이 값을
+    // 기본값보다 먼저 본다
+    Object.assign(angles, Share.anglesFromHash(location.hash) || {});
     // **링크는 편집 모드로 연다.** §19.4 의 안전 근거는 "사람이 읽고 누른다"
     // 하나다. 실행 모드에서 열면 읽어야 할 코드가 접혀 있어, 경고만 뜨고
     // 정작 읽을 것이 안 보인다 — 지금보다 나빠진다

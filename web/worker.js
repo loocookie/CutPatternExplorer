@@ -100,7 +100,7 @@ async function boot() {
   py = await loadPyodide(PYODIDE_OPTIONS);
 
   status("Loading the engine…");
-  await import("./engine.js?v=fc29497b");   // globalThis.ENGINE_SOURCES 를 채운다
+  await import("./engine.js?v=d819196c");   // globalThis.ENGINE_SOURCES 를 채운다
 
   const FS = py.FS;
   const made = new Set();

@@ -11,6 +11,10 @@
 "use strict";
 
 const KEY = "code=";
+// 각도는 code= 뒤에 별도 조각으로 붙는다 (#code=...&angles=...). code= 의
+// 압축·복원 계약은 그대로 두고, 각도는 작은 JSON 이라 압축 없이 base64url
+// 만 한다. 두 키 다 base64url 이라 "=" 나 "&" 를 안 써서 & 로 안전하게 갈린다
+const ANGLES_KEY = "angles=";
 
 // 브라우저 주소창이 감당하는 실용 한도. 넘으면 잘릴 수 있어 미리 알린다
 const SAFE_URL_LENGTH = 8000;
@@ -67,19 +71,49 @@ async function decodeSource(payload) {
   throw new Error("Unknown link format");
 }
 
-/** 현재 주소를 바탕으로 공유 링크를 만든다. */
-async function shareLink(text, baseUrl) {
-  const base = (baseUrl || "").split("#")[0];
-  return base + "#" + KEY + (await encodeSource(text));
+function encodeAngles(angles) {
+  return bytesToBase64url(new TextEncoder().encode(JSON.stringify(angles)));
 }
 
-/** fragment 에서 정의를 꺼낸다. 없으면 null. */
+function decodeAngles(payload) {
+  return JSON.parse(new TextDecoder().decode(base64urlToBytes(payload)));
+}
+
+/** 현재 주소를 바탕으로 공유 링크를 만든다. `angles` 는 선택이다 — 없거나
+ * 비어 있으면 그 조각을 아예 안 붙인다. 옛 링크와 모양이 같아진다. */
+async function shareLink(text, baseUrl, angles) {
+  const base = (baseUrl || "").split("#")[0];
+  let hash = "#" + KEY + (await encodeSource(text));
+  if (angles && Object.keys(angles).length) {
+    hash += "&" + ANGLES_KEY + encodeAngles(angles);
+  }
+  return base + hash;
+}
+
+/** fragment 에서 정의를 꺼낸다. 없으면 null.
+ *
+ * `&` 로 조각을 가른다 — angles= 가 뒤에 붙어도 code= 조각만 정확히 뗀다.
+ */
 async function sourceFromHash(hash) {
   const raw = (hash || "").replace(/^#/, "");
-  if (!raw.startsWith(KEY)) return null;
-  return decodeSource(raw.slice(KEY.length));
+  const part = raw.split("&").find((p) => p.startsWith(KEY));
+  if (part === undefined) return null;
+  return decodeSource(part.slice(KEY.length));
 }
 
-const Share = { encodeSource, decodeSource, shareLink, sourceFromHash, SAFE_URL_LENGTH, KEY };
+/** fragment 에서 각도를 꺼낸다. 없거나 손상됐으면 null — 코드를 읽는 것을
+ * 막을 이유가 없으므로 여기서는 예외를 던지지 않는다. */
+function anglesFromHash(hash) {
+  const raw = (hash || "").replace(/^#/, "");
+  const part = raw.split("&").find((p) => p.startsWith(ANGLES_KEY));
+  if (part === undefined) return null;
+  try { return decodeAngles(part.slice(ANGLES_KEY.length)); }
+  catch (_) { return null; }
+}
+
+const Share = {
+  encodeSource, decodeSource, shareLink, sourceFromHash, anglesFromHash,
+  SAFE_URL_LENGTH, KEY,
+};
 if (typeof window !== "undefined") window.Share = Share;
 if (typeof module !== "undefined") module.exports = Share;

@@ -57,6 +57,29 @@ with puzzle("OctoCube Master", faces) as p:
   try { await Share.decodeSource("x???"); } catch (_) { threw = true; }
   check("모르는 형식은 거부한다", threw);
 
+  // ---- 각도 (별도 조각) ---------------------------------------------------
+
+  const angles = { "Cube 1": 63.4349, "Rhombic Dodecahedron 1": 20 };
+  const withAngles = await Share.shareLink(source, "https://example.github.io/cut/", angles);
+  check("각도가 있으면 두 조각이 붙는다",
+    withAngles.includes("&angles="), withAngles);
+  check("code= 조각은 그대로 꺼내진다",
+    (await Share.sourceFromHash("#" + withAngles.split("#")[1])) === source);
+  check("각도도 그대로 꺼내진다",
+    JSON.stringify(Share.anglesFromHash("#" + withAngles.split("#")[1])) ===
+    JSON.stringify(angles));
+
+  const withoutAngles = await Share.shareLink(source, "https://example.github.io/cut/", {});
+  check("각도가 비어 있으면 조각을 안 붙인다 — 옛 링크와 모양이 같다",
+    !withoutAngles.includes("angles="), withoutAngles);
+  check("각도 없이도 shareLink 를 부를 수 있다",
+    !(await Share.shareLink(source, "https://example.github.io/cut/")).includes("angles="));
+
+  check("각도 조각이 없으면 null", Share.anglesFromHash("#code=x") === null);
+  check("fragment 자체가 없어도 null", Share.anglesFromHash("") === null);
+  check("손상된 각도는 코드 읽기를 막지 않는다 — null 로 넘어간다",
+    Share.anglesFromHash("#code=x&angles=???") === null);
+
   console.log(failures === 0 ? "\n전부 통과" : "\n실패 " + failures + "개");
   process.exit(failures === 0 ? 0 : 1);
 })();
