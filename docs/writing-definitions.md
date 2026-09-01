@@ -216,6 +216,30 @@ in the part that moves.
   which side is turning but whether you are in it.
 - **Chains.** If A is mounted on B and B on the core, A follows B.
 
+**This is decided per axis, not per set.** Two axes in the same attached set
+can land on opposite sides of a turn — one carried, one left behind — because
+each one's own position is what gets checked, not the set's as a whole.
+
+```python
+host = AxisSet("Host", axes={"h": (0, 0, 1)})
+rider = attach(AxisSet("Rider", axes={
+    "close": (0.5, 0, 0.866),   # 30 degrees from h
+    "far":   (0.985, 0, 0.174), # 80 degrees from h
+}), to=host)
+
+with puzzle("demo", host, rider) as p:
+    split(host)
+    with turned(host["h"], 45):          # cap turn, run at theta(host) = 60
+        split(rider["close"])
+        split(rider["far"])
+```
+
+At a 60° cut angle for `host`, the cap reaches 60° out from `h`. `close` sits
+inside it (30° < 60°) and turns with the cap — its cut circle comes out
+rotated 45° in azimuth. `far` sits outside (80° > 60°) and is untouched. Raise
+`host`'s cut angle past 80° and `far` starts riding too — the split is a
+property of the current geometry, not something fixed at `attach()` time.
+
 Why only half of it is declared: what a mechanism is bolted to cannot be read
 off the cut boundary — an axle can pass through a layer into the core, and a
 sub-mechanism can sit on a single layer. But *which layer you are currently

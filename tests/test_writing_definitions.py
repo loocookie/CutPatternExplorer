@@ -48,7 +48,7 @@ def test_the_worked_examples_actually_run():
     import pytest
 
     from cutpattern import solids as S  # noqa: F401
-    from cutpattern.dsl import at_angle, attach, nearest, puzzle, split, turned  # noqa: F401
+    from cutpattern.dsl import AxisSet, at_angle, attach, nearest, puzzle, split, turned  # noqa: F401
 
     blocks = re.findall(r"```python\n(.*?)\n```", DOC, re.DOTALL)
     ran = 0
@@ -62,6 +62,7 @@ def test_the_worked_examples_actually_run():
             "puzzle": puzzle, "split": split, "turn": turned,
             "turned": turned, "attach": attach,
             "at_angle": at_angle, "nearest": nearest,
+            "AxisSet": AxisSet,
         }
         exec(compile(block, "<doc example>", "exec"), ns)
         ran += 1

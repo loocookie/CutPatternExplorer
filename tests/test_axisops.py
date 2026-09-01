@@ -19,7 +19,7 @@ from cutpattern.axisops import (
     rotation_from_pairs,
     same_directions,
 )
-from cutpattern.dsl import attach, puzzle, split, turn
+from cutpattern.dsl import AxisSet, attach, puzzle, split, turn
 from cutpattern.geometry.vector import rotation_matrix
 
 
@@ -252,6 +252,36 @@ def test_a_carried_axis_rotates_by_the_turn_angle(deg):
     got = _inner_normals(_two_sets(attached=True, angle_deg=deg, outer_theta=100.0))
     expected = rotation_matrix((0, 0, 1), math.radians(deg)) @ np.array([1.0, 0.0, 0.0])
     assert _has(got, expected)
+
+
+def test_carrying_is_decided_per_axis_not_per_set():
+    """같은 attach 로 묶인 두 축이 한 회전에서 갈릴 수 있다 (§2.4).
+
+    `is_carried` 는 축 하나하나의 위치를 본다 — 집합째 묻지 않는다. 여기서는
+    host 축 `h` 에서 30도 떨어진 축은 60도 cap 회전에 실리고, 80도 떨어진
+    축은 그 자리에 남는다. 두 축이 같은 `rider` 에 얹혀 있는데도 그렇다.
+    """
+    host = AxisSet("host", axes={"h": (0.0, 0.0, 1.0)})
+    rider = attach(AxisSet("rider", axes={
+        "close": (math.sin(math.radians(30)), 0.0, math.cos(math.radians(30))),
+        "far": (math.sin(math.radians(80)), 0.0, math.cos(math.radians(80))),
+    }), to=host)
+    with puzzle("t", host, rider) as p:
+        split(host["h"])
+        turn(host["h"], 45.0)
+        split(rider["close"])
+        split(rider["far"])
+    reg, _ = p.evaluate({"host": 60.0, "rider": 45.0})
+
+    h_target = math.cos(math.radians(45.0))
+    got = [bc.circle.n for bc in reg.non_empty() if abs(bc.circle.h - h_target) < 1e-9]
+
+    rotated_close = rotation_matrix((0, 0, 1), math.radians(45.0)) @ np.array(
+        [math.sin(math.radians(30)), 0.0, math.cos(math.radians(30))]
+    )
+    unrotated_far = np.array([math.sin(math.radians(80)), 0.0, math.cos(math.radians(80))])
+    assert _has(got, rotated_close), "30도 떨어진 축은 실려야 한다"
+    assert _has(got, unrotated_far), "80도 떨어진 축은 그대로여야 한다"
 
 
 def test_the_rule_table():
