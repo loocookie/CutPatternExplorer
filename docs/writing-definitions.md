@@ -213,8 +213,8 @@ axes is where a hand-written list goes stale.
 
 Carried axes are excluded from automatic turn-angle derivation (§7.7 in
 design.md) — they move with their host, so there is no alignment of their own
-to solve for. A turn that carries axes also cannot be conjugated (§7.10), so
-it costs more to evaluate.
+to solve for. Carrying costs nothing extra to evaluate: the optimisation that
+collapses a `turned(...)` block (§7.10) works with carried axes too.
 
 ## 5. Regions: `inside`, `outside`, `with region(...):`
 

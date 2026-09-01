@@ -174,9 +174,9 @@ def test_rollback_cancels_matching_outer_turns_only():
     angles = {k: 120.0 for k in same_side.family.cut_angle_inputs()}
 
     # 같은 쪽이면 짝이 맞아 두 번째 Turn 이 첫 번째를 닫는다
-    assert plan_conjugation(same_side.family, angles) == {6: 7}
+    assert plan_conjugation(same_side.family) == {6: 7}
     # 다른 쪽이면 서로 다른 영역이라 상쇄되지 않고 둘 다 rollback 이 닫는다
-    assert plan_conjugation(other_side.family, angles) == {6: 8, 7: 8}
+    assert plan_conjugation(other_side.family) == {6: 8, 7: 8}
 
     # 짝이 맞으므로 순효과가 없다. 그냥 split 한 것과 같은 상태여야 한다
     with puzzle("plain", FACES) as plain:
