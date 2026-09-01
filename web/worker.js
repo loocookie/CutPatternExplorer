@@ -100,7 +100,7 @@ async function boot() {
   py = await loadPyodide(PYODIDE_OPTIONS);
 
   status("Loading the engine…");
-  await import("./engine.js?v=6c88f1a0");   // globalThis.ENGINE_SOURCES 를 채운다
+  await import("./engine.js?v=20ddbc19");   // globalThis.ENGINE_SOURCES 를 채운다
 
   const FS = py.FS;
   const made = new Set();
@@ -173,7 +173,7 @@ const HANDLERS = {
   prepare: (msg) => ({ result: call("prepare", [msg.source]) }),
   addAxisSet: (msg) => ({ result: call("add_axis_set", [msg.source, msg.factory]) }),
   removeAxisSet: (msg) => ({ result: call("remove_axis_set", [msg.source, msg.setId]) }),
-  axisOp: (msg) => ({ result: call("axis_op", [msg.source, msg.setId, msg.op, msg.other]) }),
+  axisOp: (msg) => ({ result: call("axis_op", [msg.source, msg.setId, msg.op]) }),
   evaluate: (msg) => {
     const result = call("evaluate", [JSON.stringify(msg.angles), msg.maxStep]);
     const buffer = sceneBytes("scene_bytes");

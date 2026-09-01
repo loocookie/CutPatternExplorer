@@ -142,11 +142,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=6c88f1a0"></script>
-<script src="render.js?v=6c88f1a0"></script>
-<script src="editor.js?v=6c88f1a0"></script>
-<script src="share.js?v=6c88f1a0"></script>
-<script src="app.js?v=6c88f1a0"></script>
+<script src="vocab.js?v=20ddbc19"></script>
+<script src="render.js?v=20ddbc19"></script>
+<script src="editor.js?v=20ddbc19"></script>
+<script src="share.js?v=20ddbc19"></script>
+<script src="app.js?v=20ddbc19"></script>
 <script>
 "use strict";
 
@@ -485,7 +485,7 @@ function buildAxisSets() {
   const sets = (info.sets && info.sets.length)
     ? info.sets : info.axisSets.map((id) => ({ id, axes: [] }));
 
-  sets.forEach((set, n) => {
+  for (const set of sets) {
     const drawn = info.axisSets.indexOf(set.id);
     const cell = document.createElement("div");
     cell.className = "set";
@@ -533,23 +533,14 @@ function buildAxisSets() {
     const pick = document.createElement("select");
     pick.append(new Option("Edit…", ""));
     for (const [op, label] of AXIS_OPS) pick.append(new Option(label, op));
-    // merge 는 축 id 를 그대로 물려받는다. 상대가 그려지는 집합이면 같은 id 가
-    // 두 곳에 생긴다. 앞에 정의된 것만 쓸 수 있다 — 파이썬은 위에서 아래다
-    for (const other of sets.slice(0, n)) {
-      if (info.axisSets.includes(other.id)) continue;
-      pick.append(new Option("Merge with " + other.id, "merge:" + other.id));
-    }
     pick.onchange = async () => {
-      const raw = pick.value;
+      const op = pick.value;
       pick.value = "";
-      if (!raw) return;
-      const at = raw.indexOf(":");
-      const op = at < 0 ? raw : raw.slice(0, at);
-      const other = at < 0 ? null : raw.slice(at + 1);
+      if (!op) return;
       if (!engine.ready) { fail("The engine is not running. Reload the page."); return; }
       try {
         remember(els.src.value);
-        rewrite(await engine.axisOp(els.src.value, set.id, op, other));
+        rewrite(await engine.axisOp(els.src.value, set.id, op));
         clearError();
         await run();
       } catch (e) { fail(e); }
@@ -580,7 +571,7 @@ function buildAxisSets() {
     // 바뀐다 (§19.15)
     if (mode === "run" && info.inputs.includes(set.id)) cell.append(angleRow(set.id));
     els.sets.append(cell);
-  });
+  }
 }
 
 async function run() {

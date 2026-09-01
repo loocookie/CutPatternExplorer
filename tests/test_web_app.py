@@ -1556,23 +1556,21 @@ def test_axis_op_keeps_the_id_prefix_when_renaming(ready):
     assert '"c1-U"' in ready["axis_op"](DEF_SETS, "Cube 1", "rename")
 
 
-def test_merge_folds_in_a_set_that_is_not_drawn(ready):
-    out = ready["axis_op"](DEF_SETS, "Rhombic Dodecahedron 1", "merge", "Tetrahedron 1")
-    assert 'merge("Rhombic Dodecahedron 1", rhombic_dodecahedron(' in out
-    assert out.rstrip().splitlines()[2].endswith(", t1)")
-    ready["prepare"](out)
+def test_the_menu_does_not_offer_merge():
+    """`merge` 는 축 id 를 그대로 물려받아 §19.12 가 조건 둘을 걸었다 — 상대가
+    그려지지 않고, 앞에 정의돼 있어야 한다.
 
+    그래서 실제 정의에서는 **정확히 한 줄에만, 이유는 안 보이게** 나타났다.
+    메뉴로서는 최악의 모양이다. `merge` 는 손으로 쓴다 — 이름은 여전히 이름
+    공간에 있고 어휘 목록에도 있다 (§19.7).
+    """
+    assert "merge" not in PAGE.split("const AXIS_OPS")[1].split("];")[0]
+    assert "Merge with" not in PAGE
+    assert '"merge"' not in BOOT, "아무도 안 부르는 가지가 남아 있다"
 
-def test_merge_refuses_two_drawn_sets(ready):
-    """축 id 를 그대로 물려받으므로 같은 id 가 두 집합에 생긴다 (§5)."""
-    with pytest.raises(ValueError, match="two sets at once"):
-        ready["axis_op"](DEF_SETS, "Rhombic Dodecahedron 1", "merge", "Cube 1")
-
-
-def test_merge_refuses_a_set_defined_later(ready):
-    """파이썬은 위에서 아래로 읽는다. 아직 없는 이름을 쓰면 NameError 다."""
-    with pytest.raises(ValueError, match="defined after"):
-        ready["axis_op"](DEF_SETS, "Cube 1", "merge", "Tetrahedron 1")
+    import cutpattern.axisops as axisops
+    import cutpattern.dsl as dsl
+    assert "merge" in axisops.__all__ and "merge" in dsl.__all__
 
 
 def test_axis_op_refuses_what_it_does_not_know(ready):
@@ -1589,7 +1587,7 @@ def test_the_names_were_already_in_scope():
     import cutpattern.axisops as axisops
     import cutpattern.dsl as dsl
 
-    for name in ("merge", "rotate", "remove", "rename", "mirror", "invert"):
+    for name in ("rotate", "remove", "rename", "mirror", "invert"):
         assert name in axisops.__all__ and name in dsl.__all__
 
 

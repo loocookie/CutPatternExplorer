@@ -32,7 +32,7 @@ const BOOT_SILENCE_MS = 20000;
 // CSP 는 스크립트가 아니라 **전역**에 붙으므로, https 에서 온 worker.js 가
 // 그 안에서 돌아도 물려받은 정책 아래 있다.
 function workerBlobUrl() {
-  const target = new URL("worker.js?v=6c88f1a0", location.href).href;
+  const target = new URL("worker.js?v=20ddbc19", location.href).href;
   const shim = "import " + JSON.stringify(target) + ";";
   return URL.createObjectURL(new Blob([shim], { type: "text/javascript" }));
 }
@@ -155,8 +155,8 @@ class Engine {
   }
 
   /** 축 집합을 만드는 식을 op(...) 로 감싼 새 소스 (§19.12). */
-  async axisOp(source, setId, op, other = null) {
-    return (await this._send({ type: "axisOp", source, setId, op, other })).result;
+  async axisOp(source, setId, op) {
+    return (await this._send({ type: "axisOp", source, setId, op })).result;
   }
 
   async prepare(source) {

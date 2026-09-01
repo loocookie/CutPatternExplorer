@@ -612,10 +612,10 @@ def remove_axis_set(source, set_id):
 
 
 # 축 집합을 고치는 연산 (§19.12). 이미 저작 계층에 있는데 아무도 몰랐다
-_AXIS_OPS = ("rotate", "remove", "rename", "mirror", "invert", "merge")
+_AXIS_OPS = ("rotate", "remove", "rename", "mirror", "invert")
 
 
-def axis_op(source, set_id, op, other=None):
+def axis_op(source, set_id, op):
     """축 집합을 만드는 식을 `op(...)` 로 감싼 새 소스를 돌려준다.
 
         c1 = cube("Cube 1")
@@ -666,35 +666,8 @@ def axis_op(source, set_id, op, other=None):
         # 평면을 드러낸다. 인자를 숨기면 어느 평면인지 코드에 안 보이고
         # 고칠 곳도 없다 — 기본값이 있다는 것과 안 보여도 된다는 것은 다르다
         call = "mirror(%s, normal=(0, 0, 1))" % inner
-    elif op == "invert":
+    else:
         # 원점 반전은 인자가 없다. 고를 것이 없다
         call = "invert(%s)" % inner
-    else:
-        if not other:
-            raise ValueError("merge needs a second axis set")
-        other_assign, other_var = _binding_for(tree, other)
-        if other_assign is None:
-            raise ValueError("no axis set named %r in this definition" % other)
-        # 파이썬은 위에서 아래로 읽는다. 아직 없는 이름을 쓰면 NameError 다
-        if other_assign.lineno > assign.lineno:
-            raise ValueError(
-                "%r is defined after %r. move it up first, or merge the other way."
-                % (other, set_id)
-            )
-        # 축 id 는 그대로 물려받는다. 두 집합이 다 puzzle() 인자면 같은
-        # id 가 두 곳에 생겨 엔진이 거부한다 (§5). 미리 말해 준다
-        drawn = set()
-        for node in tree.body:
-            if _is_puzzle_block(node):
-                drawn = {a.id for a in node.items[0].context_expr.args[1:]
-                         if isinstance(a, ast.Name)}
-        if other_var in drawn:
-            raise ValueError(
-                "%r is one of the puzzle's own axis sets, so merging would put its "
-                "axis ids in two sets at once. remove it from puzzle(...) first."
-                % other
-            )
-        call = "merge(%s, %s, %s)" % (
-            json.dumps(set_id), inner, other_var)
 
     return source[:start] + call + source[end:]
