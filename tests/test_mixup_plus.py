@@ -58,7 +58,7 @@ def test_new_boundaries_are_twelve_edge_direction_planes(plus):
         assert sorted(np.abs(np.round(bc.circle.n, 6))) == pytest.approx([0.0, root2, root2])
 
 
-@pytest.mark.parametrize("theta", [THETA_333, 60.0, THETA_MIXUP, 75.0])
+@pytest.mark.parametrize("theta", [95.0, 100.0, 112.5, 125.0])
 def test_45_slice_is_closed_after_the_plus_cuts(theta, plus):
     """Plus 절단을 넣으면 45도 슬라이스가 격자를 보존한다.
 
@@ -101,7 +101,7 @@ def test_slice_composition_conserves_arc_length(plus):
     assert after.total_arc_length() == pytest.approx(before.total_arc_length())
 
 
-@pytest.mark.parametrize("theta", [50.0, 54.7356, 60.0, THETA_MIXUP, 80.0])
+@pytest.mark.parametrize("theta", [95.0, 100.0, 112.5, 125.0, 135.0])
 def test_slider_sweep_stays_legal_and_finite(theta, plus):
     reg, _ = plus.evaluate({"cube": theta})
     for bc in reg.non_empty():
@@ -109,12 +109,14 @@ def test_slider_sweep_stays_legal_and_finite(theta, plus):
         assert all(math.isfinite(x) for s in bc.spans for x in s.as_tuple())
 
 
-def test_equal_sectors_is_aesthetic_not_a_requirement(plus):
-    """theta = 67.5 는 조각 크기가 같아지는 지점일 뿐 작동 조건이 아니다.
+def test_closure_does_not_depend_on_the_cut_angle(plus):
+    """45도 슬라이스가 닫히는지는 Plus 절단의 존재로 정해진다.
 
-    45도 슬라이스가 닫히는지는 Plus 절단의 존재로 정해지고, theta 와 무관하다.
+    특정 각도가 작동 조건이 아니라는 것 — theta 를 바꿔도 닫힌다. 다만
+    **90도 너머**에서 물어야 한다. 그 아래는 outer 회전이 코어를 싣고 돌아
+    믹스업이 아닌 다른 퍼즐이 된다 (§2.4).
     """
     faces = plus.axis_sets[0]
-    for theta in (THETA_333, THETA_MIXUP):
+    for theta in (100.0, 112.5, 125.0):
         after, _ = evaluate(_without_rollback(plus, SLICE_45), {"cube": theta})
         assert _complete(after, faces, theta) == {a.id for a in faces}

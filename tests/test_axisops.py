@@ -19,7 +19,7 @@ from cutpattern.axisops import (
     rotation_from_pairs,
     same_directions,
 )
-from cutpattern.dsl import carry, puzzle, split, turn
+from cutpattern.dsl import attach, puzzle, split, turn
 from cutpattern.geometry.vector import rotation_matrix
 
 
@@ -179,84 +179,153 @@ def test_operations_do_not_mutate_the_source():
     assert [a.id for a in c] == before
 
 
-# ---- carry --------------------------------------------------------------
+# ---- attach (§2.4) -------------------------------------------------------
+#
+# 무엇에 얹혀 있는지는 선언하고, 어느 회전이 나를 움직이는지는 기하가 정한다.
+#   코어에 얹힘(기본) -> 코어가 움직일 때. 코어는 늘 바깥쪽이므로 outer 회전만
+#   집합에 얹힘        -> 그 집합의 회전 영역 안에 있을 때. 안쪽이든 바깥쪽이든
 
 
-def _carry_family(declare: bool, angle_deg: float = 90.0):
-    # 두 집합의 축 id 가 겹치면 안 된다 (§5). 약자는 집합 id 에서 나오므로
-    # 서로 다른 id 를 주면 자동으로 갈린다
-    outer = S.cube("outer")     # o-0 .. o-5
-    inner = S.cube("inner")     # i-0 .. i-5
-    with puzzle("carry", outer, inner) as p:
-        if declare:
-            carry(outer["o-0"], inner["i-2"])  # o-0 = (0,0,1),  i-2 = (1,0,0)
+def _two_sets(attached: bool, angle_deg=90.0, outer_turn=False, outer_theta=100.0):
+    """`outer_theta` 가 100 이면 inner 축(90도 떨어져 있다)이 cap 안에 들어온다."""
+    outer = S.cube("outer")     # o-0 = (0,0,1)
+    inner = S.cube("inner")     # i-2 = (1,0,0)
+    if attached:
+        inner = attach(inner, to=outer)
+    with puzzle("t", outer, inner) as p:
         split(outer["o-0"])
-        turn(outer["o-0"], angle_deg)
+        turn(outer["o-0"], angle_deg, outer=outer_turn)
         split(inner["i-2"])
-    return p
+    return p, outer_theta
 
 
-def _inner_normals(p, inner_theta=20.0):
-    reg, _ = p.evaluate({"outer": 80.0, "inner": inner_theta})
+def _inner_normals(built, inner_theta=20.0):
+    p, outer_theta = built
+    reg, _ = p.evaluate({"outer": outer_theta, "inner": inner_theta})
     h = math.cos(math.radians(inner_theta))
     return [bc.circle.n for bc in reg.non_empty() if abs(bc.circle.h - h) < 1e-9]
 
 
-def test_axes_stay_put_without_a_carry_declaration():
-    """기본값은 아무것도 실리지 않음이다. pCubes 도 같다."""
-    got = _inner_normals(_carry_family(False))
-    assert any(np.allclose(n, (1, 0, 0), atol=1e-9) for n in got)
-    assert not any(np.allclose(n, (0, 1, 0), atol=1e-9) for n in got)
+def _has(normals, target):
+    return any(np.allclose(n, target, atol=1e-9) for n in normals)
 
 
-def test_declared_axis_rides_with_the_turn():
-    got = _inner_normals(_carry_family(True))
-    assert any(np.allclose(n, (0, 1, 0), atol=1e-9) for n in got)
+def test_core_mounted_axes_ignore_a_cap_turn():
+    """기본값은 코어다. cap 회전에서는 코어가 안 움직이므로 가만히 있는다."""
+    got = _inner_normals(_two_sets(attached=False, outer_theta=80.0))
+    assert _has(got, (1, 0, 0))
+    assert not _has(got, (0, 1, 0))
+
+
+def test_core_mounted_axes_ride_an_outer_turn():
+    """**theta < 90 이면 outer 회전이 코어를 움직인다.**
+
+    절단면이 축 쪽(`d = cos theta > 0`)에 있으므로 코어는 바깥쪽에 있다.
+    """
+    got = _inner_normals(_two_sets(attached=False, outer_turn=True, outer_theta=80.0))
+    assert _has(got, (0, 1, 0))
+
+
+def test_nobody_carries_the_core_past_ninety_degrees():
+    """theta > 90 이면 코어를 아무도 안 데려간다 (§2.4).
+
+    마주 보는 두 cap 이 겹치고 그 교집합이 가운데 층이다. 코어는 거기 들어가
+    있지만 실리지 않는다 — 그런 퍼즐은 코어를 구형으로 만든다. 믹스업 계열이
+    이 구간이라, 여기서 코어를 실으면 그 퍼즐이 통째로 틀어진다.
+    """
+    for outer_turn in (False, True):
+        got = _inner_normals(
+            _two_sets(attached=False, outer_turn=outer_turn, outer_theta=100.0)
+        )
+        assert _has(got, (1, 0, 0)), outer_turn
+        assert not _has(got, (0, 1, 0)), outer_turn
+
+
+def test_an_attached_axis_inside_the_region_rides_along():
+    """호스트 집합의 회전 영역 안이면 함께 돈다. 코어 규칙과 무관하다."""
+    got = _inner_normals(_two_sets(attached=True, outer_theta=100.0))
+    assert _has(got, (0, 1, 0))
 
 
 @pytest.mark.parametrize("deg", [30.0, 45.0, 120.0])
-def test_carried_axis_rotates_by_the_turn_angle(deg):
-    got = _inner_normals(_carry_family(True, deg))
+def test_a_carried_axis_rotates_by_the_turn_angle(deg):
+    got = _inner_normals(_two_sets(attached=True, angle_deg=deg, outer_theta=100.0))
     expected = rotation_matrix((0, 0, 1), math.radians(deg)) @ np.array([1.0, 0.0, 0.0])
-    assert any(np.allclose(n, expected, atol=1e-9) for n in got)
+    assert _has(got, expected)
 
 
-def test_carry_is_recorded_on_the_family():
-    p = _carry_family(True)
-    assert p.family.carries == (("o-0", ("i-2",)),)
-    assert p.family.carried_by("o-0") == ("i-2",)
-    assert p.family.carried_by("c-1") == ()
+def test_the_rule_table():
+    """`is_carried` 를 규칙 그대로 짚는다."""
+    shell = S.cube("shell")
+    rider = attach(S.cube("rider"), to=shell)
+    with puzzle("t", shell, rider) as p:
+        split(shell)
+    fam = p.family
+
+    # 코어에 얹힘: 위치와 무관하게 코어가 움직이느냐만 본다
+    for in_region in (True, False):
+        for outer in (False, True):
+            assert not fam.is_carried(
+                "shell", "shell", outer=outer, in_region=in_region,
+                core_in_region=False)
+            assert fam.is_carried(
+                "shell", "shell", outer=outer, in_region=in_region,
+                core_in_region=True)
+
+    # 집합에 얹힘: 그 집합의 회전이면 내 위치가 정한다
+    for outer in (False, True):
+        assert fam.is_carried("rider", "shell", outer=outer, in_region=True,
+                              core_in_region=False)
+        assert not fam.is_carried("rider", "shell", outer=outer, in_region=False,
+                                  core_in_region=True)
 
 
-def test_carry_accepts_a_whole_axis_set():
-    outer = S.cube("outer")
-    inner = S.cube("inner")
-    with puzzle("t", outer, inner) as p:
-        carry(outer["o-0"], inner)
-        split(outer)
-    assert p.family.carries == (("o-0", tuple(a.id for a in inner)),)
+def test_a_chain_follows_its_host():
+    """A 가 B 에, B 가 코어에 얹혀 있으면 A 는 B 를 따라간다."""
+    base = S.cube("base")
+    mid = attach(S.octahedron("mid"), to=base)
+    top = attach(S.tetrahedron("top"), to=mid)
+    with puzzle("t", base, mid, top) as p:
+        split(base)
+    fam = p.family
+
+    # base 를 도는 회전: mid 는 영역이 정하고, top 은 mid 를 따라 같은 답
+    assert fam.is_carried("mid", "base", outer=False, in_region=True,
+                          core_in_region=False)
+    assert fam.is_carried("top", "base", outer=False, in_region=True,
+                          core_in_region=False)
+    assert not fam.is_carried("top", "base", outer=False, in_region=False,
+                              core_in_region=False)
+
+    # 아무 집합도 아닌 회전이면 사슬 끝의 코어 규칙으로 떨어진다
+    assert fam.is_carried("top", "elsewhere", outer=True, in_region=False,
+                          core_in_region=True)
+    assert not fam.is_carried("top", "elsewhere", outer=True, in_region=True,
+                              core_in_region=False)
 
 
-def test_carry_rejects_self_reference():
+def test_attach_rejects_self_and_wrong_types():
     c = S.cube("cube")
-    with puzzle("t", c):
-        with pytest.raises(ValueError, match="carry itself"):
-            carry(c["c-0"], c["c-0"])
+    with pytest.raises(ValueError, match="attached to itself"):
+        attach(c, to=c)
+    with pytest.raises(TypeError, match="needs an axis set"):
+        attach(c, to="cube")
 
 
-def test_carry_rejects_wrong_types():
-    c = S.cube("cube")
-    with puzzle("t", c):
-        with pytest.raises(TypeError):
-            carry("c-0", c["c-1"])
-        with pytest.raises(TypeError):
-            carry(c["c-0"], "c-1")
+def test_attach_survives_the_other_axis_ops():
+    """rotate/mirror 로 방향을 바꿔도 무엇에 물려 있는지는 그대로다."""
+    shell = S.cube("shell")
+    rider = attach(S.cube("rider"), to=shell)
+    assert rotate(rider, axis=(0, 0, 1), angle=30).attached is shell
+    assert mirror(rider, normal=(0, 0, 1)).attached is shell
 
 
-def test_carry_outside_a_puzzle_block_is_rejected():
-    c = S.cube("cube")
-    with pytest.raises(RuntimeError, match="with puzzle"):
-        carry(c["c-0"], c["c-1"])
+def test_attaching_to_a_set_outside_the_puzzle_is_rejected():
+    shell = S.cube("shell")
+    rider = attach(S.cube("rider"), to=shell)
+    with pytest.raises(ValueError, match="not one of this puzzle"):
+        with puzzle("t", rider) as p:
+            split(rider)
 
 
 # ---- mirror / invert ----------------------------------------------------

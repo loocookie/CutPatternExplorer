@@ -41,7 +41,7 @@ EXAMPLES = (
 )
 
 
-def _no_conjugation(_family):
+def _no_conjugation(_family, _cut_angles=None):
     return {}
 
 
@@ -96,13 +96,19 @@ def test_conjugation_matches_the_unconjugated_path(name, monkeypatch):
 
 
 def test_plan_finds_every_turned_pair():
-    """`turned()` 짝은 전부 접합 대상이어야 한다."""
+    """`turned()` 짝은 전부 접합 대상이어야 한다.
+
+    **아무것도 실리지 않는 각에서 물어야 한다** (§2.4). theta > 90 이면 코어를
+    아무도 안 데려가므로 outer 회전도 접합된다. theta < 90 에서는 outer 회전이
+    코어를 싣고 돌아 접합할 수 없고, 그것이 맞는 동작이다 — mixup_plus 가
+    그 경우다.
+    """
     from cutpattern.engine.operations import Turn
 
     for name in ("octododeca", "octocube_hide", "octocube_master", "mixup_plus"):
         family = importlib.import_module("examples." + name).build().family
         turns = [i for i, op in enumerate(family.operations) if isinstance(op, Turn)]
-        pairs = plan_conjugation(family)
+        pairs = plan_conjugation(family, {k: 120.0 for k in family.cut_angle_inputs()})
         assert len(pairs) * 2 == len(turns), name
 
 
@@ -119,7 +125,7 @@ def test_rollback_closes_bare_turns():
         split(faces[R])
     ops = p.family.operations
     rollback = len(ops) - 1
-    assert plan_conjugation(p.family) == {6: rollback}
+    assert plan_conjugation(p.family, {"cube": 60.0}) == {6: rollback}
 
 
 def test_plan_refuses_what_it_cannot_prove():
@@ -131,18 +137,19 @@ def test_plan_refuses_what_it_cannot_prove():
         with turned(f2[U], 45):
             with region(outside(f2[R]), outside(f2[L])):
                 split(f2[F])
-    assert plan_conjugation(q.family) == {}
+    assert plan_conjugation(q.family, {"cube": 60.0}) == {}
 
-    # 실린 축. 블록 안 split 이 실린 축을 쓰면 법선이 달라진다 (§2.1)
-    from cutpattern.dsl import carry
+    # 실린 축. 블록 안 split 이 실린 축을 쓰면 법선이 달라진다 (§2.4).
+    # host 에 얹힌 집합이 있으면 host 의 회전은 접합할 수 없다
+    from cutpattern.dsl import attach
 
-    f3 = S.cube("cube", turns=(45, -45))
-    with puzzle("carried", f3) as r:
-        carry(f3[U], f3[R])
-        split(f3)
-        with turned(f3[U], 45):
-            split(f3[R])
-    assert plan_conjugation(r.family) == {}
+    host = S.cube("host", turns=(45, -45))
+    rider = attach(S.octahedron("rider"), to=host)
+    with puzzle("carried", host, rider) as r:
+        split(host)
+        with turned(host["h-0"], 45):
+            split(host["h-1"])
+    assert plan_conjugation(r.family, {"host": 60.0, "rider": 60.0}) == {}
 
 
 def test_mixed_fallback_and_conjugation_agree():
@@ -152,19 +159,18 @@ def test_mixed_fallback_and_conjugation_agree():
     위에서 정의되므로 둘이 일관된다. RollbackTurns 는 실행된 적 없는 회전을
     되돌리지 않는다 — 접합된 회전은 pending_turns 에 들어가지 않기 때문이다.
     """
-    from cutpattern.dsl import carry
-
     def build():
         f = S.cube("cube", turns=(45, -45, 90, -90))
         with puzzle("mixed", f) as p:
-            carry(f[U], f[F])        # U 는 실려 있어 접합 대상이 아니다
             split(f)
-            with turned(f[U], 45):   # 폴백
-                with turned(f[R], 45):  # 접합
+            # theta < 90 이면 outer 회전이 코어를 싣고 돈다 (§2.4). 실으면
+            # 접합할 수 없으므로 바깥은 폴백, 안쪽 cap 회전은 접합이다
+            with turned(f[U], 45, outer=True):   # 폴백
+                with turned(f[R], 45):           # 접합
                     split(f[F], f[B])
         return p
 
-    plan = plan_conjugation(build().family)
+    plan = plan_conjugation(build().family, {"cube": 60.0})
     assert len(plan) == 1, plan  # R 짝만 접합된다
 
     for theta in (40.0, 54.7356, 63.0, 70.0):
@@ -187,7 +193,8 @@ def test_region_outside_the_pair_is_still_conjugated():
 
     family = importlib.import_module("examples.octocube_hide").build().family
     turns = [i for i, op in enumerate(family.operations) if isinstance(op, Turn)]
-    assert len(plan_conjugation(family)) * 2 == len(turns)
+    angles = {k: 60.0 for k in family.cut_angle_inputs()}
+    assert len(plan_conjugation(family, angles)) * 2 == len(turns)
 
 
 def test_conjugation_removes_the_empty_carrier_leftovers():

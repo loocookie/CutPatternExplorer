@@ -152,7 +152,29 @@ class SplitResult:
 # 다시 계산할 이유가 없다. PuzzleFamily 는 frozen 이고 Vec3 가 tuple 이라 해시가
 # 된다 (§12.2). 정의 몇 개를 오가는 UI 를 감당할 크기로 잡는다
 @lru_cache(maxsize=32)
-def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
+def core_moves(d: float, outer: bool) -> bool:
+    """코어가 이 회전 영역 안에 있는가 (§2.4).
+
+    절단면은 중심에서 `d = cos(theta)` 만큼 떨어져 있다. 중심(코어)이 어느
+    쪽인지는 **d 의 부호**가 정한다.
+
+        theta < 90   d > 0   절단면이 축 쪽에 있다   -> 코어는 바깥쪽에 있다
+        theta >= 90  d <= 0  절단면이 코어를 지나거나 넘는다 -> 아무도 안 데려간다
+
+    theta > 90 이면 마주 보는 두 cap 이 겹치고, 그 교집합이 가운데 층이다.
+    코어는 거기 들어가 있지만 **실리지는 않는다** — 그런 퍼즐은 코어를 구형으로
+    만들어 가운데 층이 그 둘레를 미끄러지게 한다. 믹스업 계열이 이 구간이다.
+
+    theta == 90 은 2x2x2 다. 실제 2x2x2 는 45도 회전을 기계적으로 허용하려고
+    한 층을 코어에 묶지만, 그것은 절단 경계에 나타나지 않는다 (§1). 여기서는
+    묶을 이유가 없다.
+    """
+    return outer and d > 0.0
+
+
+def plan_conjugation(
+    family: PuzzleFamily, cut_angles: dict[str, float]
+) -> dict[int, int]:
     """접합 가능한 Turn 짝을 찾는다 (§7.10, §12.3-2).
 
     `turned(a, θ)` 는 회전하고 자르고 정확히 되돌린다. 그 왕복의 순효과는
@@ -177,15 +199,34 @@ def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
     - 짝 사이에 `EnterRegion` / `ExitRegion` 이 열리는 경우. 블록 **바깥의**
       영역은 괜찮다 (`Φ⁻¹(C ∩ Φ(R)) = Φ⁻¹(C) ∩ R`). 안에서 여는 것은 영역이
       회전을 따라 변환되는 경로라 따로 다뤄야 한다
-    - 축이 다른 축을 싣고 도는 경우 (§2.1 carry). 블록 안 split 이 실린 축을
-      쓰면 법선이 달라진다
+    - 축이 다른 축을 싣고 도는 경우 (§2.4 attach). 블록 안 split 이 실린 축을
+      쓰면 법선이 달라진다. outer 회전은 코어를 움직이므로 늘 여기 걸린다
 
     일부만 거부해도 된다. 바깥이 폴백이고 안쪽이 접합이면, registry 는 바깥
     회전이 실제로 적용된 좌표계를 들고 있고 안쪽 프레임은 그 위에서 정의되므로
     둘이 일관된다. `RollbackTurns` 는 실행된 적 없는 회전을 되돌리지 않는다 —
     접합된 회전은 `pending_turns` 에 들어가지 않기 때문이다.
     """
-    carriers = {mover for mover, _carried in family.carries}
+    def moves_other_axes(op: Turn) -> bool:
+        """이 회전이 다른 축을 싣고 도는가 (§2.4).
+
+        실으면 접합할 수 없다 — 블록 안 split 이 실린 축을 쓰면 법선이 달라진다.
+        위치를 모르는 자리이므로 **실릴 수 있으면** 거부한다 (in_region=True).
+        outer 회전은 코어를 움직이므로 코어에 얹힌 집합이 하나라도 있으면 걸린다.
+        """
+        aset, _axis = family.find_axis(op.axis)
+        d = math.cos(math.radians(float(cut_angles[aset.cut_angle_input])))
+        core = core_moves(d, op.outer)
+        # 위치는 모르므로 실릴 수 있으면(in_region=True) 거부한다. 코어 쪽은
+        # 각도를 아니까 정확히 본다 — theta > 90 이면 코어가 안 움직이므로
+        # 얹힌 집합이 없는 정의는 outer 회전도 그대로 접합된다
+        return any(
+            family.is_carried(
+                s.id, aset.id, outer=op.outer, in_region=True, core_in_region=core
+            )
+            for s in family.axis_sets
+        )
+
     pairs: dict[int, int] = {}
     # (연산 번호, 축 id, 각도, outer, 접합 가능한가)
     stack: list[list] = []
@@ -206,7 +247,7 @@ def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
                 if entry[4]:
                     pairs[entry[0]] = i
                 continue
-            ok = op.axis not in carriers
+            ok = not moves_other_axes(op)
             stack.append([i, op.axis, op.angle, op.outer, ok])
         elif isinstance(op, SplitByAxis):
             continue  # 접합 대상이다
@@ -393,7 +434,7 @@ def evaluate(
 
     # 접합 계획 (§7.10). 증명된 짝만 들어 있고, 나머지는 지금 경로로 흐른다.
     # registry 는 항상 **끌어온 좌표계**(회전 이전)의 상태를 들고 있다
-    conj_open = plan_conjugation(family)
+    conj_open = plan_conjugation(family, cut_angles)
     frames: list[TurnFrame] = []
     # 각 프레임을 닫는 연산 번호. 반대 회전일 수도 RollbackTurns 일 수도 있다
     frame_close: list[int] = []
@@ -453,13 +494,29 @@ def evaluate(
     def active_region():
         return region_stack[-1] if region_stack else None
 
-    def apply_carry(axis: Axis, angle_deg: float) -> None:
-        carried = family.carried_by(axis.id)
-        if not carried:
-            return
-        matrix = rotation_matrix(normals[axis.id], math.radians(angle_deg))
-        for other in carried:
-            normals[other] = matrix @ normals[other]
+    def apply_carry(
+        axis: Axis, turn_set_id: str, theta: float, angle_deg: float, outer: bool
+    ) -> None:
+        """회전한 재료에 얹힌 축들을 함께 돌린다 (§2.4).
+
+        어느 축이 실리는지는 마운트(`attached`)와 위치가 정한다. 코어에 얹힌
+        축은 코어가 움직일 때 — 즉 `outer` 회전에서 — 돌고, 어떤 집합에 얹힌
+        축은 그 집합의 회전 영역 안에 있을 때 돈다.
+        """
+        a = normals[axis.id]
+        d = math.cos(math.radians(theta))
+        matrix = rotation_matrix(a, math.radians(angle_deg))
+        for other_set in family.axis_sets:
+            for other in other_set.axes:
+                if other.id == axis.id:
+                    continue        # 회전축 자신은 이 회전에 불변이다
+                value = float(a @ normals[other.id])
+                in_region = (value < d) if outer else (value > d)
+                if family.is_carried(
+                    other_set.id, turn_set_id, outer=outer,
+                    in_region=in_region, core_in_region=core_moves(d, outer),
+                ):
+                    normals[other.id] = matrix @ normals[other.id]
     for i, op in enumerate(family.operations):
         if isinstance(op, SplitByAxis):
             aset, axis = family.find_axis(op.axis)
@@ -538,7 +595,7 @@ def evaluate(
                         active_region(),
                     )
                 )
-                apply_carry(axis, op.angle)
+                apply_carry(axis, aset.id, theta, op.angle, op.outer)
                 if region_stack:
                     a = normals[axis.id]
                     d = math.cos(math.radians(theta))
@@ -656,7 +713,9 @@ def evaluate(
                             None,
                         )
                     )
-                    apply_carry(axis, -angle)
+                    apply_carry(
+                        axis, family.find_axis(axis.id)[0].id, theta, -angle, outer
+                    )
                 except IllegalTurnError as exc:
                     if on_illegal == "raise":
                         raise

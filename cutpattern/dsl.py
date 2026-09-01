@@ -46,7 +46,8 @@ from .engine.operations import (
     Turn,
     evaluate,
 )
-from .axisops import invert, keep, merge, mirror, remove, rename, rotate, same_directions
+from .axisops import (attach, invert, keep, merge, mirror, remove, rename,
+                      rotate, same_directions)
 from .query import (
     angle_between,
     angles_from,
@@ -63,10 +64,10 @@ __all__ = [
     "split",
     "turn",
     "turned",
-    "carry",
     "region",
     "inside",
     "outside",
+    "attach",
     "merge",
     "rotate",
     "remove",
@@ -111,10 +112,14 @@ class AxisSet:
         axes: dict[str, tuple[float, float, float]] | None = None,
         turns: tuple[float, ...] = (),
         name: str = "",
+        attached=None,
     ) -> None:
         self.id = id
         self.name = name or id
         self.turns = tuple(float(a) for a in turns)
+        # 이 집합이 얹혀 있는 집합. None 이면 코어다 (§2.4). axisops.attach 가
+        # 채운다 — 호스트가 먼저 있어야 하므로 만들 때보다 뒤에 정해진다
+        self.attached = attached
         self._axes: list[Axis] = []
         for axis_id, normal in (axes or {}).items():
             self.add(axis_id, normal)
@@ -161,11 +166,13 @@ class AxisSet:
         return f"AxisSet({self.id!r}, axes={len(self._axes)})"
 
     def to_engine(self) -> _EngineAxisSet:
+        host = self.attached
         return _EngineAxisSet(
             id=self.id,
             axes=tuple(self._axes),
             cut_angle_input=self.cut,
             name=self.name,
+            attached=getattr(host, "id", host),
         )
 
 
@@ -176,7 +183,6 @@ class _Recorder:
     def __init__(self) -> None:
         self.ops: list[object] = []
         self.open_turns: list[tuple[str, float, bool]] = []
-        self.carries: list[tuple[str, tuple[str, ...]]] = []
 
 
 _STACK: list[_Recorder] = []
@@ -300,38 +306,6 @@ def turned(axis: Axis, angle: float, outer: bool = False):
         turn(axis, -angle, outer)
 
 
-def carry(mover: Axis, *carried):
-    """mover 를 돌리면 지정한 축들도 함께 돈다고 선언한다 (§2.1).
-
-    유도하지 않는다. 축이 어느 재료에 물려 있는지는 경계면만으로 알 수 없고,
-    기하로 유도하면 조건이 절단 각도의 함수가 되어 슬라이더를 움직일 때마다
-    축이 붙었다 떨어졌다 한다. 메커니즘은 그렇게 바뀌지 않는다.
-
-    규칙은 파이썬으로 쓴다. angle_to 는 슬라이더와 무관한 정적 값이다.
-
-        for x in outer:
-            carry(x, *[a for a in inner if angle_between(x, a) < 40])
-
-    기본값은 아무것도 실리지 않음이다.
-    """
-    if not isinstance(mover, Axis):
-        raise TypeError(f"the first argument of carry() must be an Axis, got {mover!r}")
-    ids: list[str] = []
-    for target in carried:
-        if isinstance(target, AxisSet):
-            ids.extend(a.id for a in target)
-        elif isinstance(target, Axis):
-            ids.append(target.id)
-        else:
-            raise TypeError(
-                f"carry() needs an AxisSet or an Axis, got {target!r}"
-            )
-    if mover.id in ids:
-        raise ValueError(f"axis {mover.id!r} cannot carry itself")
-    if ids:
-        _active().carries.append((mover.id, tuple(ids)))
-
-
 def _clean(value: float) -> str:
     """각도를 사람이 읽는 모양으로. 45.0 은 45 로 적는다."""
     return f"{value:g}"
@@ -372,7 +346,6 @@ class Puzzle:
             self.family = PuzzleFamily(
                 axis_sets=tuple(s.to_engine() for s in self.axis_sets),
                 operations=tuple(ops),
-                carries=tuple(self._recorder.carries),
             )
             self.check()
         return False
@@ -417,10 +390,13 @@ class Puzzle:
                         f"operation #{i}: {op.axis!r} declares turn angles "
                         f"({declared}) and {_clean(op.angle)} is not one of them.{hint}"
                     )
-        for mover, carried in self.family.carries:
-            for axis_id in (mover, *carried):
-                if axis_id not in known:
-                    raise ValueError(f"carry declaration: no such axis {axis_id!r}")
+        for s in self.axis_sets:
+            host = getattr(s.attached, "id", s.attached)
+            if host is not None and not any(o.id == host for o in self.axis_sets):
+                raise ValueError(
+                    f"{s.id!r} is attached to {host!r}, which is not one of this "
+                    "puzzle's axis sets"
+                )
 
     def evaluate(self, cut_angles: dict[str, float], **kwargs):
         if self.family is None:

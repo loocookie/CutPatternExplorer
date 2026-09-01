@@ -169,10 +169,14 @@ def test_rollback_cancels_matching_outer_turns_only():
     # 연산 배치는 둘 다 [0..5]=split, 6=Turn, 7=Turn, 8=RollbackTurns 다.
     from cutpattern.engine.operations import plan_conjugation
 
+    # theta > 90 을 준다. outer 회전이 코어를 안 데려가는 구간이라 접합이
+    # 그대로 살아 있고, 상쇄 판정만 남는다 (§2.4)
+    angles = {k: 120.0 for k in same_side.family.cut_angle_inputs()}
+
     # 같은 쪽이면 짝이 맞아 두 번째 Turn 이 첫 번째를 닫는다
-    assert plan_conjugation(same_side.family) == {6: 7}
+    assert plan_conjugation(same_side.family, angles) == {6: 7}
     # 다른 쪽이면 서로 다른 영역이라 상쇄되지 않고 둘 다 rollback 이 닫는다
-    assert plan_conjugation(other_side.family) == {6: 8, 7: 8}
+    assert plan_conjugation(other_side.family, angles) == {6: 8, 7: 8}
 
     # 짝이 맞으므로 순효과가 없다. 그냥 split 한 것과 같은 상태여야 한다
     with puzzle("plain", FACES) as plain:

@@ -30,6 +30,7 @@ from .geometry.vector import (
 
 __all__ = [
     "MERGE_TOL",
+    "attach",
     "merge",
     "rotate",
     "mirror",
@@ -54,7 +55,10 @@ def _axis_set_cls():
 
 def _new_like(id: str, name: str, template):
     AxisSet = _axis_set_cls()
-    return AxisSet(id, turns=template.turns, name=name)
+    # 얹힌 곳은 물려준다. rotate/mirror 로 방향을 바꿔도 무엇에 물려 있는지는
+    # 그대로다 (§2.4)
+    return AxisSet(id, turns=template.turns, name=name,
+                   attached=getattr(template, "attached", None))
 
 
 def _same_direction(a, b, tol: float = MERGE_TOL) -> bool:
@@ -227,6 +231,35 @@ def invert(aset, *, id: str | None = None, name: str = ""):
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
         out.add(a.id, -a.normal, turns=a.turn_angles)
+    return out
+
+
+def attach(aset, to, *, id: str | None = None, name: str = ""):
+    """이 축 집합이 `to` 의 재료에 얹혀 있다고 선언한다 (§2.4).
+
+        inner = attach(octahedron("Inner"), to=shell)
+
+    기본값은 **코어**다. 코어에 얹힌 축은 코어가 움직일 때 — 즉 `outer`
+    회전에서 — 함께 돌고, cap 회전에서는 가만히 있는다.
+
+    어떤 집합에 얹히면 그 집합의 **회전 영역 안에 들어갈 때** 함께 돈다.
+    안쪽이든 바깥쪽이든 같다 — 무엇이 도느냐가 아니라 내가 그 안에 있느냐가
+    정한다.
+
+    **얹힌 사실은 선언하고, 어느 회전이 나를 움직이는지는 기하가 정한다.**
+    무엇에 물려 있는지는 경계면만 보고 알 수 없어 선언해야 하지만, 그 재료의
+    어느 층에 있는지는 이미 계산할 수 있는 값이다.
+
+    사슬로 이어진다 — A 가 B 에, B 가 코어에 얹혀 있으면 A 는 B 를 따라간다.
+    """
+    if to is not None and not isinstance(to, _axis_set_cls()):
+        raise TypeError(f"attach(to=...) needs an axis set, got {to!r}")
+    if to is not None and to.id == aset.id:
+        raise ValueError(f"{aset.id!r} cannot be attached to itself")
+    out = _new_like(id or aset.id, name or aset.name, aset)
+    out.attached = to
+    for a in aset:
+        out.add(a.id, a.normal, turns=a.turn_angles)
     return out
 
 

@@ -26,7 +26,7 @@ with puzzle("My Puzzle", faces) as p:
 - `puzzle(name, *axis_sets)` opens the puzzle. Its argument list is also the
   **slider list** — one cut-angle slider per axis set you pass here.
 - `split(...)` and `turn(...)` are the only two operations; everything else
-  (`turned`, `carry`, `region`, the queries) is sugar built from them or from
+  (`turned`, `attach`, `region`, the queries) is sugar built from them or from
   plain Python.
 - `as p` binds a `Puzzle` object. Inside the editor you never touch it
   directly — it exists mainly for the local vpython dev viewer (`p.run(...)`,
@@ -181,21 +181,40 @@ with puzzle("OctoCube Master", faces) as p:
 `with turned(...):` blocks nest freely — each undoes only its own rotation,
 in reverse order, when its `with` exits.
 
-## 4. `carry(mover, *carried)`
+## 4. What rides along: `attach(aset, to=host)`
 
-Some axes are rigidly attached to others, so that turning one turns them
-both. This is **declared, not derived** — there is no piece model to infer it
-from, and geometric conditions for "attached" flip back and forth as the cut
-angle changes anyway. Nothing is carried by default.
+Axes normally stay put while cuts move around them. When a turn should carry
+axes with it, what decides is **what those axes are mounted on**.
 
 ```python
-for x in outer:
-    carry(x, *[a for a in inner if angle_between(x, a) < 40])
+inner = attach(octahedron("Inner"), to=shell)
 ```
 
-A carried axis is excluded from automatic turn-angle derivation (§7.7 in
-design.md) — it moves with its mover, so there's no alignment of its own to
-solve for.
+Every axis set is mounted on something: the **core** by default, or another
+axis set. You declare the mount; geometry decides, per turn, whether you are
+in the part that moves.
+
+- **Mounted on the core.** You move when the core moves. The core sits on the
+  far side of a cut plane at distance `cos θ` from the centre, so it is in the
+  outer region while `θ < 90°` — meaning an `outer=True` turn carries it, and
+  a cap turn does not. At `θ ≥ 90°` **nothing carries the core**: opposing
+  caps overlap, and the band where they meet slides around a spherical core
+  without moving it. Mixup-family puzzles live in that range.
+- **Mounted on an axis set.** You move when that set turns and your position
+  falls inside the moving region — cap or outer alike. What matters is not
+  which side is turning but whether you are in it.
+- **Chains.** If A is mounted on B and B on the core, A follows B.
+
+Why only half of it is declared: what a mechanism is bolted to cannot be read
+off the cut boundary — an axle can pass through a layer into the core, and a
+sub-mechanism can sit on a single layer. But *which layer you are currently
+in* is already computable, and making you spell that out for every pair of
+axes is where a hand-written list goes stale.
+
+Carried axes are excluded from automatic turn-angle derivation (§7.7 in
+design.md) — they move with their host, so there is no alignment of their own
+to solve for. A turn that carries axes also cannot be conjugated (§7.10), so
+it costs more to evaluate.
 
 ## 5. Regions: `inside`, `outside`, `with region(...):`
 

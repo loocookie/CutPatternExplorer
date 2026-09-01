@@ -53,6 +53,8 @@ class AxisSet:
     axes: tuple[Axis, ...]
     cut_angle_input: str
     name: str = ""
+    # 이 집합이 얹혀 있는 집합의 id. None 이면 코어다 (§2.4)
+    attached: str | None = None
 
     def axis(self, axis_id: str) -> Axis:
         for a in self.axes:
@@ -67,18 +69,48 @@ class PuzzleFamily:
 
     axis_sets: tuple[AxisSet, ...]
     operations: tuple = field(default_factory=tuple)
-    # 축 실림 선언 ((돌리는 축 id, (함께 도는 축 id, ...)), ...)
-    #
-    # 축이 어느 재료에 물려 있는지는 경계면만으로 알 수 없다. 유도하려 하면
-    # 조건이 절단 각도의 함수가 되어 슬라이더를 움직일 때마다 축이 붙었다
-    # 떨어졌다 하는데, 메커니즘은 그렇게 바뀌지 않는다. 그래서 선언한다 (§2.1).
-    carries: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
-    def carried_by(self, axis_id: str) -> tuple[str, ...]:
-        for mover, carried in self.carries:
-            if mover == axis_id:
-                return carried
-        return ()
+    def attached_to(self, set_id: str) -> str | None:
+        """이 집합이 얹혀 있는 집합 id. None 이면 코어다 (§2.4)."""
+        for s in self.axis_sets:
+            if s.id == set_id:
+                return s.attached
+        raise KeyError(f"no such axis set: {set_id!r}")
+
+    def is_carried(
+        self,
+        set_id: str,
+        turn_set_id: str,
+        *,
+        outer: bool,
+        in_region: bool,
+        core_in_region: bool,
+    ) -> bool:
+        """이 회전이 `set_id` 의 축을 함께 돌리는가 (§2.4).
+
+        마운트를 따라 올라간다.
+
+        - 코어에 얹혀 있으면 **코어가 회전 영역 안에 있을 때** 돈다.
+          어느 쪽인지는 절단각이 정한다 — `core_in_region` 을 보라
+        - 어떤 집합에 얹혀 있고 그 집합이 지금 도는 집합이면, 내 위치가 회전
+          영역 안일 때 돈다
+        - 그 집합이 지금 도는 집합이 아니면, **그 집합이 실리는지**를 묻는다.
+          사슬이 이렇게 이어진다
+
+        `in_region` 은 묻는 축의 위치가 이 회전의 영역 안인지다.
+        """
+        seen: set[str] = set()
+        current = set_id
+        while True:
+            if current in seen:
+                raise ValueError(f"attached loop through {current!r}")
+            seen.add(current)
+            host = self.attached_to(current)
+            if host is None:
+                return core_in_region
+            if host == turn_set_id:
+                return in_region
+            current = host
 
     def find_axis(self, axis_id: str) -> tuple[AxisSet, Axis]:
         for s in self.axis_sets:
