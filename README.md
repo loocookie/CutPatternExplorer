@@ -12,6 +12,32 @@ sliders, so a whole family of puzzles is one definition.
 - Design and the reasoning behind it: [`docs/design.md`](docs/design.md) (Korean)
 - Browser build: `web/` (Pyodide + Canvas 2D)
 
+## It follows pCubes
+
+The way a puzzle is expressed here is taken wholesale from
+**[pCubes](https://github.com/BMouradov/pCubes)** by Boris Mouradov. Not the
+file format — the model:
+
+- a puzzle is a set of **axes**, and a cut is a circle on the sphere given by an
+  axis and a **cut angle** from it
+- the only two primitives are **split by an axis** and **turn a cap by an
+  angle**, and everything else is those two composed
+- the `Turn … Split … Undo` idiom — turn into a position, cut there, put it back
+  — is pCubes'. It is `with turned(...)` here
+
+If you know pCubes, you already know how to think in this tool.
+[The XML reference](https://github.com/BMouradov/pCubes/blob/main/Lazarus_sources/ReadMe.txt)
+is worth reading; `docs/design.md` §9.4 maps its commands onto this engine one
+by one, including the ones that are refused.
+
+What is different is the representation and the authoring layer. This engine
+stores **only the cut boundaries** and has no piece model, so it cannot do
+anything piece-shaped (bandaging, jumbling into a physical state); in exchange a
+cut angle can be a slider and a whole family of puzzles is one definition. And
+the definition is a Python script rather than XML, which is why there is no
+parser here and no `Script`/`Macro`/`ExecMacro` to reinvent control flow with
+(§9.1).
+
 ## Running it locally
 
 The Pyodide runtime is not in this repository (12 MB). Fetch it once:
@@ -63,7 +89,7 @@ with puzzle("OctoCube Master", c1) as p:
 The definitions under `examples/` are importable modules, so they are wrapped in
 `def build(): ... return p`. The editor has no such constraint.
 
-For the full language — every function in scope, `turned`/`carry`/`region`,
+For the full language — every function in scope, `turned`/`attach`/`region`,
 the axis-picking queries, and worked examples — see
 [docs/writing-definitions.md](docs/writing-definitions.md).
 
