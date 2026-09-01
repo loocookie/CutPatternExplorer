@@ -712,7 +712,9 @@ def test_received_code_does_not_run_until_you_press_run():
     assert "let live = false" in PAGE
 
     body = _function_body(PAGE, "async function drawStage()")
-    assert "!live" in body, "동의 전에도 소스를 실행하고 있다"
+    assert "engine.ready && live" in body, "동의 전에도 소스를 실행하고 있다"
+    marker = body.index("engine.axisScene")
+    assert body.index("engine.ready && live") < marker, "문이 먼저다"
 
     # 그 문은 성공한 평가 뒤에만 열린다
     run_body = _function_body(PAGE, "async function run()")
@@ -752,10 +754,37 @@ def test_one_checkbox_two_stages():
     assert "view.hidden.clear()" not in body, "목록을 다시 그릴 때 풀리면 안 된다"
 
     # 렌더러는 인덱스로 본다. 옮기는 곳은 무대에 올리는 자리 하나다
-    apply = _function_body(PAGE, "function applyHidden(scene)")
+    apply = _function_body(PAGE, "function putOnStage(scene)")
     assert "scene.axisSets.forEach" in apply and "hiddenIn[mode]" in apply
     stage = _function_body(PAGE, "async function drawStage()")
-    assert stage.count("applyHidden(") == 2, "두 무대 다 적용해야 한다"
+    assert stage.count("putOnStage(") == 2, "두 무대 다 적용해야 한다"
+
+
+def test_the_swatch_takes_its_colour_from_the_stage():
+    """옆칸 색과 화면의 색은 **같은 목록**에서 나와야 한다 (§11.5, §19.15).
+
+    렌더러는 `scene.axisSets` 의 인덱스로 팔레트를 고른다. 옆칸이 그것을
+    `info.axisSets` (= `puzzle()` 인자) 로 세면 두 목록이 다른 순간 어긋난다.
+    편집 모드의 마커 장면에는 **기준으로만 쓰는 집합도 들어 있으므로** (§19.12)
+    그런 집합 하나가 목록에 있으면 그 뒤가 통째로 한 칸씩 밀려 다른 색이 된다.
+
+    그래서 무대에 올린 장면의 목록을 들고 있다가 그걸로 센다.
+    """
+    assert "let stageSets = []" in PAGE
+
+    put = _function_body(PAGE, "function putOnStage(scene)")
+    assert "stageSets = scene.axisSets" in put, "무대와 같은 자리에서 갱신해야 한다"
+    assert "view.setScene(scene)" in put
+
+    body = _function_body(PAGE, "function buildAxisSets()")
+    assert "stageSets.indexOf(set.id)" in body
+    colour = body[body.index("PALETTE["):]
+    assert "PALETTE[group %" in colour, "색은 무대 인덱스로 고른다"
+    assert "PALETTE[drawn %" not in body, "puzzle() 인자 순서로 세면 어긋난다"
+
+    # 목록은 무대를 **따라** 그린다. 반대면 색이 한 박자 늦는다
+    stage = _function_body(PAGE, "async function drawStage()")
+    assert stage.index("putOnStage(") < stage.rindex("buildAxisSets()")
 
 
 def test_every_cut_input_gets_an_angle():
@@ -829,7 +858,7 @@ def test_a_blank_definition_clears_instead_of_erroring():
 
     cleared = _function_body(PAGE, "function clearStage()")
     for what in ("info = null", "lastCutScene = null", "els.sets.replaceChildren",
-                 "view.setScene(EMPTY_SCENE)"):
+                 "putOnStage(EMPTY_SCENE)"):
         assert what in cleared, what
 
 

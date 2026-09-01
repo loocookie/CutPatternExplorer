@@ -162,11 +162,11 @@
   </div>
 </aside>
 
-<script src="vocab.js?v=739ce2be"></script>
-<script src="render.js?v=739ce2be"></script>
-<script src="editor.js?v=739ce2be"></script>
-<script src="share.js?v=739ce2be"></script>
-<script src="app.js?v=739ce2be"></script>
+<script src="vocab.js?v=2e1da839"></script>
+<script src="render.js?v=2e1da839"></script>
+<script src="editor.js?v=2e1da839"></script>
+<script src="share.js?v=2e1da839"></script>
+<script src="app.js?v=2e1da839"></script>
 <script>
 "use strict";
 
@@ -277,12 +277,22 @@ let lastCutScene = null;
 // 어느 것이 꺼져 있었는지가 사라진다.
 const hiddenIn = { run: new Set(), edit: new Set() };
 
-/** id 로 든 것을 이 장면의 인덱스로 옮긴다. 렌더러는 인덱스로 본다 (§11.5). */
-function applyHidden(scene) {
+// 지금 무대에 올라간 장면의 축 집합 목록. **색과 감춤을 이것이 정한다.**
+//
+// 무대마다 목록이 다르다 — 절단 장면에는 `puzzle()` 인자만, 마커 장면에는
+// 이름 공간의 모든 집합이 있다 (§19.12). 옆칸의 색을 `info.axisSets` 로
+// 세면 편집 모드에서 어긋난다: 기준으로만 쓰는 집합이 마커 장면에서는 한
+// 칸을 차지하므로, 그 뒤가 통째로 한 칸씩 밀려 다른 색이 된다
+let stageSets = [];
+
+/** 장면을 무대에 올린다. id 로 든 것을 이 장면의 인덱스로 옮긴다 (§11.5). */
+function putOnStage(scene) {
+  stageSets = scene.axisSets;
   view.hidden.clear();
   scene.axisSets.forEach((id, i) => {
     if (hiddenIn[mode].has(id)) view.hidden.add(i);
   });
+  view.setScene(scene);
 }
 
 /** 무대에 무엇을 그릴지는 **모드가 정한다** (§19.15).
@@ -292,17 +302,12 @@ function applyHidden(scene) {
  * 절단은 `Run` 전까지 바뀌지 않는다.
  */
 async function drawStage() {
-  if (mode === "edit") {
-    if (!engine.ready || !live) {
-      console.debug("axis markers: skipped", { ready: engine.ready, live });
-      return;
-    }
+  if (mode === "edit" && engine.ready && live) {
     try {
       const out = await engine.axisScene(els.src.value);
+      putOnStage(out.scene);
       // 목록은 마커와 **같은 실행**에서 온다. 따로 가져오면 어긋난다
-      if (info) { info.sets = out.sets; buildAxisSets(); }
-      applyHidden(out.scene);
-      view.setScene(out.scene);
+      if (info) info.sets = out.sets;
     } catch (e) {
       // **타이핑 중에는 늘 깨져 있다** (§19.9). 직전 마커를 그대로 두고
       // 넘어간다 — 글자를 칠 때마다 빨간 칸이 깜빡이면 못 쓴다. 오류는
@@ -311,10 +316,14 @@ async function drawStage() {
       // 다만 삼키기만 하면 배선이 끊겼을 때도 조용해진다. 콘솔에는 남긴다
       console.debug("axis markers:", e && e.message ? e.message : e);
     }
+  } else if (mode === "edit") {
+    console.debug("axis markers: skipped", { ready: engine.ready, live });
   } else if (lastCutScene) {
-    applyHidden(lastCutScene);
-    view.setScene(lastCutScene);
+    putOnStage(lastCutScene);
   }
+  // **목록은 무대를 따라 그린다.** 옆칸 색이 무대에서 오므로 (stageSets) 이
+  // 순서여야 한다. 마커를 못 그린 경우에도 그린다 — 줄까지 사라지면 안 된다
+  if (info) buildAxisSets();
 }
 
 // 편집창을 고치면 마커가 따라 움직인다 (§19.15).
@@ -331,8 +340,8 @@ async function setMode(next) {
   mode = next;
   for (const el of document.querySelectorAll(".editonly")) el.hidden = next !== "edit";
   els.mode.textContent = next === "edit" ? "Close editor" : "Edit definition";
-  // Edit… 와 × 는 편집 모드 것이다. 목록을 다시 그려야 반영된다
-  if (info) buildAxisSets();
+  // Edit… 와 × 는 편집 모드 것이다. drawStage 가 무대를 바꾸고 목록을 다시
+  // 그린다 — 색이 무대에서 오므로 그 순서여야 한다
   await drawStage();
 }
 
@@ -526,6 +535,10 @@ function buildAxisSets() {
 
   for (const set of sets) {
     const drawn = info.axisSets.indexOf(set.id);
+    // **색은 지금 무대에 있는 장면이 정한다.** 무대에 없으면 (아직 한 번도
+    // 안 그렸거나, 실행 모드의 기준 전용 집합) 절단 목록으로 물러선다
+    const onStage = stageSets.indexOf(set.id);
+    const group = onStage >= 0 ? onStage : drawn;
     const cell = document.createElement("div");
     cell.className = "set";
     const row = document.createElement("div");
@@ -553,8 +566,8 @@ function buildAxisSets() {
       };
       row.append(box);
     }
-    if (drawn >= 0) {
-      sw.style.background = `rgb(${PALETTE[drawn % PALETTE.length]})`;
+    if (group >= 0) {
+      sw.style.background = `rgb(${PALETTE[group % PALETTE.length]})`;
     } else {
       sw.className = "sw off";
       sw.title = "Not passed to puzzle(...), so it is not drawn";
@@ -626,8 +639,7 @@ function clearStage() {
   els.sets.replaceChildren(Object.assign(document.createElement("legend"),
     { textContent: "Axis sets" }));
   els.stat.textContent = "";
-  view.hidden.clear();
-  view.setScene(EMPTY_SCENE);
+  putOnStage(EMPTY_SCENE);
 }
 
 async function run() {
