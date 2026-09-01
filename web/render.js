@@ -66,7 +66,20 @@ class SphereView {
     this.scene = null;
     this.view = null;          // 변환된 좌표. 장면이 바뀔 때만 다시 잡는다
     this.hidden = new Set();   // 꺼진 축 집합 인덱스 (§11.5)
+    // 축 집합별 팔레트 자리. **앱이 준다** (§11.5).
+    //
+    // 장면의 인덱스로 고르면 같은 집합이 무대마다 다른 색이 된다 — 절단
+    // 장면에는 `puzzle()` 인자만, 마커 장면에는 이름 공간의 모든 집합이
+    // 들어 있어 목록이 다르기 때문이다. 색은 정의가 정할 일이지 무대가
+    // 정할 일이 아니다. 안 주면 장면의 인덱스를 그대로 쓴다
+    this.colors = null;
     this._bindDrag();
+  }
+
+  /** 축 집합 group 의 색. §11.5 */
+  _rgb(group) {
+    const slot = this.colors ? this.colors[group] : group;
+    return PALETTE[slot % PALETTE.length];
   }
 
   setScene(scene) {
@@ -231,7 +244,7 @@ class SphereView {
       const group = scene.groups[i];
       if (this.hidden.has(group)) continue;
 
-      const rgb = PALETTE[group % PALETTE.length];
+      const rgb = this._rgb(group);
       const base = kind === MARKER ? STYLE.markerAlpha : STYLE.frontAlpha;
       const alpha = front ? base : base * STYLE.backAlpha;
       ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
@@ -274,7 +287,7 @@ class SphereView {
       if (vz <= 0) continue;
       const vx = m[0] * x + m[1] * y + m[2] * z;
       const vy = m[3] * x + m[4] * y + m[5] * z;
-      const rgb = PALETTE[group % PALETTE.length];
+      const rgb = this._rgb(group);
       const sx = cx + R * vx, sy = cy - R * vy;
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
       ctx.lineWidth = 3;

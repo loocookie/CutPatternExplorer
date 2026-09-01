@@ -760,31 +760,82 @@ def test_one_checkbox_two_stages():
     assert stage.count("putOnStage(") == 2, "두 무대 다 적용해야 한다"
 
 
-def test_the_swatch_takes_its_colour_from_the_stage():
-    """옆칸 색과 화면의 색은 **같은 목록**에서 나와야 한다 (§11.5, §19.15).
+def test_one_axis_set_is_one_colour_everywhere():
+    """축 집합의 색은 **정의가 정한다.** 무대도 옆칸도 못 바꾼다 (§11.5).
 
-    렌더러는 `scene.axisSets` 의 인덱스로 팔레트를 고른다. 옆칸이 그것을
-    `info.axisSets` (= `puzzle()` 인자) 로 세면 두 목록이 다른 순간 어긋난다.
-    편집 모드의 마커 장면에는 **기준으로만 쓰는 집합도 들어 있으므로** (§19.12)
-    그런 집합 하나가 목록에 있으면 그 뒤가 통째로 한 칸씩 밀려 다른 색이 된다.
+    렌더러는 장면의 `axisSets` 인덱스로 팔레트를 골랐고 옆칸은 `info.axisSets`
+    (= `puzzle()` 인자) 로 셌다. 세 목록이 다 달라서 세 군데 색이 어긋났다:
 
-    그래서 무대에 올린 장면의 목록을 들고 있다가 그걸로 센다.
+    - 편집 모드의 마커 장면에는 **기준으로만 쓰는 집합도 들어 있다** (§19.12).
+      그런 집합이 하나 있으면 뒤가 통째로 한 칸씩 밀린다
+    - 그래서 같은 집합이 실행 모드와 편집 모드에서 다른 색으로 나온다. 마커를
+      보고 고른 축이 Run 하면 다른 색이 되는 셈이라 못 쓴다
+
+    정의의 축 집합 목록(이름 공간에 묶인 순서)으로 한 번 세고, 옆칸과 렌더러가
+    **그 자리 하나**를 같이 쓴다.
     """
-    assert "let stageSets = []" in PAGE
+    assert "let colorOrder = []" in PAGE
 
-    put = _function_body(PAGE, "function putOnStage(scene)")
-    assert "stageSets = scene.axisSets" in put, "무대와 같은 자리에서 갱신해야 한다"
-    assert "view.setScene(scene)" in put
-
-    body = _function_body(PAGE, "function buildAxisSets()")
-    assert "stageSets.indexOf(set.id)" in body
-    colour = body[body.index("PALETTE["):]
-    assert "PALETTE[group %" in colour, "색은 무대 인덱스로 고른다"
-    assert "PALETTE[drawn %" not in body, "puzzle() 인자 순서로 세면 어긋난다"
-
-    # 목록은 무대를 **따라** 그린다. 반대면 색이 한 박자 늦는다
+    # 두 무대가 같은 목록을 준다. 색은 그 목록에서 나온다
+    order = _function_body(PAGE, "function setColorOrder(sets)")
+    assert "colorOrder = sets.map" in order
+    run_body = _function_body(PAGE, "async function run()")
+    assert "setColorOrder(info.sets)" in run_body
     stage = _function_body(PAGE, "async function drawStage()")
+    assert "setColorOrder(out.sets)" in stage
+
+    # 렌더러는 색을 스스로 안 고른다. 앱이 준 자리를 쓴다
+    put = _function_body(PAGE, "function putOnStage(scene)")
+    assert "view.colors = scene.axisSets.map(colorSlot)" in put
+    assert put.index("view.colors") < put.index("view.setScene"), "올리기 전에 줘야 한다"
+    render = (pathlib.Path(__file__).resolve().parents[1] / "web" / "render.js").read_text(encoding="utf-8")
+    assert "PALETTE[group %" not in render, "장면의 인덱스로 색을 고르고 있다"
+    assert "this.colors ? this.colors[group] : group" in render
+
+    # 옆칸도 같은 자리에서 고른다
+    body = _function_body(PAGE, "function buildAxisSets()")
+    assert "PALETTE[colorSlot(set.id) %" in body
+    assert "PALETTE[drawn %" not in body and "PALETTE[onStage %" not in body
+
+    # 무대의 목록은 이제 **감출지 말지**에만 쓴다
+    put_hidden = _function_body(PAGE, "function putOnStage(scene)")
+    assert "stageSets = scene.axisSets" in put_hidden
+    assert "stageSets.indexOf(set.id)" in body
+
+    # 목록은 무대를 **따라** 그린다. 반대면 어느 집합이 회색인지가 한 박자 늦다
     assert stage.index("putOnStage(") < stage.rindex("buildAxisSets()")
+    mode_body = _function_body(PAGE, "async function setMode(next)")
+    assert mode_body.index("drawStage()") < mode_body.index("buildAxisSets()")
+
+
+def test_dragging_a_slider_does_not_rebuild_the_slider():
+    """실행 모드의 다시 그리기가 목록을 건드리면 **드래그가 끊긴다.**
+
+    슬라이더를 미는 것이 곧 다시 그리는 것이다 — input -> refresh ->
+    drawStage. 거기서 목록을 갈아 끼우면 지금 잡고 있는 `<input>` 이 DOM 에서
+    사라져 포인터가 놓인다. 클릭은 한 번에 끝나니 멀쩡해 보이고 미는 것만
+    안 된다. 원인이 안 보이는 종류라 테스트로 못 박는다.
+
+    목록은 **목록이 바뀔 때** 그린다: 정의를 읽었을 때, 편집 중 실시간 갱신
+    때, 모드가 바뀌었을 때. 그림이 바뀔 때가 아니다.
+    """
+    stage = _function_body(PAGE, "async function drawStage()")
+    cut = stage[stage.index("lastCutScene"):]
+    assert "buildAxisSets()" not in cut, "실행 모드에서 다시 그리면 드래그가 끊긴다"
+
+    # 목록이 바뀌는 세 자리에는 있어야 한다
+    assert "buildAxisSets()" in _function_body(PAGE, "async function run()")
+    assert "buildAxisSets()" in _function_body(PAGE, "async function setMode(next)")
+    assert "buildAxisSets()" in stage[:stage.index("lastCutScene")], "실시간 갱신"
+
+
+def test_a_set_with_no_name_still_gets_a_colour():
+    """`puzzle("p", merge(a, b))` 처럼 쓰면 이름 공간에 안 묶여 정의의 목록에
+    없다. 색이 없다고 죽으면 안 된다 — 본 순서대로 뒤에 붙인다.
+    """
+    slot = _function_body(PAGE, "function colorSlot(id)")
+    assert "colorOrder.push(id)" in slot
+    assert "return colorOrder.length - 1" in slot
 
 
 def test_every_cut_input_gets_an_angle():
