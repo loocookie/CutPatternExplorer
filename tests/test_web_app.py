@@ -40,6 +40,11 @@ BOOT = (ROOT / "web" / "boot.py").read_text(encoding="utf-8")
 DEFAULT_SOURCE = _between(PAGE, "const DEFAULT_SOURCE = `")
 
 
+def _angles(info, theta):
+    """모든 절단 입력에 같은 각도. 정의에서 뽑으므로 기본 정의가 바뀌어도 산다."""
+    return json.dumps({k: theta for k in info["inputs"]})
+
+
 @pytest.fixture
 def browser_globals():
     """BOOT 를 실행한 namespace. worker 가 보는 것과 같다."""
@@ -57,10 +62,15 @@ def test_boot_defines_the_contract(browser_globals):
 def test_default_definition_runs_and_reports_its_inputs(browser_globals):
     """페이지가 처음 띄우는 정의가 실제로 도는가."""
     info = browser_globals["prepare"](DEFAULT_SOURCE)
-    assert info["name"] == "OctoCube Master"
-    assert info["inputs"] == ["cube1"]
-    assert info["axisSets"] == ["cube1"]
+    assert info["name"] == "Rose Diamond"
+    assert info["inputs"] == ["Octahedron 1", "Rhombic Dodecahedron 1"]
+    assert info["axisSets"] == info["inputs"]
     assert info["ops"] > 0
+
+    # 기준으로만 쓰는 집합이 들어 있다 (§19.12). 편집 모드 패널이 왜 있는지가
+    # 기본 화면에서 바로 보인다
+    assert [s["id"] for s in info["sets"]] == [
+        "Octahedron 1", "Tetrahedron 1", "Rhombic Dodecahedron 1"]
 
 
 def test_evaluate_returns_a_scene_the_renderer_can_draw(browser_globals):
@@ -69,8 +79,8 @@ def test_evaluate_returns_a_scene_the_renderer_can_draw(browser_globals):
     좌표는 여기 없다. JSON 을 태우면 평탄화로 아낀 것을 문자열 파싱으로 도로
     쓰므로 `scene_bytes` 로 따로 간다 (§11.1).
     """
-    browser_globals["prepare"](DEFAULT_SOURCE)
-    out = browser_globals["evaluate"](json.dumps({"cube1": 63.25}), 0.03)
+    info = browser_globals["prepare"](DEFAULT_SOURCE)
+    out = browser_globals["evaluate"](_angles(info, 63.25), 0.03)
 
     assert set(out) == {
         "starts", "counts", "groups", "kinds", "labels", "axisSets",
@@ -91,8 +101,8 @@ def test_coordinates_come_over_as_float64_bytes(browser_globals):
     """
     import array
 
-    browser_globals["prepare"](DEFAULT_SOURCE)
-    out = browser_globals["evaluate"](json.dumps({"cube1": 63.25}), 0.03)
+    info = browser_globals["prepare"](DEFAULT_SOURCE)
+    out = browser_globals["evaluate"](_angles(info, 63.25), 0.03)
     raw = browser_globals["scene_bytes"]()
 
     assert isinstance(raw, bytes)
@@ -108,10 +118,10 @@ def test_coordinates_come_over_as_float64_bytes(browser_globals):
 
 def test_illegal_turn_is_reported_not_raised(browser_globals):
     """슬라이더를 밀다 불법이 되어도 예외로 죽지 않는다 (§13.2)."""
-    browser_globals["prepare"](DEFAULT_SOURCE)
+    info = browser_globals["prepare"](DEFAULT_SOURCE)
     notes = []
     for theta in (5.0, 20.0, 44.0, 63.25, 80.0, 120.0, 170.0):
-        out = browser_globals["evaluate"](json.dumps({"cube1": theta}), 0.12)
+        out = browser_globals["evaluate"](_angles(info, theta), 0.12)
         notes.append(out["note"])
     assert any(n == "" for n in notes), "전 각도가 잘리면 정의가 잘못된 것이다"
 
@@ -442,6 +452,10 @@ def test_a_menu_edit_can_be_undone_once():
     되돌릴 수도 없게 된다.
     """
     assert 'id="undo"' in PAGE
+    # 나타났다 사라지는 것이 본질인 버튼은 자리를 비워 둔다. display 로 지우면
+    # 누를 때마다 옆의 것들이 밀렸다 당겨졌다 한다
+    assert 'id="undo" class="away"' in PAGE
+    assert ".away { visibility: hidden; }" in PAGE
     # 메뉴가 소스를 고치기 **전에** 직전 것을 기억해야 한다
     for call in ("addAxisSet", "removeAxisSet", "axisOp"):
         i = PAGE.index("rewrite(await engine." + call + "(")
@@ -486,7 +500,15 @@ def test_the_menu_avoids_colliding_axis_id_prefixes(browser_globals):
     있어서 바꾸면 다 깨진다. 손으로 지은 이름을 규칙에 맞추라고 할 수도 없다.
     메뉴가 비켜 간다.
     """
-    out = browser_globals["add_axis_set"](DEFAULT_SOURCE, "cube")
+    # 규칙에 어긋나게 지은 이름 — 사용자는 규칙을 모르고, 알아도 따를 이유가 없다
+    source = "\n".join([
+        'cube1 = cube("cube1")',
+        '',
+        'with puzzle("demo", cube1) as p:',
+        '    split(cube1)',
+        '',
+    ])
+    out = browser_globals["add_axis_set"](source, "cube")
     # 여기서 ValueError 가 났었다
     info = browser_globals["prepare"](out)
     assert info["axisSets"] == ["cube1", "Cube 2"], info["axisSets"]
@@ -816,7 +838,7 @@ def test_default_definition_needs_no_imports(browser_globals):
     """기본 정의가 그 편의를 보여 준다."""
     assert "import" not in DEFAULT_SOURCE
     info = browser_globals["prepare"](DEFAULT_SOURCE)
-    assert info["name"] == "OctoCube Master"
+    assert info["name"] == "Rose Diamond"
 
 
 def test_explicit_imports_still_work(browser_globals):
@@ -1033,15 +1055,15 @@ def test_degenerate_angles_do_not_break(browser_globals):
     RADIUS_EPS 판정이 split 과 build_arcs 에서 걸러 내므로 터지지 않고
     "자를 것이 없는 상태" 로 나온다. 그래서 슬라이더를 0~180 으로 연다.
     """
-    browser_globals["prepare"](DEFAULT_SOURCE)
+    info = browser_globals["prepare"](DEFAULT_SOURCE)
     for theta in (0.0, 180.0):
-        out = browser_globals["evaluate"](json.dumps({"cube1": theta}), 0.03)
+        out = browser_globals["evaluate"](_angles(info, theta), 0.03)
         assert out["carriers"] == 0
         assert out["length"] == pytest.approx(0.0)
         assert out["note"] == "", "불법 회전으로 잘리면 안 된다"
 
     # 바로 옆은 정상이다
-    out = browser_globals["evaluate"](json.dumps({"cube1": 0.05}), 0.03)
+    out = browser_globals["evaluate"](_angles(info, 0.05), 0.03)
     assert out["carriers"] > 0 and out["length"] > 0
 
 

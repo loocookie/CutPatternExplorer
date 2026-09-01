@@ -31,7 +31,11 @@
   body {
     margin: 0; font: 14px ui-sans-serif, system-ui, sans-serif;
     background: #fbfbfd; color: #1b1e26;
-    display: grid; grid-template-columns: 1fr 340px; height: 100vh;
+    /* 편집창이 코드를 담는 자리다. 폭이 좁으면 파이썬 한 줄이 화면을
+       넘어가고, 넘어가면 가로로 밀어야 한다 (§19.6). 그래픽을 줄이더라도
+       이쪽을 넓게 잡는다 */
+    display: grid; grid-template-columns: 1fr clamp(360px, 32vw, 560px);
+    height: 100vh;
   }
   /* grid 항목은 min-width/min-height 가 auto 라 내용보다 작아지지 않는다.
      캔버스 내부 해상도(= dpr 배)가 min-content 로 잡히면 열이 넓어지고,
@@ -51,7 +55,7 @@
   h1 { font-size: 13px; margin: 0; letter-spacing: .02em; color: #5b6172; }
   /* 긴 줄은 접지 않고 가로로 민다 (§19.6). 접으면 한 줄이 두 줄로 보여
      들여쓰기 열이 어긋나 보이는데, 파이썬은 그 열이 문법이다 */
-  textarea { width: 100%; height: 220px; padding: 10px; resize: vertical;
+  textarea { width: 100%; height: clamp(240px, 44vh, 620px); padding: 10px; resize: vertical;
              overflow-x: auto;
              font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
              border: 1px solid #dfe3ec; border-radius: 6px; background: #fff;
@@ -99,6 +103,9 @@
   /* UA 의 [hidden]{display:none} 은 **작성자 규칙에 진다.** .bar 가 flex 라
      hidden 을 걸어도 그대로 보인다. 모드 전환이 조용히 안 먹는 자리다 */
   [hidden] { display: none !important; }
+  /* 나타났다 사라지는 것이 본질인 버튼은 **자리를 비워 둔다** (§19.15).
+     display 로 지우면 옆의 것들이 밀렸다 당겨졌다 한다 */
+  .away { visibility: hidden; }
   .bar select { flex: 1; min-width: 0; padding: 5px; }
   .bar .msg { font-size: 12px; color: #7b8194; }
 </style>
@@ -127,7 +134,7 @@
   <div class="bar">
     <select id="addPick"></select>
     <button id="add">Add axis set</button>
-    <button id="undo" hidden>Undo</button>
+    <button id="undo" class="away">Undo</button>
   </div>
   <!-- wrap="off" 라야 긴 줄이 접히지 않고 가로로 스크롤된다 (§19.6) -->
   <textarea id="src" class="editonly" spellcheck="false" wrap="off"></textarea>
@@ -142,21 +149,28 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=20ddbc19"></script>
-<script src="render.js?v=20ddbc19"></script>
-<script src="editor.js?v=20ddbc19"></script>
-<script src="share.js?v=20ddbc19"></script>
-<script src="app.js?v=20ddbc19"></script>
+<script src="vocab.js?v=23532ebc"></script>
+<script src="render.js?v=23532ebc"></script>
+<script src="editor.js?v=23532ebc"></script>
+<script src="share.js?v=23532ebc"></script>
+<script src="app.js?v=23532ebc"></script>
 <script>
 "use strict";
 
-const DEFAULT_SOURCE = `cube1 = cube("cube1", turns=(45, -45, 90, -90, 180))
+const DEFAULT_SOURCE = `o1 = octahedron("Octahedron 1")
+t1 = tetrahedron("Tetrahedron 1", turns=(15, 120, 135, -120, -105))
 
-with puzzle("OctoCube Master", cube1) as p:
-    split(cube1)
-    for x in cube1:
-        with turned(x, 45):
-            split(*at_angle(x, 90, cube1))
+pair = lambda a: (a, at_angle(a, 180, o1)[0])
+
+rd1 = rhombic_dodecahedron("Rhombic Dodecahedron 1")
+
+with puzzle("Rose Diamond", o1, rd1) as p:
+    split(o1)
+    for i in range(4):
+        x, y = pair(nearest(t1[f"t1-{i}"], o1))
+        with turned(x, 15):
+            with turned(y, 15):
+                split(at_angle(x, 90, rd1, start=t1[f"t1-{(i+1)%4}"])[1::2])
 `;
 
 // 평가가 이만큼 끌면 Stop 을 내놓는다 (§19.15).
@@ -327,12 +341,12 @@ let undoSource = null;
 
 function remember(source) {
   undoSource = source;
-  els.undo.hidden = false;
+  els.undo.classList.remove("away");
 }
 
 function forgetUndo() {
   undoSource = null;
-  els.undo.hidden = true;
+  els.undo.classList.add("away");
 }
 
 els.undo.onclick = async () => {
