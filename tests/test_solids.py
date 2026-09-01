@@ -73,7 +73,7 @@ def test_platonic_is_face_transitive(factory, count, prefix):
 @pytest.mark.parametrize("factory,count,prefix", PLATONIC_COUNTS)
 def test_platonic_carries_no_static_turn_angles(factory, count, prefix):
     """회전각은 절단 각도의 함수라 프리셋에 박지 않는다 (engine.turns)."""
-    assert all(a.extra_turn_angles == () for a in factory())
+    assert all(a.turn_angles == () for a in factory())
 
 
 def test_octahedron_directions_are_cube_vertices():
@@ -217,9 +217,9 @@ def test_from_orbit_validates_the_seed():
         S.from_orbit("bad", (1, 1, 1), "O", 6, "q")
 
 
-def test_extra_turns_can_be_supplied_per_solid():
+def test_turns_can_be_supplied_per_solid():
     aset = S.cube("cube", turns=(45.0,))
-    assert all(a.extra_turn_angles == (45.0,) for a in aset)
+    assert all(a.turn_angles == (45.0,) for a in aset)
 
 
 # ---- 카탈란 다면체 -------------------------------------------------------

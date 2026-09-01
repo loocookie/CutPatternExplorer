@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from .engine.axes import Axis
 from .engine.axes import AxisSet as _EngineAxisSet
 from .engine.axes import PuzzleFamily
+from .engine.turns import matches_declared
 from .engine.operations import (
     EnterRegion,
     ExitRegion,
@@ -108,27 +109,27 @@ class AxisSet:
         self,
         id: str,
         axes: dict[str, tuple[float, float, float]] | None = None,
-        extra_turns: tuple[float, ...] = (),
+        turns: tuple[float, ...] = (),
         name: str = "",
     ) -> None:
         self.id = id
         self.name = name or id
-        self.extra_turns = tuple(float(a) for a in extra_turns)
+        self.turns = tuple(float(a) for a in turns)
         self._axes: list[Axis] = []
         for axis_id, normal in (axes or {}).items():
             self.add(axis_id, normal)
 
-    def add(self, axis_id: str, normal, extra_turns=None) -> Axis:
+    def add(self, axis_id: str, normal, turns=None) -> Axis:
         """축 하나를 넣는다.
 
         회전각은 절단 각도의 함수라 여기 저장하지 않는다 (engine.turns).
-        extra_turns 는 유도가 찾지 못하는 각을 그 축에만 명시하는 자리다.
+        turns 는 그 축이 돌 수 있는 각의 선언이다 (§7.11).
         생략하면 집합 기본값을 쓴다.
         """
         if any(a.id == axis_id for a in self._axes):
             raise ValueError(f"duplicate axis id {axis_id!r} in set {self.id!r}")
         axis = Axis.make(
-            axis_id, normal, self.extra_turns if extra_turns is None else extra_turns
+            axis_id, normal, self.turns if turns is None else turns
         )
         self._axes.append(axis)
         return axis
@@ -331,6 +332,11 @@ def carry(mover: Axis, *carried):
         _active().carries.append((mover.id, tuple(ids)))
 
 
+def _clean(value: float) -> str:
+    """각도를 사람이 읽는 모양으로. 45.0 은 45 로 적는다."""
+    return f"{value:g}"
+
+
 @dataclass
 class Puzzle:
     """with puzzle(...) 이 만드는 빌더. 블록을 벗어나면 family 가 완성된다."""
@@ -382,18 +388,38 @@ class Puzzle:
         return tuple(dict.fromkeys(s.cut for s in self.axis_sets))
 
     def check(self) -> None:
-        """실행 전 정적 검사. 참조하는 이름이 실제로 있는지 본다."""
+        """실행 전 정적 검사. 참조하는 이름이 실제로 있는지 본다.
+
+        선언된 회전각(§7.11)도 여기서 본다. **절단 각도와 무관한 정적 성질**
+        이라 이 자리가 맞다 — 회전 합법성(§7.1)이나 영역 판정(§6.3)은 각도의
+        함수라 evaluate 에서 on_illegal 정책을 타지만 (§13.2), 선언에 없는 각은
+        슬라이더를 어디에 두든 처음부터 틀린 것이다.
+        """
         if self.family is None:
             return
-        known_axes = {a.id for s in self.axis_sets for a in s}
+        known = {a.id: a for s in self.axis_sets for a in s}
         for i, op in enumerate(self.family.operations):
-            if isinstance(op, SplitByAxis) and op.axis not in known_axes:
+            if isinstance(op, SplitByAxis) and op.axis not in known:
                 raise ValueError(f"operation #{i}: no such axis {op.axis!r}")
-            if isinstance(op, Turn) and op.axis not in known_axes:
-                raise ValueError(f"operation #{i}: no such axis {op.axis!r}")
+            if isinstance(op, Turn):
+                if op.axis not in known:
+                    raise ValueError(f"operation #{i}: no such axis {op.axis!r}")
+                axis = known[op.axis]
+                if not matches_declared(axis, op.angle, op.outer):
+                    declared = ", ".join(_clean(d) for d in axis.turn_angles)
+                    hint = (
+                        f" an outer turn by {_clean(op.angle)} needs "
+                        f"{_clean(-op.angle)} declared, because turning the cap by "
+                        f"t leaves the same pattern as turning the outside by -t"
+                        if op.outer else ""
+                    )
+                    raise ValueError(
+                        f"operation #{i}: {op.axis!r} declares turn angles "
+                        f"({declared}) and {_clean(op.angle)} is not one of them.{hint}"
+                    )
         for mover, carried in self.family.carries:
             for axis_id in (mover, *carried):
-                if axis_id not in known_axes:
+                if axis_id not in known:
                     raise ValueError(f"carry declaration: no such axis {axis_id!r}")
 
     def evaluate(self, cut_angles: dict[str, float], **kwargs):

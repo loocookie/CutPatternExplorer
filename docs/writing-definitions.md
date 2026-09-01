@@ -99,15 +99,26 @@ If no preset fits, build a set directly from normals:
 AxisSet("Custom", axes={"top": (0, 0, 1), "bottom": (0, 0, -1)})
 ```
 
-**`turns=`** lists extra turn angles for a set, beyond what the engine
-derives on its own from the current cut state (the derivation looks at which
-axes' cut circles can land on one another — see design.md §7.7 if you want
-the geometry). Use it when you already know an angle the automatic search
-won't find:
+**`turns=`** declares which angles this set's axes may turn by:
 
 ```python
 faces = cube("faces", turns=(45, -45, 90, -90, 180))
 ```
+
+Leave it out and there is no constraint — any angle turns, like a parameter
+with no type annotation. Write it and `turn()` is checked against it when the
+`with puzzle(...)` block closes, so a typo fails immediately rather than
+quietly drawing the wrong pattern.
+
+**The declaration is in cap terms**, and an `outer=True` turn flips the sign.
+Turning the cap by `t` leaves the same pattern as turning the outside by `−t`
+(the two differ only by a rotation of the whole sphere), so declaring `-60`
+is what opens up `turn(x, 60, outer=True)`. Angles are a circle: `-90` and
+`270` are the same declaration. See design.md §7.11.
+
+A list like `45, -45, 90, -90, 180` is closed under sign flip, so cap and
+outer accept the same values — that is a property of that particular list,
+not a rule.
 
 ## 3. The two primitive operations
 
@@ -143,6 +154,12 @@ A turn is **legal only if that axis's cut circle is already a complete cut**
 — nothing splits it into an arc. If it isn't, the whole operation is
 rejected and nothing changes; there is no partial state to clean up. That's
 why `split(...)` almost always comes before the turns that depend on it.
+
+That legality depends on the current cut angle, so dragging a slider can make
+a turn illegal; the app reports it rather than crashing. Separately, if the
+axis set declared `turns=`, the angle must be one of the declared ones — that
+check is static (it doesn't depend on any slider) and happens as soon as the
+`with puzzle(...)` block closes.
 
 `turn` leaves the rotation in place. `with turned(...):` does the same thing
 but **rotates back at the end of the block**, so whatever you do inside —

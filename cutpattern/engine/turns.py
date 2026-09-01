@@ -30,7 +30,7 @@ a1 의 cap 반경 theta1, a2 의 절단원은 a2 에서 극각 theta2. a1 에서
 ----
 유도되는 것은 절단원끼리 맞아떨어지는 각이다. 축이 어느 재료에 물려 있는지는
 경계면만으로 알 수 없으므로, 실려 도는 축은 `carry` 로 선언하고 여기서 제외한다
-(§2.1). 유도가 못 찾는 각은 축의 `extra_turn_angles` 로 명시한다.
+(§2.1). 유도가 못 찾는 각은 축의 `turn_angles` 로 명시한다.
 """
 
 from __future__ import annotations
@@ -41,7 +41,8 @@ from collections import defaultdict
 from ..geometry.vector import clamp, orthonormal_basis
 from .axes import Axis, PuzzleFamily
 
-__all__ = ["ANGLE_TOL_DEG", "derived_turns", "available_turns", "rings_around"]
+__all__ = ["ANGLE_TOL_DEG", "derived_turns", "available_turns", "rings_around",
+           "declares", "matches_declared"]
 
 # 극각과 방위각을 같은 값으로 볼 허용 오차(도).
 # acos 는 인자가 +-1 근처에서 오차를 sqrt(eps) ~ 1e-8 rad 까지 키운다.
@@ -145,6 +146,34 @@ def derived_turns(
     return uniq
 
 
+def _circular_diff(a: float, b: float) -> float:
+    """0~360 을 고리로 보고 잰 차이."""
+    d = abs((a % 360.0) - (b % 360.0))
+    return min(d, 360.0 - d)
+
+
+def declares(axis: Axis) -> bool:
+    """이 축이 회전각을 선언했는가. 안 했으면 제약이 없다."""
+    return bool(axis.turn_angles)
+
+
+def matches_declared(axis: Axis, angle: float, outer: bool = False) -> bool:
+    """이 회전이 축에 선언된 각인가 (§7.11).
+
+    **선언이 비어 있으면 참이다.** 타입을 안 붙인 인자와 같다 — 안 적었으면
+    제약이 없고, 적었으면 검사한다.
+
+    **선언은 cap 기준이다.** cap 을 +t 돌린 상태는 outer 를 -t 돌린 상태와
+    (구 전체 회전 차이로) 같으므로, outer 회전은 부호를 뒤집어 본다. 그래서
+    `-60` 을 선언해 두면 `turn(x, 60, outer=True)` 가 열린다.
+    """
+    if not axis.turn_angles:
+        return True
+    want = (-angle if outer else angle)
+    return any(_circular_diff(want, float(d)) <= ANGLE_TOL_DEG
+               for d in axis.turn_angles)
+
+
 def available_turns(
     family: PuzzleFamily,
     axis: Axis,
@@ -153,14 +182,19 @@ def available_turns(
     outer: bool = False,
     carried: set[str] | None = None,
 ) -> list[float]:
-    """유도된 각과 축에 명시된 각의 합집합.
+    """유도된 각과 축에 선언된 각의 합집합.
 
     유도는 절단원이 맞아떨어지는 각만 찾는다. 그밖에 의미 있는 각이 있으면
-    축의 extra_turn_angles 로 넣는다.
+    축의 turn_angles 로 넣는다.
+
+    **outer 면 선언된 각의 부호를 뒤집어 얹는다.** 선언은 cap 기준이고
+    cap(+t) == outer(-t) 이기 때문이다 (matches_declared 와 같은 규칙).
+    부호 반전에 닫힌 목록(`45, -45, 90, -90, 180`)에서는 차이가 안 나지만,
+    비대칭 목록에서는 다른 값이 나온다.
     """
     values = derived_turns(family, axis, cut_angles, outer=outer, carried=carried)
-    for extra in axis.extra_turn_angles:
-        value = float(extra) % 360.0
+    for extra in axis.turn_angles:
+        value = (-float(extra) if outer else float(extra)) % 360.0
         if value < ANGLE_TOL_DEG:
             continue
         if not any(abs(value - v) <= ANGLE_TOL_DEG for v in values):

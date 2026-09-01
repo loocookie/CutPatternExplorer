@@ -157,7 +157,7 @@ def test_carried_axes_are_excluded():
 # ---- 명시 각과의 합집합 -------------------------------------------------
 
 
-def test_extra_turn_angles_are_unioned():
+def test_turn_angles_are_unioned():
     """유도가 못 찾는 각은 축에 명시한다."""
     cube = S.cube("cube", turns=(45.0,))
     fam = family_of(cube)
@@ -167,7 +167,7 @@ def test_extra_turn_angles_are_unioned():
     assert available_turns(fam, axis, angles) == pytest.approx([45.0, 90.0, 180.0, 270.0])
 
 
-def test_extra_turn_angles_do_not_duplicate_derived_ones():
+def test_turn_angles_do_not_duplicate_derived_ones():
     cube = S.cube("cube", turns=(90.0, 450.0))
     fam = family_of(cube)
     axis = list(cube)[0]

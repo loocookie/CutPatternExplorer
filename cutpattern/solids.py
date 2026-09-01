@@ -106,7 +106,7 @@ def from_normals(id: str, normals, prefix: str | None = None, turns=(),
     축 id 는 전 집합에서 유일해야 한다 (§5).
     """
     AxisSet = _axis_set_cls()
-    s = AxisSet(id, extra_turns=tuple(turns), name=name or id)
+    s = AxisSet(id, turns=tuple(turns), name=name or id)
     head = abbrev(id) if prefix is None else prefix
     # Axis 목록도 그대로 받는다 (§2.5)
     normals = [getattr(n, "normal", n) for n in normals]
@@ -338,7 +338,7 @@ def prism(n: int, id: str | None = None, turns=()):
     id = id or f"Prism {n}"
     head = abbrev(id)
     AxisSet = _axis_set_cls()
-    s = AxisSet(id, extra_turns=tuple(turns), name=f"{n}각기둥 면축")
+    s = AxisSet(id, turns=tuple(turns), name=f"{n}각기둥 면축")
     half = math.pi / n
     for i in range(n):
         phi = 2 * math.pi * i / n + half
@@ -358,7 +358,7 @@ def antiprism(n: int, id: str | None = None, turns=()):
     id = id or f"Antiprism {n}"
     head = abbrev(id)
     AxisSet = _axis_set_cls()
-    s = AxisSet(id, extra_turns=tuple(turns), name=f"{n}각엇각기둥 면축")
+    s = AxisSet(id, turns=tuple(turns), name=f"{n}각엇각기둥 면축")
     top, bottom = _antiprism_vertices(n)
     k = 0
     for i in range(n):

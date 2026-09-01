@@ -54,7 +54,7 @@ def _axis_set_cls():
 
 def _new_like(id: str, name: str, template):
     AxisSet = _axis_set_cls()
-    return AxisSet(id, extra_turns=template.extra_turns, name=name)
+    return AxisSet(id, turns=template.turns, name=name)
 
 
 def _same_direction(a, b, tol: float = MERGE_TOL) -> bool:
@@ -88,7 +88,7 @@ def merge(id: str, *sets, name: str = "", tol: float = MERGE_TOL):
                 axis_id = f"{axis.id}_{suffix}"
                 suffix += 1
             used.add(axis_id)
-            out.add(axis_id, axis.normal, extra_turns=axis.extra_turn_angles)
+            out.add(axis_id, axis.normal, turns=axis.turn_angles)
     return out
 
 
@@ -176,7 +176,7 @@ def rotate(
 
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
-        out.add(a.id, matrix @ a.normal, extra_turns=a.extra_turn_angles)
+        out.add(a.id, matrix @ a.normal, turns=a.turn_angles)
     return out
 
 
@@ -214,7 +214,7 @@ def mirror(aset, *, normal, id: str | None = None, name: str = ""):
     )
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
-        out.add(a.id, matrix @ a.normal, extra_turns=a.extra_turn_angles)
+        out.add(a.id, matrix @ a.normal, turns=a.turn_angles)
     return out
 
 
@@ -226,7 +226,7 @@ def invert(aset, *, id: str | None = None, name: str = ""):
     """
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
-        out.add(a.id, -a.normal, extra_turns=a.extra_turn_angles)
+        out.add(a.id, -a.normal, turns=a.turn_angles)
     return out
 
 
@@ -262,7 +262,7 @@ def remove(aset, *axes, id: str | None = None, name: str = ""):
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
         if a.id not in drop:
-            out.add(a.id, a.normal, extra_turns=a.extra_turn_angles)
+            out.add(a.id, a.normal, turns=a.turn_angles)
     return out
 
 
@@ -275,7 +275,7 @@ def keep(aset, *axes, id: str | None = None, name: str = ""):
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
         if a.id in wanted:
-            out.add(a.id, a.normal, extra_turns=a.extra_turn_angles)
+            out.add(a.id, a.normal, turns=a.turn_angles)
     return out
 
 
@@ -286,5 +286,5 @@ def rename(aset, mapping: dict[str, str], *, id: str | None = None, name: str = 
         raise KeyError(f"no such axes: {sorted(unknown)} in set {aset.id!r}")
     out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
-        out.add(mapping.get(a.id, a.id), a.normal, extra_turns=a.extra_turn_angles)
+        out.add(mapping.get(a.id, a.id), a.normal, turns=a.turn_angles)
     return out

@@ -20,21 +20,24 @@ class Axis:
         cut circle  : n·x = cos(theta)
         turn region : n·x >= cos(theta)   (바깥쪽이면 <=)
 
-    회전각은 여기 저장하지 않는다. 현재 절단 각도에 따라 달라지므로
-    engine.turns.derived_turns 로 유도한다 (§7). extra_turn_angles 는 유도가
-    찾지 못하는 각을 명시하는 자리다.
+    turn_angles 는 이 축이 돌 수 있는 각의 **선언**이다 (§7.11). 비어 있으면
+    제약이 없고, 적혀 있으면 그 각으로만 돈다 — 정적 검사라 `Puzzle.check()`
+    에서 본다. 선언은 cap 기준이고, outer 회전은 부호를 뒤집어 본다.
+
+    유도되는 회전각(engine.turns.derived_turns, §7.7)은 별개다. 그쪽은 현재
+    절단 각도의 함수라 여기 저장하지 않는다.
     """
 
     id: str
     normal: Vec3
-    extra_turn_angles: tuple[float, ...] = ()
+    turn_angles: tuple[float, ...] = ()
 
     @staticmethod
-    def make(id: str, normal, extra_turn_angles=()) -> "Axis":
+    def make(id: str, normal, turn_angles=()) -> "Axis":
         return Axis(
             id=id,
             normal=normalize(normal),
-            extra_turn_angles=tuple(float(a) for a in extra_turn_angles),
+            turn_angles=tuple(float(a) for a in turn_angles),
         )
 
 
