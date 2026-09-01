@@ -451,8 +451,12 @@ def test_the_two_modes_split_the_sidebar():
         return "editonly" in line
 
     # 코드에 딸린 것은 편집 모드 것이다
-    for tag_id in ('id="src"', 'id="shared"', 'id="vocab"'):
+    for tag_id in ('id="src"', 'id="shared"'):
         assert marked(tag_id), tag_id + " 가 편집 모드 것이어야 한다"
+
+    # 어휘 목록과 문서 링크는 한 줄에 묶여 그 줄이 편집 모드 것이다
+    row = PAGE[PAGE.index('class="bar editonly vocabrow"'):PAGE.index("</aside>")]
+    assert 'id="vocab"' in row and 'id="docs"' in row
 
     # 오류와 축 집합 목록은 두 모드에 다 있다. 실행 모드에서 슬라이더를 밀다
     # 죽을 수 있고, 갈 곳 없는 오류는 없는 오류보다 나쁘다.
@@ -790,6 +794,86 @@ def test_the_run_stage_has_no_markers():
     render = (ROOT / "web" / "render.js").read_text(encoding="utf-8")
     assert "showMarkers" not in render, "늘 켜져 있는 스위치는 스위치가 아니다"
     assert "showLabels" not in render
+
+
+def test_removing_the_last_axis_set_leaves_nothing(browser_globals):
+    """마지막 축 집합을 지우면 `with puzzle` 블록째 간다 (§19.9).
+
+    축 집합 없는 퍼즐은 없으므로 이것이 맞다. 남는 소스가 비는 것도 맞다.
+    """
+    source = "\n".join([
+        'c1 = cube("Cube 1")',
+        '',
+        'with puzzle("Demo", c1) as p:',
+        '    split(c1)',
+        '',
+    ])
+    assert browser_globals["remove_axis_set"](source, "Cube 1").strip() == ""
+
+
+def test_a_blank_definition_clears_instead_of_erroring():
+    """**빈 정의는 오류가 아니다.**
+
+    마지막 축 집합을 `×` 로 지우면 소스가 빈다. 그것을 prepare 에 넘기면
+    "no puzzle block" 으로 죽고, run 이 던지면 목록이 다시 안 그려져 방금
+    지운 슬라이더가 화면에 남는다 — 지웠는데 안 없어지는 것으로 보인다.
+
+    비어 있지 않은데 puzzle 블록이 없는 경우는 그대로 오류다. 그 메시지는
+    `return p` 로 끝낸 사람을 가르치는 자리다 (§19.7).
+    """
+    body = _function_body(PAGE, "async function run()")
+    assert "els.src.value.trim()" in body
+    assert body.index("els.src.value.trim()") < body.index("engine.prepare"), \
+        "prepare 에 넘기기 전에 걸러야 한다"
+    assert "clearStage()" in body
+
+    cleared = _function_body(PAGE, "function clearStage()")
+    for what in ("info = null", "lastCutScene = null", "els.sets.replaceChildren",
+                 "view.setScene(EMPTY_SCENE)"):
+        assert what in cleared, what
+
+
+def test_an_empty_set_list_is_not_a_missing_one():
+    """**빈 목록과 목록 없음은 다르다** (§19.15).
+
+    편집창을 비우면 실시간 갱신이 빈 목록을 준다. 길이로 판정하면 그때 마지막
+    `Run` 의 `axisSets` 로 되돌아가 이미 사라진 집합이 유령으로 남고, 그 줄의
+    `×` 는 없는 이름을 지우려다 죽는다:
+
+        no axis set named 'Rhombic Dodecahedron 1' in this definition
+    """
+    body = _function_body(PAGE, "function buildAxisSets()")
+    assert "Array.isArray(info.sets)" in body
+    assert "info.sets.length" not in body, "길이로 판정하면 빈 목록이 유령이 된다"
+
+
+def test_a_blank_source_reports_no_axis_sets(browser_globals):
+    """빈 소스는 빈 목록이다. 오류가 아니다 (§19.15)."""
+    out = browser_globals["axis_scene"]("")
+    assert out["sets"] == []
+    assert out["axisSets"] == []
+    assert out["starts"] == []
+
+
+def test_the_docs_link_points_at_a_file_that_exists():
+    """편집 모드에서 문서로 나가는 길 (§19.7).
+
+    `docs/` 는 배포에 안 올라가므로 (§19.13) GitHub 이 렌더한 쪽으로 건다.
+    그래서 저장소 안의 파일과 링크가 조용히 어긋날 수 있다 — 여기서 묶는다.
+    """
+    import re
+
+    tag = PAGE[PAGE.index('id="docs"'):]
+    href = re.search(r'href="([^"]+)"', tag).group(1)
+    assert href.startswith("https://github.com/"), href
+
+    rel = href.split("/blob/main/", 1)[1]
+    assert (ROOT / rel).exists(), rel
+
+    # 새 탭으로 연다. 같은 탭이면 쓰던 정의가 날아간다
+    head = tag[:tag.index(">")]
+    assert 'target="_blank"' in head or 'target="_blank"' in PAGE[
+        PAGE.index('id="docs"') - 200:PAGE.index('id="docs"')]
 
 
 def test_engine_can_be_killed():

@@ -123,3 +123,10 @@ when they go stale.
 Code comments and `docs/design.md` are in Korean; everything a user sees is in
 English. The comments carry the reasoning behind each decision and are worth
 more to a maintainer than a translation would be.
+
+## How it was built
+
+Written with [Claude Code](https://claude.com/claude-code), working from the
+design in `docs/design.md`. That document came first and is still the source of
+truth: every non-obvious decision is written down there with the reasoning that
+produced it, and the code cites its section numbers.

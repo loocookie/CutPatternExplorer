@@ -324,6 +324,49 @@ Split all six faces, then for each one, rotate 45° and split the four axes
 perpendicular to it — recorded in the rotated frame, then carried back when
 `with turned` exits. That's what produces the octagonal cut pattern.
 
+### Mixup Plus
+
+```python
+faces = cube("faces", turns=(45, -45, 90, -90, 180))
+
+with puzzle("Mixup Plus", faces) as p:
+    split(faces)
+    for x in faces:
+        opposite = at_angle(x, 180, faces)[0]
+        with turned(x, 45, outer=True):
+            with turned(opposite, 45):
+                split(faces)
+```
+
+**Set the cut angle above 90°** — around 100° is a good place to look. This is
+the one example where that matters, and it is what makes it a Mixup rather than
+some other puzzle; see below.
+
+Mixup-family puzzles turn the middle slice by 45°. A slice turn is not a
+primitive here — it is a composition:
+
+```text
+turn(U, 45, outer=True)    everything except U's cap
+turn(D, 45)                puts D's cap back
+```
+
+`D` is the axis opposite `U`, so it shares `U`'s line; rotating about `U` by
+`+45°` is rotating about `D` by `−45°`, and the second turn cancels exactly
+that. What is left turning is the band between the two caps.
+
+At 45° the R/L/F/B circles no longer line up — the arc arriving at azimuth 22.5°
+comes from a different circle than the one that was there. Mixup Plus accepts
+the thin pieces that misalignment creates, which means cutting at the rotated
+position and keeping those cuts: that is the `split(faces)` inside the block.
+When the block exits, the new arcs ride back out to their permanent home.
+
+**Why above 90°.** Cutting deeper than 90° is what makes opposing caps overlap,
+and the band where they overlap is the middle layer. That layer turns without
+taking the core with it — such puzzles are built around a spherical core the
+middle slides on. Below 90° the core sits in the outer region instead, so
+`outer=True` drags it and every core-mounted axis along, and you get a
+different puzzle (see §2.4 in design.md).
+
 ### Rose Diamond (the editor's default)
 
 ```python
