@@ -332,10 +332,15 @@ def test_catalan_seed_errors_are_caught_by_the_orbit_size():
 
 
 def test_pentagonal_icositetrahedron_groups_by_cube_symmetry():
-    """네 예시. 24개 축이 정육면체 면 6개마다 4개씩 나뉜다."""
+    """네 예시. 24개 축이 정육면체 면 6개마다 4개씩 나뉜다.
+
+    **기준이 먼저다.** 질의는 전부 그 순서다 (`at_angle`, `angles_from`,
+    `nearest`). 전에는 이것만 반대였는데, 두 인자가 둘 다 축 집합이라 잘못
+    써도 예외가 안 나고 결과만 틀렸다.
+    """
     from cutpattern.query import group_by_nearest
 
-    groups = group_by_nearest(S.pentagonal_icositetrahedron(), S.cube("cube"))
+    groups = group_by_nearest(S.cube("cube"), S.pentagonal_icositetrahedron())
     assert len(groups) == 6
     assert sorted(len(v) for v in groups.values()) == [4] * 6
 

@@ -192,13 +192,17 @@ def rotate(
 #     orbit(pi_seed, "Oh") -> 48        반사를 넣으면 두 손이 모두 생긴다
 
 
-def mirror(aset, normal=(0, 0, 1), *, id: str | None = None, name: str = ""):
+def mirror(aset, *, normal, id: str | None = None, name: str = ""):
     """원점을 지나고 `normal` 을 법선으로 하는 평면에 대해 반사한다.
 
     손대칭 입체의 반대 손을 만드는 데 쓴다.
 
         left  = pentagonal_icositetrahedron()
-        right = mirror(left, (0, 0, 1), id="pi_right")
+        right = mirror(left, normal=(0, 0, 1), id="pi_right")
+
+    **`normal` 에 기본값을 두지 않는다.** 기본값이 있으면 `mirror(a)` 가 말없이
+    xy 평면을 고르는데, 어느 평면에 비추었는지가 코드에 없으면 고칠 곳도 없다.
+    `rotate` 가 `axis`/`angle` 을 드러내는 것과 같은 이유다 (§19.12).
     """
     n = normalize(normal)
     # 반사 행렬 I - 2 n n^T
@@ -275,12 +279,12 @@ def keep(aset, *axes, id: str | None = None, name: str = ""):
     return out
 
 
-def rename(aset, mapping: dict[str, str], id: str | None = None):
+def rename(aset, mapping: dict[str, str], *, id: str | None = None, name: str = ""):
     """축 id 를 바꾼다. 자동 번호가 마음에 들지 않을 때 쓴다."""
     unknown = set(mapping) - {a.id for a in aset}
     if unknown:
         raise KeyError(f"no such axes: {sorted(unknown)} in set {aset.id!r}")
-    out = _new_like(id or aset.id, aset.name, aset)
+    out = _new_like(id or aset.id, name or aset.name, aset)
     for a in aset:
         out.add(mapping.get(a.id, a.id), a.normal, extra_turns=a.extra_turn_angles)
     return out

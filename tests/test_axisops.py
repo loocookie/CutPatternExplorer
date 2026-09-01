@@ -265,7 +265,7 @@ def test_carry_outside_a_puzzle_block_is_rejected():
 
 
 def test_mirror_is_an_improper_isometry():
-    m = mirror(S.cube("cube"), (0, 0, 1))
+    m = mirror(S.cube("cube"), normal=(0, 0, 1))
     assert len(m) == len(S.cube("cube"))
     assert all(float(np.linalg.norm(a.normal)) == pytest.approx(1.0) for a in m)
     # 사잇각은 보존된다. 반사는 등거리사상이다
@@ -273,14 +273,14 @@ def test_mirror_is_an_improper_isometry():
 
 
 def test_mirror_twice_is_identity():
-    once = mirror(S.icosahedron("icosahedron"), (1, 2, 3))
-    twice = mirror(once, (1, 2, 3))
+    once = mirror(S.icosahedron("icosahedron"), normal=(1, 2, 3))
+    twice = mirror(once, normal=(1, 2, 3))
     assert same_directions(twice, S.icosahedron("icosahedron"))
 
 
 def test_mirror_of_an_achiral_solid_gives_the_same_directions_here():
     """정육면체는 z=0 평면 반사가 방향집합을 그대로 둔다."""
-    assert same_directions(mirror(S.cube("cube"), (0, 0, 1)), S.cube("cube"))
+    assert same_directions(mirror(S.cube("cube"), normal=(0, 0, 1)), S.cube("cube"))
 
 
 @pytest.mark.parametrize(
@@ -314,7 +314,7 @@ def test_both_hands_merge_into_the_full_group_orbit(key, full_group_name):
     from cutpattern.geometry.symmetry import orbit
 
     left = S.CATALAN[key]()
-    right = mirror(left, (0, 0, 1), id=f"{key}_mirror")
+    right = mirror(left, normal=(0, 0, 1), id=f"{key}_mirror")
     both = merge("both", left, right)
     full = S.from_normals(
         "full", orbit(S._CATALAN_SEEDS[key][0], full_group_name), "f"
@@ -356,6 +356,6 @@ def test_same_directions_ignores_order_and_names():
 def test_mirror_and_invert_do_not_mutate_the_source():
     before = [a.id for a in S.cube("cube")]
     c = S.cube("cube")
-    mirror(c, (0, 0, 1))
+    mirror(c, normal=(0, 0, 1))
     invert(c)
     assert [a.id for a in c] == before

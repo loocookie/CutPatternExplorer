@@ -245,10 +245,18 @@ merge(id, *sets)                    같은 방향은 먼저 온 쪽만
 rotate(s, axis=..., angle=...)      축과 각
 rotate(s, pairs=[(a,a2), (b,b2)])   두 쌍의 대응. 사잇각이 안 맞으면 거부
 rotate(s, quaternion=(w,x,y,z))
-mirror(s, normal)                   평면 반사
+mirror(s, normal=...)               평면 반사. 기본값을 두지 않는다
 invert(s)                           원점 반전
 remove(s, *axes) / keep(s, *axes) / rename(s, mapping)
 ```
+
+`mirror` 의 `normal` 에 **기본값을 두지 않는다.** 있으면 `mirror(s)` 가 말없이
+xy 평면을 고르는데, 어느 평면에 비추었는지가 코드에 없으면 고칠 곳도 없다.
+`rotate` 가 `axis`/`angle` 을 드러내는 것과 같은 이유다 (§19.12).
+
+`merge` 만 id 가 앞에 온다. 여럿을 합쳐 **새것을 만드는** 것이라 `puzzle(name,
+*axis_sets)` 와 같은 모양이고, 나머지는 하나를 변형하는 것이라 `id=` 가
+곁가지다.
 
 반사는 `det = −1` 이라 회전이 아니다. `rotate` 로는 만들 수 없다. **손대칭 입체의 반대 손**을 만들려면 반사가 필요하다.
 
@@ -257,7 +265,7 @@ remove(s, *axes) / keep(s, *axes) / rename(s, mapping)
 ```
 orbit(pi_seed, "O")  → 24        한 손
 orbit(pi_seed, "Oh") → 48        두 손
-merge(pi, mirror(pi)) 와 같다
+merge(id, pi, mirror(pi, normal=...)) 와 같다
 ```
 
 나머지 11종과 정다면체는 거울상이 (회전을 허용하면) 자기 자신과 같으므로 `mirror` 가 새 입체를 만들지 않는다.
@@ -272,8 +280,13 @@ merge(pi, mirror(pi)) 와 같다
 angle_between(a, b)
 at_angle(ref, degrees, *targets)
 angles_from(ref, *targets)            {각: [축들]}
-group_by_nearest(source, reference)
+nearest(ref, *targets)                가장 가까운 축 하나
+group_by_nearest(ref, *targets)       {기준 축 id: [축들]}
 ```
+
+**기준이 먼저다.** 넷이 다 그 순서다. 전에는 `group_by_nearest` 만 반대였는데,
+두 인자가 둘 다 축 집합이라 잘못 써도 예외가 안 나고 **결과만 틀렸다.** 이름이
+같은 자리를 뜻하지 않는 것은 문서로 못 막는다.
 
 질의는 `at_angle` 하나로 충분하다. 수직(90), 반대(180), 자기 자신(0)이 전부 그 특수한 경우이고, 입체에 따라 수직인 축이나 반대 축이 아예 없을 수도 있다. 자주 쓰는 조합은 파이썬 함수로 묶는다.
 

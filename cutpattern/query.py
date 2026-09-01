@@ -204,19 +204,23 @@ def nearest(reference, *targets) -> Axis:
     return max(axes, key=lambda a: float(a.normal @ ref))
 
 
-def group_by_nearest(source, reference) -> dict[str, list[Axis]]:
-    """source 의 축들을 가장 가까운 reference 축으로 분류한다.
+def group_by_nearest(reference, *targets) -> dict[str, list[Axis]]:
+    """targets 의 축들을 가장 가까운 reference 축으로 분류한다.
 
     대칭이 낮은 축 집합을 익숙한 대칭으로 읽을 때 쓴다.
 
-        group_by_nearest(pentagonal_icositetrahedron(), cube())
+        group_by_nearest(cube(), pentagonal_icositetrahedron())
         -> 정육면체 면 6개마다 4개씩
+
+    **기준이 먼저다.** 이 파일의 질의는 전부 그렇다 (`at_angle`, `angles_from`,
+    `nearest`). 전에는 이것만 반대였는데, 두 인자가 둘 다 축 집합이라 잘못
+    써도 예외가 안 나고 **결과만 틀렸다.**
     """
     ref_axes = axes_of(reference)
     if not ref_axes:
         raise ValueError("the reference axis set is empty")
     groups: dict[str, list[Axis]] = {a.id: [] for a in ref_axes}
-    for a in axes_of(source):
+    for a in axes_of(*targets):
         best = max(ref_axes, key=lambda r: float(r.normal @ a.normal))
         groups[best.id].append(a)
     return groups
