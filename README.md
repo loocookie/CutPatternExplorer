@@ -63,6 +63,10 @@ with puzzle("OctoCube Master", c1) as p:
 The definitions under `examples/` are importable modules, so they are wrapped in
 `def build(): ... return p`. The editor has no such constraint.
 
+For the full language — every function in scope, `turned`/`carry`/`region`,
+the axis-picking queries, and worked examples — see
+[docs/writing-definitions.md](docs/writing-definitions.md).
+
 ### Naming
 
 ```
