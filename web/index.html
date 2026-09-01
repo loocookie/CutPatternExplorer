@@ -149,11 +149,11 @@
   </details>
 </aside>
 
-<script src="vocab.js?v=d0fc0e9b"></script>
-<script src="render.js?v=d0fc0e9b"></script>
-<script src="editor.js?v=d0fc0e9b"></script>
-<script src="share.js?v=d0fc0e9b"></script>
-<script src="app.js?v=d0fc0e9b"></script>
+<script src="vocab.js?v=fa49d597"></script>
+<script src="render.js?v=fa49d597"></script>
+<script src="editor.js?v=fa49d597"></script>
+<script src="share.js?v=fa49d597"></script>
+<script src="app.js?v=fa49d597"></script>
 <script>
 "use strict";
 
@@ -182,6 +182,14 @@ const SLOW_MS = 5000;
 
 // 새 축 집합이 얹혔을 때 쓸 절단 각도
 const DEFAULT_ANGLE = 60;
+
+// 기본 정의의 시작 각도. 정의마다 잘 보이는 각이 다르므로 60 하나로는 모자란다.
+// 이름이 위 DEFAULT_SOURCE 의 puzzle() 인자와 어긋나면 조용히 무시되므로
+// 테스트가 둘을 묶어 둔다
+const DEFAULT_ANGLES = {
+  "Octahedron 1": 90,
+  "Rhombic Dodecahedron 1": 30,
+};
 
 // 조작 중 / 멎은 뒤 tessellation (§12.3). 조작 중에는 거칠게 그린다
 const DRAG_STEP = 0.12;
@@ -733,6 +741,7 @@ async function start() {
   // 사라지면 안 된다
   if (shared === null) {
     els.src.value = DEFAULT_SOURCE;
+    Object.assign(angles, DEFAULT_ANGLES);
   } else {
     els.src.value = shared;
     // 각도는 코드와 별도 조각이다. 없거나 손상됐으면 null — 코드를 읽는 것을

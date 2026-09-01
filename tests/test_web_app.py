@@ -73,6 +73,32 @@ def test_default_definition_runs_and_reports_its_inputs(browser_globals):
         "Octahedron 1", "Tetrahedron 1", "Rhombic Dodecahedron 1"]
 
 
+def test_the_default_angles_name_real_inputs(browser_globals):
+    """시작 각도의 이름이 정의와 어긋나면 **조용히 무시된다**.
+
+    `angles[id] === undefined` 일 때만 기본값을 채우므로 (§13), 오타가 있으면
+    그 슬라이더만 60 에서 시작하고 아무 오류도 안 난다. 여기서 묶어 둔다.
+    """
+    import json
+
+    block = PAGE.split("const DEFAULT_ANGLES = ")[1].split("};")[0]
+    declared = {
+        m.group(1): float(m.group(2))
+        for m in re.finditer(r'"([^"]+)":\s*(-?[\d.]+)', block)
+    }
+    assert declared, block
+
+    info = browser_globals["prepare"](DEFAULT_SOURCE)
+    assert set(declared) <= set(info["inputs"]), (
+        sorted(set(declared) - set(info["inputs"])))
+
+    # 그 각도로 실제로 돌아야 한다 — 잘리면 첫 화면이 잘린 채로 뜬다
+    angles = {k: declared.get(k, 60.0) for k in info["inputs"]}
+    out = browser_globals["evaluate"](json.dumps(angles), 0.03)
+    assert out["carriers"] > 0
+    assert out["note"] == "", out["note"]
+
+
 def test_evaluate_returns_a_scene_the_renderer_can_draw(browser_globals):
     """render.js 가 읽는 필드가 전부 있고 길이가 맞는가.
 
