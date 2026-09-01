@@ -99,26 +99,37 @@ If no preset fits, build a set directly from normals:
 AxisSet("Custom", axes={"top": (0, 0, 1), "bottom": (0, 0, -1)})
 ```
 
-**`turns=`** declares which angles this set's axes may turn by:
+**`turns=`** declares the **orientations** an axis may rest in — not the
+amounts it may turn by:
 
 ```python
-faces = cube("faces", turns=(45, -45, 90, -90, 180))
+faces = cube("faces", turns=(22.5, 90, 112.5, 180, 202.5, 270, 292.5))
 ```
 
-Leave it out and there is no constraint — any angle turns, like a parameter
-with no type annotation. Write it and `turn()` is checked against it when the
+Every axis starts at 0 and accumulates its own turns. A turn is checked by
+where it *leaves* the axis, not by how far it moved. **0 is always allowed**:
+it is where you start, and where a `with turned(...)` block returns to.
+
+That distinction matters as soon as you use `turned`:
+
+```python
+with turned(x, 22.5):     # 0 -> 22.5, declared
+    ...
+                          # 22.5 -> 0 on the way out, always fine
+```
+
+Read as amounts, the exit would be a turn of `-22.5` and you would have to
+declare that too — and every other return angle besides. Read as orientations,
+there is nothing extra to say.
+
+An `outer=True` turn counts backwards: turning the outside by `t` leaves the
+axis where turning the cap by `−t` would (§2.4). Orientations are a circle, so
+`-90` and `270` are the same declaration.
+
+Leave `turns=` out and there is no constraint — any orientation, like a
+parameter with no type annotation. Write it and the check runs when the
 `with puzzle(...)` block closes, so a typo fails immediately rather than
-quietly drawing the wrong pattern.
-
-**The declaration is in cap terms**, and an `outer=True` turn flips the sign.
-Turning the cap by `t` leaves the same pattern as turning the outside by `−t`
-(the two differ only by a rotation of the whole sphere), so declaring `-60`
-is what opens up `turn(x, 60, outer=True)`. Angles are a circle: `-90` and
-`270` are the same declaration. See design.md §7.11.
-
-A list like `45, -45, 90, -90, 180` is closed under sign flip, so cap and
-outer accept the same values — that is a property of that particular list,
-not a rule.
+quietly drawing the wrong pattern. See design.md §7.11.
 
 ## 3. The two primitive operations
 
@@ -157,9 +168,9 @@ why `split(...)` almost always comes before the turns that depend on it.
 
 That legality depends on the current cut angle, so dragging a slider can make
 a turn illegal; the app reports it rather than crashing. Separately, if the
-axis set declared `turns=`, the angle must be one of the declared ones — that
-check is static (it doesn't depend on any slider) and happens as soon as the
-`with puzzle(...)` block closes.
+axis set declared `turns=`, the turn must leave the axis at one of the declared
+orientations — that check is static (it doesn't depend on any slider) and
+happens as soon as the `with puzzle(...)` block closes.
 
 `turn` leaves the rotation in place. `with turned(...):` does the same thing
 but **rotates back at the end of the block**, so whatever you do inside —

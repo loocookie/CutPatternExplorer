@@ -42,7 +42,7 @@ from ..geometry.vector import clamp, orthonormal_basis
 from .axes import Axis, PuzzleFamily
 
 __all__ = ["ANGLE_TOL_DEG", "derived_turns", "available_turns", "rings_around",
-           "declares", "matches_declared"]
+           "state_after", "state_is_declared"]
 
 # 극각과 방위각을 같은 값으로 볼 허용 오차(도).
 # acos 는 인자가 +-1 근처에서 오차를 sqrt(eps) ~ 1e-8 rad 까지 키운다.
@@ -152,25 +152,35 @@ def _circular_diff(a: float, b: float) -> float:
     return min(d, 360.0 - d)
 
 
-def declares(axis: Axis) -> bool:
-    """이 축이 회전각을 선언했는가. 안 했으면 제약이 없다."""
-    return bool(axis.turn_angles)
+def state_after(state: float, angle: float, outer: bool = False) -> float:
+    """이 회전 뒤 축의 방향 (§7.11).
+
+    cap 을 `+t` 돌리면 그만큼 나아가고, outer 를 `+t` 돌리는 것은 cap 을 `-t`
+    돌린 것과 같으므로 (§2.4) 반대로 간다.
+
+    **자기 회전만 센다.** 다른 축의 회전이 이 축의 재료를 옮기더라도 — 실려
+    도는 경우까지 포함해 — 이 값은 안 바뀐다. 구 전체가 돌아간 것과 같아서
+    축들 사이의 상대 방향이 그대로이기 때문이다.
+    """
+    return (state + (-angle if outer else angle)) % 360.0
 
 
-def matches_declared(axis: Axis, angle: float, outer: bool = False) -> bool:
-    """이 회전이 축에 선언된 각인가 (§7.11).
+def state_is_declared(axis: Axis, state: float) -> bool:
+    """이 방향이 축에 선언된 것인가 (§7.11).
 
-    **선언이 비어 있으면 참이다.** 타입을 안 붙인 인자와 같다 — 안 적었으면
-    제약이 없고, 적었으면 검사한다.
+    **선언은 "돌 수 있는 양"이 아니라 "있을 수 있는 방향"이다.** 시작이 0 이고
+    모든 회전은 축을 선언된 방향 중 하나로 데려가야 한다.
 
-    **선언은 cap 기준이다.** cap 을 +t 돌린 상태는 outer 를 -t 돌린 상태와
-    (구 전체 회전 차이로) 같으므로, outer 회전은 부호를 뒤집어 본다. 그래서
-    `-60` 을 선언해 두면 `turn(x, 60, outer=True)` 가 열린다.
+    **선언이 비어 있으면 참이다.** 타입을 안 붙인 인자와 같다.
+
+    **0 은 늘 참이다.** 시작 방향이고, `turned()` 블록이 되돌아오는 곳이다.
+    안 그러면 22.5 를 선언한 정의가 블록을 나오면서 0 으로 돌아올 때 거부된다.
     """
     if not axis.turn_angles:
         return True
-    want = (-angle if outer else angle)
-    return any(_circular_diff(want, float(d)) <= ANGLE_TOL_DEG
+    if _circular_diff(state, 0.0) <= ANGLE_TOL_DEG:
+        return True
+    return any(_circular_diff(state, float(d)) <= ANGLE_TOL_DEG
                for d in axis.turn_angles)
 
 
@@ -181,22 +191,26 @@ def available_turns(
     *,
     outer: bool = False,
     carried: set[str] | None = None,
+    state: float = 0.0,
 ) -> list[float]:
     """유도된 각과 축에 선언된 각의 합집합.
 
-    유도는 절단원이 맞아떨어지는 각만 찾는다. 그밖에 의미 있는 각이 있으면
-    축의 turn_angles 로 넣는다.
+    유도는 절단원이 맞아떨어지는 각만 찾는다. 그밖에 의미 있는 방향이 있으면
+    축의 turn_angles 로 선언한다.
 
-    **outer 면 선언된 각의 부호를 뒤집어 얹는다.** 선언은 cap 기준이고
-    cap(+t) == outer(-t) 이기 때문이다 (matches_declared 와 같은 규칙).
-    부호 반전에 닫힌 목록(`45, -45, 90, -90, 180`)에서는 차이가 안 나지만,
-    비대칭 목록에서는 다른 값이 나온다.
+    **선언은 방향이고 여기서 내는 것은 회전량이다** (§7.11). 지금 방향
+    `state` 에서 선언된 방향 `d` 로 가려면 `d - state` 만큼 돌린다. 집으로
+    돌아오는 `-state` 도 늘 후보다 — 0 은 언제나 유효한 방향이다.
     """
     values = derived_turns(family, axis, cut_angles, outer=outer, carried=carried)
-    for extra in axis.turn_angles:
-        value = (-float(extra) if outer else float(extra)) % 360.0
+
+    def offer(delta: float) -> None:
+        value = (-delta if outer else delta) % 360.0
         if value < ANGLE_TOL_DEG:
-            continue
+            return          # 0 도는 회전이 아니다
         if not any(abs(value - v) <= ANGLE_TOL_DEG for v in values):
             values.append(value)
+
+    for target in list(axis.turn_angles) + [0.0]:
+        offer(float(target) - state)
     return sorted(values)

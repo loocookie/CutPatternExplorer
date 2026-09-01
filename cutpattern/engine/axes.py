@@ -20,9 +20,10 @@ class Axis:
         cut circle  : n·x = cos(theta)
         turn region : n·x >= cos(theta)   (바깥쪽이면 <=)
 
-    turn_angles 는 이 축이 돌 수 있는 각의 **선언**이다 (§7.11). 비어 있으면
-    제약이 없고, 적혀 있으면 그 각으로만 돈다 — 정적 검사라 `Puzzle.check()`
-    에서 본다. 선언은 cap 기준이고, outer 회전은 부호를 뒤집어 본다.
+    turn_angles 는 이 축이 **있을 수 있는 방향**의 선언이다 (§7.11). 돌 수 있는
+    양이 아니다 — 시작이 0 이고 모든 회전은 축을 선언된 방향으로 데려가야 한다.
+    비어 있으면 제약이 없고, 0 은 늘 유효하다. 정적 검사라 `Puzzle.check()`
+    에서 본다.
 
     유도되는 회전각(engine.turns.derived_turns, §7.7)은 별개다. 그쪽은 현재
     절단 각도의 함수라 여기 저장하지 않는다.

@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from .engine.axes import Axis
 from .engine.axes import AxisSet as _EngineAxisSet
 from .engine.axes import PuzzleFamily
-from .engine.turns import matches_declared
+from .engine.turns import state_after, state_is_declared
 from .engine.operations import (
     EnterRegion,
     ExitRegion,
@@ -128,7 +128,7 @@ class AxisSet:
         """축 하나를 넣는다.
 
         회전각은 절단 각도의 함수라 여기 저장하지 않는다 (engine.turns).
-        turns 는 그 축이 돌 수 있는 각의 선언이다 (§7.11).
+        turns 는 그 축이 있을 수 있는 방향의 선언이다 (§7.11).
         생략하면 집합 기본값을 쓴다.
         """
         if any(a.id == axis_id for a in self._axes):
@@ -363,32 +363,43 @@ class Puzzle:
     def check(self) -> None:
         """실행 전 정적 검사. 참조하는 이름이 실제로 있는지 본다.
 
-        선언된 회전각(§7.11)도 여기서 본다. **절단 각도와 무관한 정적 성질**
-        이라 이 자리가 맞다 — 회전 합법성(§7.1)이나 영역 판정(§6.3)은 각도의
-        함수라 evaluate 에서 on_illegal 정책을 타지만 (§13.2), 선언에 없는 각은
-        슬라이더를 어디에 두든 처음부터 틀린 것이다.
+        선언된 방향(§7.11)도 여기서 본다. **절단 각도와 무관한 정적 성질**이라
+        이 자리가 맞다 — 회전 합법성(§7.1)이나 영역 판정(§6.3)은 각도의 함수라
+        evaluate 에서 on_illegal 정책을 타지만 (§13.2), 선언 밖 방향은 슬라이더를
+        어디에 두든 처음부터 틀린 것이다.
+
+        선언은 **돌 수 있는 양이 아니라 있을 수 있는 방향**이므로, 축마다 방향을
+        0 에서 누적해 따라간다. `RollbackTurns` 는 아직 안 닫힌 회전을 역순으로
+        되돌리므로 (§7.6) 여기서도 같이 되감는다.
         """
         if self.family is None:
             return
         known = {a.id: a for s in self.axis_sets for a in s}
+        state = {axis_id: 0.0 for axis_id in known}
+        opened: list = []
         for i, op in enumerate(self.family.operations):
             if isinstance(op, SplitByAxis) and op.axis not in known:
                 raise ValueError(f"operation #{i}: no such axis {op.axis!r}")
+            if isinstance(op, RollbackTurns):
+                for prev in reversed(opened):
+                    state[prev.axis] = state_after(
+                        state[prev.axis], -prev.angle, prev.outer)
+                opened = []
             if isinstance(op, Turn):
                 if op.axis not in known:
                     raise ValueError(f"operation #{i}: no such axis {op.axis!r}")
                 axis = known[op.axis]
-                if not matches_declared(axis, op.angle, op.outer):
+                state[op.axis] = state_after(state[op.axis], op.angle, op.outer)
+                opened.append(op)
+                if not state_is_declared(axis, state[op.axis]):
                     declared = ", ".join(_clean(d) for d in axis.turn_angles)
-                    hint = (
-                        f" an outer turn by {_clean(op.angle)} needs "
-                        f"{_clean(-op.angle)} declared, because turning the cap by "
-                        f"t leaves the same pattern as turning the outside by -t"
-                        if op.outer else ""
-                    )
                     raise ValueError(
-                        f"operation #{i}: {op.axis!r} declares turn angles "
-                        f"({declared}) and {_clean(op.angle)} is not one of them.{hint}"
+                        f"operation #{i}: turning {op.axis!r} by "
+                        f"{_clean(op.angle)}{' (outer)' if op.outer else ''} leaves it "
+                        f"at {_clean(state[op.axis])}, which is not one of its declared "
+                        f"orientations ({declared}). turns= lists the orientations an "
+                        f"axis may rest in, not the amounts it may turn by; 0 is "
+                        f"always allowed."
                     )
         for s in self.axis_sets:
             host = getattr(s.attached, "id", s.attached)
