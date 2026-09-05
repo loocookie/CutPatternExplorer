@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
-from functools import lru_cache
 
 from ..epsilon import ANGLE_EPS, NORMAL_EPS
 
@@ -148,10 +147,6 @@ class SplitResult:
 # ---- 실행 --------------------------------------------------------------
 
 
-# 계획은 연산 목록만 보고 정해진다. 절단 각도와 무관하므로 슬라이더를 움직여도
-# 다시 계산할 이유가 없다. PuzzleFamily 는 frozen 이고 Vec3 가 tuple 이라 해시가
-# 된다 (§12.2). 정의 몇 개를 오가는 UI 를 감당할 크기로 잡는다
-@lru_cache(maxsize=32)
 def core_moves(d: float, outer: bool, opposed_d: float | None = None) -> bool:
     """코어가 이 회전에 실리는가 (§2.4).
 
@@ -215,6 +210,11 @@ def opposed_cut(
 
 def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
     """접합 가능한 Turn 짝을 찾는다 (§7.10, §12.3-2).
+
+    **계획은 연산 목록만 보고 정해진다.** 절단 각도와 무관하므로 슬라이더를
+    밀어도 답이 같다. 그래도 캐시하지 않는다 — 재 보니 evaluate 의 0.2% 라
+    아낄 것이 없고, 공개 함수가 공유 dict 를 돌려주면 부르는 쪽이 그것을 고쳐
+    캐시를 오염시킬 수 있다.
 
     `turned(a, θ)` 는 회전하고 자르고 정확히 되돌린다. 그 왕복의 순효과는
     `E ∪ Φ⁻¹(C)` 뿐이므로 (§7.10), 짝을 알아보면 registry 를 건드리지 않고
