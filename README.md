@@ -31,12 +31,13 @@ is worth reading; `docs/design.md` §9.4 maps its commands onto this engine one
 by one, including the ones that are refused.
 
 What is different is the representation and the authoring layer. This engine
-stores **only the cut boundaries** and has no piece model, so it cannot do
-anything piece-shaped (bandaging, jumbling into a physical state); in exchange a
-cut angle can be a slider and a whole family of puzzles is one definition. And
-the definition is a Python script rather than XML, which is why there is no
-parser here and no `Script`/`Macro`/`ExecMacro` to reinvent control flow with
-(§9.1).
+stores **only the cut boundaries** and has no piece model, so anything defined
+on pieces is out of reach — bandaging above all, where pieces are glued across
+a cut. Jumbling is not in that list: carrying arcs onto a new circle is what a
+jumbling turn *is*, and it is the engine's ordinary operation. In exchange a cut
+angle can be a slider, and a whole family of puzzles is one definition. And the
+definition is a Python script rather than XML, which is why there is no parser
+here and no `Script`/`Macro`/`ExecMacro` to reinvent control flow with (§9.1).
 
 ## Running it locally
 
