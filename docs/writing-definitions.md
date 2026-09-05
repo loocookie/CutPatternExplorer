@@ -205,12 +205,18 @@ Every axis set is mounted on something: the **core** by default, or another
 axis set. You declare the mount; geometry decides, per turn, whether you are
 in the part that moves.
 
-- **Mounted on the core.** You move when the core moves. The core sits on the
-  far side of a cut plane at distance `cos θ` from the centre, so it is in the
-  outer region while `θ < 90°` — meaning an `outer=True` turn carries it, and
-  a cap turn does not. At `θ ≥ 90°` **nothing carries the core**: opposing
-  caps overlap, and the band where they meet slides around a spherical core
-  without moving it. Mixup-family puzzles live in that range.
+- **Mounted on the core.** You move when the core moves. A cap is the layer
+  that turns and the core is in the body around it, so an `outer=True` turn
+  carries it and a cap turn does not — however deep the cut is. The one
+  exception is a **middle layer**: if the axis has an opposite axis (at 180°)
+  and the two caps are deep enough to overlap (`θ + θ' > 180°`), the overlap is
+  a band bounded by two circles about the same line, so it turns — and being
+  the cap of both sides, neither can own the core. **Nothing carries the core
+  then**; such puzzles are built around a spherical core the band slides on.
+  Mixup-family puzzles are this case. Overlapping with a cap about some *other*
+  line does not count: that intersection turns about nothing, so it is not a
+  layer. A tetrahedron has no opposite axis at all, so its outer turns carry
+  the core at any depth.
 - **Mounted on an axis set.** You move when that set turns and your position
   falls inside the moving region — cap or outer alike. What matters is not
   which side is turning but whether you are in it.

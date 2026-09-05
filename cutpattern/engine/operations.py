@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, replace
 from functools import lru_cache
 
-from ..epsilon import ANGLE_EPS
+from ..epsilon import ANGLE_EPS, NORMAL_EPS
 
 # 회전 상쇄 판정 허용 오차(도)
 TURN_CANCEL_EPS = 1e-9
@@ -152,24 +152,65 @@ class SplitResult:
 # 다시 계산할 이유가 없다. PuzzleFamily 는 frozen 이고 Vec3 가 tuple 이라 해시가
 # 된다 (§12.2). 정의 몇 개를 오가는 UI 를 감당할 크기로 잡는다
 @lru_cache(maxsize=32)
-def core_moves(d: float, outer: bool) -> bool:
-    """코어가 이 회전 영역 안에 있는가 (§2.4).
+def core_moves(d: float, outer: bool, opposed_d: float | None = None) -> bool:
+    """코어가 이 회전에 실리는가 (§2.4).
 
-    절단면은 중심에서 `d = cos(theta)` 만큼 떨어져 있다. 중심(코어)이 어느
-    쪽인지는 **d 의 부호**가 정한다.
+    **cap 은 도는 층이고 코어는 나머지 몸통에 있다.** 그래서 `outer` 가 싣고
+    cap 은 안 싣는다. 절단이 얼마나 깊든 마찬가지다 — 깊은 cap 이 원점을 삼켜도
+    그것이 도는 층이라는 사실은 안 바뀐다.
 
-        theta < 90   d > 0   절단면이 축 쪽에 있다   -> 코어는 바깥쪽에 있다
-        theta >= 90  d <= 0  절단면이 코어를 지나거나 넘는다 -> 아무도 안 데려간다
+    예외는 **가운데 층**이 생길 때 하나뿐이다. 같은 축선의 반대쪽 축이 있고 두
+    cap 이 겹치면, 그 교집합은 두 원이 다 이 축 둘레이므로 **돌 수 있는 띠**가
+    된다. 그 띠는 양쪽 모두의 cap 이라 어느 쪽도 코어를 가질 수 없다 — 그런
+    퍼즐은 코어를 구형으로 만들어 띠가 그 둘레를 미끄러지게 한다. 믹스업 계열이
+    이것이다.
 
-    theta > 90 이면 마주 보는 두 cap 이 겹치고, 그 교집합이 가운데 층이다.
-    코어는 거기 들어가 있지만 **실리지는 않는다** — 그런 퍼즐은 코어를 구형으로
-    만들어 가운데 층이 그 둘레를 미끄러지게 한다. 믹스업 계열이 이 구간이다.
+        cap(n, theta)  겹침  cap(-n, theta')   <=>   theta + theta' > 180
+                                              <=>   d + d' < 0
 
-    theta == 90 은 2x2x2 다. 실제 2x2x2 는 45도 회전을 기계적으로 허용하려고
-    한 층을 코어에 묶지만, 그것은 절단 경계에 나타나지 않는다 (§1). 여기서는
-    묶을 이유가 없다.
+    `opposed_d` 는 반대쪽 축의 `cos(theta')` 다. 그런 축이 **퍼즐에** 없으면
+    None 이고, 그러면 겹칠 상대가 없으므로 예외도 없다.
+
+    반대쪽이 아닌 축의 cap 과 겹치는 것은 상관없다. 두 원의 축이 다르면 그
+    교집합은 어느 축 둘레로도 안 도는 그냥 영역이라 층이 아니다.
     """
-    return outer and d > 0.0
+    if not outer:
+        return False
+    if opposed_d is None:
+        return True
+    return d + opposed_d >= 0.0
+
+
+def opposed_cut(
+    family: PuzzleFamily,
+    normals: dict[str, object],
+    cut_angles: dict[str, float],
+    axis_id: str,
+) -> float | None:
+    """`axis_id` 의 **반대쪽 축**의 `cos(theta)`. 그런 축이 없으면 None (§2.4).
+
+    가운데 층은 같은 축선의 반대쪽 cap 과 겹쳐야 생기므로, 찾는 것은 `-n`
+    방향의 축이다. 다른 방향의 축은 아무리 깊어도 층을 만들지 않는다 — 두 원의
+    축이 다르면 그 교집합은 어느 축 둘레로도 안 돈다.
+
+    여럿이면 **제일 깊은 것**을 준다. 하나라도 겹치면 띠가 생기기 때문이다.
+
+    법선은 **지금 값**으로 본다. 실려 움직인 축이 있으면 그 자리가 진실이다 —
+    영역 판정이 쓰는 것과 같은 값이라야 어긋나지 않는다.
+    """
+    a = normals[axis_id]
+    found: float | None = None
+    for aset in family.axis_sets:
+        theta = cut_angles[aset.cut_angle_input]
+        for other in aset.axes:
+            if other.id == axis_id:
+                continue
+            if float(a @ normals[other.id]) > -1.0 + NORMAL_EPS:
+                continue
+            d = math.cos(math.radians(theta))
+            if found is None or d < found:
+                found = d
+    return found
 
 
 def plan_conjugation(family: PuzzleFamily) -> dict[int, int]:
@@ -484,7 +525,10 @@ def evaluate(
         얹힌 축은 그 집합의 회전 영역 안에 있을 때 돈다.
         """
         d = math.cos(math.radians(theta))
-        core_in_region = core_moves(d, outer)
+        core_in_region = core_moves(
+            d, outer,
+            opposed_cut(family, normals, cut_angles, axis.id) if outer else None,
+        )
         # 실릴 것이 아예 없으면 훑지 않는다. 얹힌 집합이 하나도 없는 정의
         # (지금 예제 전부)에서 코어가 안 움직이면 이 회전은 아무것도 안 옮긴다
         if not core_in_region and not any_attached:

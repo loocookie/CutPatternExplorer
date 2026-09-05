@@ -226,6 +226,104 @@ def test_core_mounted_axes_ride_an_outer_turn():
     assert _has(got, (0, 1, 0))
 
 
+def test_outer_carries_the_core_unless_a_middle_layer_exists():
+    """**cap 은 도는 층이고 코어는 나머지 몸통에 있다** (§2.4).
+
+    그래서 outer 가 싣고 cap 은 안 싣는다. 절단 깊이는 그 자체로 기준이 아니다 —
+    깊은 cap 이 원점을 삼켜도 그것이 도는 층이라는 사실은 안 바뀐다.
+
+    예외는 가운데 층 하나뿐이고, 그것은 **같은 축선의 반대쪽 cap** 과 겹쳐야
+    생긴다 (theta + theta' > 180, 즉 d + d' < 0). 두 원이 다 이 축 둘레라야
+    그 교집합이 돌 수 있는 띠가 되기 때문이다.
+    """
+    from cutpattern.engine.operations import core_moves
+
+    shallow = math.cos(math.radians(80.0))
+    deep = math.cos(math.radians(100.0))
+
+    # cap 회전은 무슨 일이 있어도 코어를 안 옮긴다
+    for d in (shallow, deep):
+        for opposed in (None, shallow, deep):
+            assert not core_moves(d, False, opposed), (d, opposed)
+
+    # 반대쪽 축이 없으면 얼마나 깊든 outer 가 싣는다. 겹칠 상대가 없다
+    assert core_moves(shallow, True, None)
+    assert core_moves(deep, True, None)
+
+    # 반대쪽이 있어도 두 cap 이 안 닿으면 띠가 없다
+    assert core_moves(shallow, True, shallow)
+    # 닿으면 그 띠가 양쪽 모두의 cap 이라 아무도 못 가진다 — 믹스업
+    assert not core_moves(deep, True, deep)
+
+    # 한쪽만 깊어도 합이 180 을 넘으면 겹친다
+    assert not core_moves(math.cos(math.radians(120.0)), True,
+                          math.cos(math.radians(70.0)))
+
+
+def test_ninety_degrees_is_not_a_cliff():
+    """theta = 90 은 2x2x2 다. 두 cap 이 닿기만 하고 띠는 없으므로 outer 가 싣는다.
+
+    전에는 `cos(theta) > 0` 하나로 갈랐는데 `cos(90도)` 가 부동소수점에서
+    6.1e-17 이라, 정확히 90 도에서 답이 우연에 걸려 있었다. 슬라이더가 0.05 도
+    단위라 90.00 은 실제로 짚을 수 있는 값이다. 이제 두 절단의 **합**으로 보므로
+    그 자리가 벼랑이 아니다.
+    """
+    from cutpattern.engine.operations import core_moves
+
+    ninety = math.cos(math.radians(90.0))
+    assert core_moves(ninety, True, ninety)
+    assert not core_moves(ninety, False, ninety)
+
+
+def test_the_opposite_axis_lookup():
+    """가운데 층이 있는지는 **반대쪽 축이 있는지**로 갈린다 (§2.4).
+
+    큐브는 c-0 의 맞은편에 c-5 가 있어서 깊게 자르면 믹스업이 된다. 정사면체는
+    네 축이 서로 109.47 도라 반대쪽 짝이 하나도 없다 — 다른 방향의 cap 과
+    겹치는 것은 상관없다. 두 원의 축이 다르면 그 교집합은 어느 축 둘레로도 안
+    돌아서 층이 아니다.
+    """
+    from cutpattern.engine.operations import opposed_cut
+
+    def look(aset, axis_id, theta):
+        with puzzle("x", aset) as p:
+            split(aset[axis_id])
+        fam = p.family
+        normals = {a.id: a.normal for s in fam.axis_sets for a in s.axes}
+        return opposed_cut(fam, normals, {aset.id: theta}, axis_id)
+
+    deep = math.cos(math.radians(100.0))
+    assert look(S.cube("c"), "c-0", 100.0) == pytest.approx(deep), "큐브는 짝이 있다"
+    assert look(S.tetrahedron("t"), "t-0", 100.0) is None, "정사면체는 짝이 없다"
+    assert look(S.octahedron("o"), "o-0", 100.0) == pytest.approx(deep), "8면체는 짝이 있다"
+
+
+def test_a_solid_with_no_opposite_axis_carries_the_core_when_deep():
+    """정사면체는 깊게 잘라도 코어가 실린다 (§2.4).
+
+    큐브는 theta > 90 이면 마주 보는 두 cap 이 겹쳐 가운데 층이 생기고, 그
+    띠가 양쪽 모두의 cap 이라 아무도 코어를 못 가진다. 정사면체에는 그 짝이
+    없으므로 예외가 성립하지 않는다 — `outer` 는 그냥 싣는다.
+    """
+    from cutpattern.engine.operations import core_moves, opposed_cut
+
+    def carries(aset, axis_id, theta):
+        with puzzle("x", aset) as p:
+            split(aset[axis_id])
+        fam = p.family
+        normals = {a.id: a.normal for s in fam.axis_sets for a in s.axes}
+        opposed = opposed_cut(fam, normals, {aset.id: theta}, axis_id)
+        return core_moves(math.cos(math.radians(theta)), True, opposed)
+
+    for theta in (80.0, 90.0, 100.0, 110.0):
+        assert carries(S.tetrahedron("t"), "t-0", theta), theta
+
+    assert carries(S.cube("c"), "c-0", 80.0)
+    assert carries(S.cube("c"), "c-0", 90.0)
+    assert not carries(S.cube("c"), "c-0", 100.0), "믹스업 구간"
+    assert not carries(S.cube("c"), "c-0", 110.0), "믹스업 구간"
+
+
 def test_nobody_carries_the_core_past_ninety_degrees():
     """theta > 90 이면 코어를 아무도 안 데려간다 (§2.4).
 
